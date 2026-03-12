@@ -4,6 +4,7 @@ import type {
   DetectPathsInput,
   DetectPathsResult,
   EmptyParams,
+  ModLibraryResult,
   SaveSettingsInput,
   SaveSettingsResult,
   ValidatePathInput,
@@ -15,6 +16,7 @@ import {
   detectPathsInputSchema,
   detectPathsResultSchema,
   emptyParamsSchema,
+  modLibraryResultSchema,
   saveSettingsInputSchema,
   saveSettingsResultSchema,
   validatePathInputSchema,
@@ -40,6 +42,7 @@ export type RpcSchema<
 
 export type RimunBunRequests = {
   getBootstrap: RpcRequestDefinition<EmptyParams, BootstrapPayload>;
+  getModLibrary: RpcRequestDefinition<EmptyParams, ModLibraryResult>;
   getSettings: RpcRequestDefinition<EmptyParams, AppSettings>;
   saveSettings: RpcRequestDefinition<SaveSettingsInput, SaveSettingsResult>;
   detectPaths: RpcRequestDefinition<DetectPathsInput, DetectPathsResult>;
@@ -69,6 +72,10 @@ export const rimunRpcSchemas = {
       getBootstrap: {
         params: emptyParamsSchema,
         response: bootstrapPayloadSchema,
+      },
+      getModLibrary: {
+        params: emptyParamsSchema,
+        response: modLibraryResultSchema,
       },
       getSettings: {
         params: emptyParamsSchema,

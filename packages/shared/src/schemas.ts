@@ -39,6 +39,8 @@ export const errorCodeSchema = z.enum([
 
 export const isoDateTimeSchema = z.iso.datetime();
 
+export const modSourceSchema = z.enum(["installation", "workshop"]);
+
 export const windowsAbsolutePathSchema = z
   .string()
   .min(1, "Windows path is required")
@@ -91,11 +93,42 @@ export const appSettingsSchema = pathSelectionSchema.extend({
   updatedAt: isoDateTimeSchema.nullable(),
 });
 
+export const modRecordSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  packageId: z.string().trim().min(1).nullable(),
+  author: z.string().trim().min(1).nullable(),
+  version: z.string().trim().min(1).nullable(),
+  description: z.string().trim().min(1).nullable(),
+  source: modSourceSchema,
+  windowsPath: windowsAbsolutePathSchema,
+  wslPath: wslAbsolutePathSchema.nullable(),
+  manifestPath: windowsAbsolutePathSchema.nullable(),
+  enabled: z.boolean(),
+  isOfficial: z.boolean(),
+  hasAboutXml: z.boolean(),
+  notes: z.array(z.string().min(1)).default([]),
+});
+
 export const bootstrapPayloadSchema = z.object({
   environment: executionEnvironmentSchema,
   settings: appSettingsSchema,
   supportedChannels: z.array(distributionChannelSchema).min(1),
   preferredSelection: pathSelectionSchema.nullable(),
+});
+
+export const modLibraryResultSchema = z.object({
+  environment: executionEnvironmentSchema,
+  selection: pathSelectionSchema.nullable(),
+  scannedAt: isoDateTimeSchema,
+  scannedRoots: z.object({
+    installationModsPath: windowsAbsolutePathSchema.nullable(),
+    workshopPath: windowsAbsolutePathSchema.nullable(),
+    modsConfigPath: windowsAbsolutePathSchema.nullable(),
+  }),
+  mods: z.array(modRecordSchema),
+  errors: z.array(appErrorSchema),
+  requiresConfiguration: z.boolean(),
 });
 
 export const detectPathsInputSchema = z.object({
@@ -149,12 +182,15 @@ export type PathKind = z.infer<typeof pathKindSchema>;
 export type PathDiscoverySource = z.infer<typeof pathDiscoverySourceSchema>;
 export type ValidationIssueCode = z.infer<typeof validationIssueCodeSchema>;
 export type ErrorCode = z.infer<typeof errorCodeSchema>;
+export type ModSource = z.infer<typeof modSourceSchema>;
 export type ExecutionEnvironment = z.infer<typeof executionEnvironmentSchema>;
 export type AppError = z.infer<typeof appErrorSchema>;
 export type DetectedPath = z.infer<typeof detectedPathSchema>;
 export type PathSelection = z.infer<typeof pathSelectionSchema>;
 export type AppSettings = z.infer<typeof appSettingsSchema>;
+export type ModRecord = z.infer<typeof modRecordSchema>;
 export type BootstrapPayload = z.infer<typeof bootstrapPayloadSchema>;
+export type ModLibraryResult = z.infer<typeof modLibraryResultSchema>;
 export type DetectPathsInput = z.infer<typeof detectPathsInputSchema>;
 export type DetectPathsResult = z.infer<typeof detectPathsResultSchema>;
 export type ValidatePathInput = z.infer<typeof validatePathInputSchema>;

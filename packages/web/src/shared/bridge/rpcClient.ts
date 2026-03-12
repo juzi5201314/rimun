@@ -1,17 +1,23 @@
 import type {
   AppSettings,
   BootstrapPayload,
+  DetectPathsInput,
   DetectPathsResult,
+  ModLibraryResult,
   RimunRpc,
   SaveSettingsInput,
   SaveSettingsResult,
+  ValidatePathInput,
+  ValidatePathResult,
 } from "@rimun/shared";
 
 export type RimunRpcClient = {
   getBootstrap(): Promise<BootstrapPayload>;
+  getModLibrary(): Promise<ModLibraryResult>;
   getSettings(): Promise<AppSettings>;
   saveSettings(input: SaveSettingsInput): Promise<SaveSettingsResult>;
-  detectPaths(): Promise<DetectPathsResult>;
+  detectPaths(input: DetectPathsInput): Promise<DetectPathsResult>;
+  validatePath(input: ValidatePathInput): Promise<ValidatePathResult>;
 };
 
 declare global {
@@ -42,13 +48,11 @@ async function createElectrobunRpcClient(): Promise<RimunRpcClient> {
 
   return {
     getBootstrap: async () => typedRpc.request.getBootstrap({}),
+    getModLibrary: async () => typedRpc.request.getModLibrary({}),
     getSettings: async () => typedRpc.request.getSettings({}),
     saveSettings: async (input) => typedRpc.request.saveSettings(input),
-    detectPaths: async () =>
-      typedRpc.request.detectPaths({
-        preferredChannels: ["steam"],
-        allowFallbackToManual: true,
-      }),
+    detectPaths: async (input) => typedRpc.request.detectPaths(input),
+    validatePath: async (input) => typedRpc.request.validatePath(input),
   };
 }
 

@@ -1,196 +1,411 @@
-import { useBootstrapQuery } from "@/features/bootstrap/hooks/useBootstrapQuery";
-import { Button } from "@/shared/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
+import { useModLibraryQuery } from "@/features/mod-library/hooks/useModLibraryQuery";
 import { Badge } from "@/shared/components/ui/badge";
-import { Checkbox } from "@/shared/components/ui/checkbox";
+import { Button } from "@/shared/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/shared/components/ui/card";
 import { Input } from "@/shared/components/ui/input";
-import { Play, ArrowUp, ArrowDown, Search, FolderOpen, AlertTriangle, User, Hash } from "lucide-react";
-import { useState } from "react";
 import { cn } from "@/shared/lib/utils";
+import {
+  AlertTriangle,
+  FolderSearch,
+  HardDrive,
+  Package,
+  Search,
+  ShieldCheck,
+} from "lucide-react";
+import { useState } from "react";
+import { Link } from "react-router-dom";
 
-const MOCK_MODS = [
-  { id: "core", name: "Core", author: "Ludeon Studios", version: "1.5.4062", enabled: true, isCore: true, hasErrors: false },
-  { id: "royalty", name: "Royalty", author: "Ludeon Studios", version: "1.5.4062", enabled: true, isCore: true, hasErrors: false },
-  { id: "ideology", name: "Ideology", author: "Ludeon Studios", version: "1.5.4062", enabled: true, isCore: true, hasErrors: false },
-  { id: "biotech", name: "Biotech", author: "Ludeon Studios", version: "1.5.4062", enabled: true, isCore: true, hasErrors: false },
-  { id: "anomaly", name: "Anomaly", author: "Ludeon Studios", version: "1.5.4062", enabled: true, isCore: true, hasErrors: false },
-  { id: "hugslib", name: "HugsLib", author: "UnlimitedHugs", version: "11.0.0", enabled: true, isCore: false, hasErrors: false },
-  { id: "harmony", name: "Harmony", author: "pardeike", version: "2.3.1", enabled: true, isCore: false, hasErrors: false },
-  { id: "rimhud", name: "RimHUD", author: "Jaxe", version: "1.15.1", enabled: false, isCore: false, hasErrors: false },
-  { id: "dubs", name: "Dubs Mint Menus", author: "Dubwise", version: "1.5.0", enabled: true, isCore: false, hasErrors: false },
-  { id: "broken", name: "Broken Mod Example", author: "Unknown", version: "0.0.1", enabled: true, isCore: false, hasErrors: true, errorMsg: "Missing dependency: HugsLib" },
-];
+function formatPathValue(path: string | null) {
+  return path ?? "Not available";
+}
+
+function renderDescriptionBlocks(description: string | null) {
+  if (!description) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        No description was found in About.xml.
+      </p>
+    );
+  }
+
+  return description
+    .split(/\n{2,}/)
+    .map((block) => block.trim())
+    .filter(Boolean)
+    .map((block, index) => {
+      const lines = block
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean);
+      const bulletLines = lines.filter((line) => /^[-*]\s+/.test(line));
+
+      if (lines.length > 0 && bulletLines.length === lines.length) {
+        return (
+          <ul
+            key={`${index}:${block.slice(0, 16)}`}
+            className="list-disc space-y-1 pl-5 text-sm leading-relaxed"
+          >
+            {lines.map((line) => (
+              <li key={line}>{line.replace(/^[-*]\s+/, "")}</li>
+            ))}
+          </ul>
+        );
+      }
+
+      return (
+        <p
+          key={`${index}:${block.slice(0, 16)}`}
+          className="text-sm leading-relaxed text-foreground/90"
+        >
+          {lines.join(" ")}
+        </p>
+      );
+    });
+}
 
 export function HomePage() {
-  const bootstrapQuery = useBootstrapQuery();
-  const [selectedModId, setSelectedModId] = useState<string | null>("core");
+  const modLibraryQuery = useModLibraryQuery();
   const [searchQuery, setSearchQuery] = useState("");
+  const mods = modLibraryQuery.data?.mods ?? [];
+  const term = searchQuery.trim().toLowerCase();
+  const filteredMods = mods.filter((mod) => {
+    if (!term) {
+      return true;
+    }
 
-  const selectedMod = MOCK_MODS.find(m => m.id === selectedModId);
+    return [mod.name, mod.packageId ?? "", mod.author ?? ""].some((field) =>
+      field.toLowerCase().includes(term),
+    );
+  });
+  const [selectedModId, setSelectedModId] = useState<string | null>(null);
+  const selectedMod =
+    filteredMods.find((mod) => mod.id === selectedModId) ?? filteredMods[0] ?? null;
 
-  if (bootstrapQuery.isPending) {
+  if (modLibraryQuery.isPending) {
     return (
-      <div className="flex items-center justify-center h-full bg-background">
-        <p className="text-primary animate-pulse font-medium">Initializing Mod Database...</p>
+      <div className="flex h-full items-center justify-center bg-background/40">
+        <p className="font-black uppercase tracking-widest text-primary rw-text animate-pulse">
+          Scanning Mod Library...
+        </p>
+      </div>
+    );
+  }
+
+  if (modLibraryQuery.isError) {
+    return (
+      <div className="flex h-full items-center justify-center p-8">
+        <Card className="max-w-xl border-destructive bg-destructive/10">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="h-5 w-5" />
+              Failed To Load Mod Library
+            </CardTitle>
+            <CardDescription>
+              The desktop backend did not return a mod scan result.
+            </CardDescription>
+          </CardHeader>
+        </Card>
+      </div>
+    );
+  }
+
+  const modLibrary = modLibraryQuery.data;
+
+  if (modLibrary.requiresConfiguration) {
+    return (
+      <div className="flex h-full items-center justify-center p-8">
+        <Card className="max-w-2xl border-border/60 bg-card/70">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-3 text-2xl">
+              <HardDrive className="h-6 w-6 text-primary" />
+              Mod Library Needs Configuration
+            </CardTitle>
+            <CardDescription>
+              A RimWorld installation path must be saved before the backend can
+              scan local or workshop mods.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {modLibrary.errors.length ? (
+              <div className="space-y-3">
+                {modLibrary.errors.map((error) => (
+                  <div
+                    key={`${error.code}:${error.message}`}
+                    className="rounded-lg border border-destructive/40 bg-destructive/10 p-4"
+                  >
+                    <p className="text-sm font-bold text-destructive">
+                      {error.message}
+                    </p>
+                    {error.detail ? (
+                      <p className="mt-1 text-sm text-destructive/80">
+                        {error.detail}
+                      </p>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            ) : null}
+            <Link to="/settings">
+              <Button className="gap-2">
+                <FolderSearch className="h-4 w-4" />
+                Open Core Config
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
       </div>
     );
   }
 
   return (
-    <div className="flex h-full w-full bg-background">
-      {/* Mod List Section */}
-      <section className="w-[55%] flex flex-col border-r border-border">
-        {/* Top Header/Toolbar */}
-        <div className="px-6 py-4 border-b border-border bg-card flex items-center justify-between">
-          <div className="flex gap-2">
-            <Button variant="default" size="sm">
-              <Play className="w-4 h-4 mr-2" />
-              Launch
-            </Button>
-            <Button variant="outline" size="sm">
-              <FolderOpen className="w-4 h-4 mr-2" />
-              Folder
-            </Button>
-          </div>
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input 
-              placeholder="Filter Library..." 
-              className="pl-10 w-64 h-9"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
+    <div className="flex h-full w-full bg-background/20">
+      <section className="flex w-[56%] min-w-0 flex-col border-r border-border/60">
+        <div className="border-b border-border/40 bg-card/10 px-6 py-5">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+            <div className="space-y-2">
+              <p className="text-[10px] font-black uppercase tracking-[0.3em] text-primary">
+                Backend Mod Scan
+              </p>
+              <h2 className="text-3xl font-black uppercase tracking-tight rw-text">
+                Mod Library
+              </h2>
+              <p className="text-sm font-medium text-muted-foreground">
+                {modLibrary.mods.length} mods loaded from configured installation
+                and workshop roots.
+              </p>
+            </div>
+
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Filter Mods..."
+                className="w-72 pl-10 font-bold"
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+              />
+            </div>
           </div>
         </div>
 
-        {/* List Table */}
-        <div className="flex-1 flex flex-col min-h-0">
-          <div className="flex items-center px-6 py-2 bg-muted text-xs font-semibold text-muted-foreground border-b border-border">
-            <div className="w-12 text-center">On</div>
-            <div className="flex-1 px-4">Mod Name</div>
-            <div className="w-24 text-center">Version</div>
-            <div className="w-24 text-right">Order</div>
-          </div>
+        <div className="flex items-center px-6 py-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+          <div className="flex-1">Mod</div>
+          <div className="w-28 text-center">Source</div>
+          <div className="w-24 text-right">Version</div>
+        </div>
 
-          <div className="flex-1 overflow-y-auto">
-            {MOCK_MODS.filter(m => m.name.toLowerCase().includes(searchQuery.toLowerCase())).map((mod) => (
-              <div 
-                key={mod.id}
-                onClick={() => setSelectedModId(mod.id)}
-                className={cn(
-                  "flex items-center px-6 py-3 border-b border-border cursor-pointer transition-colors",
-                  selectedModId === mod.id ? "bg-accent" : "hover:bg-muted/50"
-                )}
-              >
-                <div className="w-12 flex justify-center" onClick={(e) => e.stopPropagation()}>
-                  <Checkbox checked={mod.enabled} />
-                </div>
-                <div className="flex-1 px-4 flex items-center gap-3 overflow-hidden">
-                  <span className={cn(
-                    "font-medium text-sm truncate",
-                    mod.hasErrors ? "text-destructive" : "text-foreground"
-                  )}>
-                    {mod.name}
-                  </span>
-                  {mod.isCore && <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Core</Badge>}
-                </div>
-                <div className="w-24 text-center text-xs text-muted-foreground">{mod.version}</div>
-                <div className="w-24 flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
-                   <Button variant="ghost" size="icon" className="h-8 w-8"><ArrowUp className="w-4 h-4" /></Button>
-                   <Button variant="ghost" size="icon" className="h-8 w-8"><ArrowDown className="w-4 h-4" /></Button>
-                </div>
+        <div className="flex-1 overflow-y-auto border-y border-border/30">
+          {filteredMods.length ? (
+            filteredMods.map((mod) => {
+              const isSelected = selectedMod?.id === mod.id;
+
+              return (
+                <button
+                  key={mod.id}
+                  type="button"
+                  onClick={() => setSelectedModId(mod.id)}
+                  className={cn(
+                    "flex w-full items-center border-b border-border/20 px-6 py-4 text-left transition-colors",
+                    isSelected
+                      ? "bg-accent/40"
+                      : "hover:bg-muted/30",
+                  )}
+                >
+                  <div className="min-w-0 flex-1 space-y-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="truncate text-sm font-bold">
+                        {mod.name}
+                      </span>
+                      <Badge variant={mod.enabled ? "default" : "outline"}>
+                        {mod.enabled ? "Enabled" : "Disabled"}
+                      </Badge>
+                      {mod.isOfficial ? (
+                        <Badge variant="secondary">Official</Badge>
+                      ) : null}
+                      {!mod.hasAboutXml ? (
+                        <Badge variant="destructive">Missing About.xml</Badge>
+                      ) : null}
+                    </div>
+                    <p className="truncate font-mono text-xs text-muted-foreground">
+                      {mod.packageId ?? mod.windowsPath}
+                    </p>
+                  </div>
+                  <div className="w-28 text-center">
+                    <Badge variant="outline" className="uppercase">
+                      {mod.source}
+                    </Badge>
+                  </div>
+                  <div className="w-24 text-right text-xs font-bold text-muted-foreground">
+                    {mod.version ?? "Unknown"}
+                  </div>
+                </button>
+              );
+            })
+          ) : (
+            <div className="flex h-full items-center justify-center p-10 text-center">
+              <div className="space-y-3">
+                <Package className="mx-auto h-10 w-10 text-muted-foreground" />
+                <p className="text-lg font-black uppercase tracking-[0.2em] rw-text">
+                  No Matching Mods
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Adjust the filter or rescan after changing paths.
+                </p>
               </div>
-            ))}
-          </div>
+            </div>
+          )}
         </div>
-        
-        {/* Footer Stats */}
-        <div className="px-6 py-3 border-t border-border bg-card text-xs text-muted-foreground flex justify-between">
-          <span>{MOCK_MODS.length} mods found</span>
-          <span>{MOCK_MODS.filter(m => m.enabled).length} enabled</span>
+
+        <div className="flex justify-between border-t border-border/40 bg-card/10 px-6 py-3 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+          <span>Scanned At: {new Date(modLibrary.scannedAt).toLocaleString()}</span>
+          <span>{filteredMods.length} Visible</span>
         </div>
       </section>
 
-      {/* Inspection Aside */}
-      <aside className="w-[45%] flex flex-col bg-card overflow-hidden">
+      <aside className="flex w-[44%] min-w-0 flex-col bg-card/10">
         {selectedMod ? (
-          <div className="flex flex-col h-full overflow-y-auto">
-            <div className="p-8 border-b border-border">
-              <div className="flex items-start justify-between mb-4">
-                <h2 className="text-3xl font-bold tracking-tight">{selectedMod.name}</h2>
-                {selectedMod.hasErrors && <AlertTriangle className="w-8 h-8 text-destructive" />}
-              </div>
-              
-              <div className="flex flex-wrap gap-4 mb-8">
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <User className="w-4 h-4" />
-                  {selectedMod.author}
+          <div className="flex h-full flex-col">
+            <div className="border-b border-border/40 bg-background/30 p-8">
+              <div className="mb-5 flex items-start justify-between gap-4">
+                <div className="space-y-3">
+                  <h3 className="text-3xl font-black uppercase tracking-wide rw-text leading-tight">
+                    {selectedMod.name}
+                  </h3>
+                  <div className="flex flex-wrap gap-2">
+                    <Badge variant={selectedMod.enabled ? "default" : "outline"}>
+                      {selectedMod.enabled ? "Enabled" : "Disabled"}
+                    </Badge>
+                    <Badge variant="outline" className="uppercase">
+                      {selectedMod.source}
+                    </Badge>
+                    {selectedMod.isOfficial ? (
+                      <Badge variant="secondary">Official</Badge>
+                    ) : null}
+                    {!selectedMod.hasAboutXml ? (
+                      <Badge variant="destructive">Metadata Missing</Badge>
+                    ) : null}
+                  </div>
                 </div>
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Hash className="w-4 h-4" />
-                  v{selectedMod.version}
-                </div>
+                {selectedMod.isOfficial ? (
+                  <ShieldCheck className="h-8 w-8 text-primary" />
+                ) : null}
               </div>
-              
-              <div className="flex gap-4">
-                <Button variant={selectedMod.enabled ? "secondary" : "default"} className="flex-1">
-                  {selectedMod.enabled ? "Disable Mod" : "Enable Mod"}
-                </Button>
-                <Button variant="outline">Browse Files</Button>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <Card className="bg-background/30">
+                  <CardContent className="p-4">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                      Package ID
+                    </p>
+                    <p className="mt-2 break-all font-mono text-xs">
+                      {selectedMod.packageId ?? "Not available"}
+                    </p>
+                  </CardContent>
+                </Card>
+                <Card className="bg-background/30">
+                  <CardContent className="p-4">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                      Author / Version
+                    </p>
+                    <p className="mt-2 text-sm font-bold">
+                      {selectedMod.author ?? "Unknown author"}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Version: {selectedMod.version ?? "Unknown"}
+                    </p>
+                  </CardContent>
+                </Card>
               </div>
             </div>
 
-            <div className="p-8 space-y-8">
-              {selectedMod.hasErrors && (
-                <Card className="border-destructive bg-destructive/10">
-                   <CardHeader className="p-4 pb-2">
-                     <CardTitle className="text-sm text-destructive flex items-center gap-2">
-                       <AlertTriangle className="w-4 h-4" />
-                       Conflict Detected
-                     </CardTitle>
-                   </CardHeader>
-                   <CardContent className="p-4 pt-0">
-                     <p className="text-sm">{selectedMod.errorMsg}</p>
-                   </CardContent>
-                </Card>
-              )}
-
-              <section>
-                <h3 className="text-sm font-semibold mb-3">Description</h3>
-                <p className="text-sm text-muted-foreground leading-relaxed">
-                  This simulated entry for {selectedMod.name} represents the metadata parsed from About.xml. In a fully initialized system, this viewport would render formatted content, including dependency chains and load order requirements.
+            <div className="flex-1 space-y-6 overflow-y-auto p-8">
+              <section className="space-y-3">
+                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                  Description
                 </p>
-              </section>
-
-              <section>
-                <h3 className="text-sm font-semibold mb-3">System Metadata</h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <Card>
-                    <CardHeader className="p-3 pb-1">
-                      <CardTitle className="text-[10px] text-muted-foreground uppercase">Package Identifier</CardTitle>
-                    </CardHeader>
-                    <CardContent className="p-3 pt-0">
-                      <p className="text-xs font-mono truncate">{selectedMod.author.toLowerCase()}.{selectedMod.id}</p>
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardHeader className="p-3 pb-1">
-                      <CardTitle className="text-[10px] text-muted-foreground uppercase">Load Context</CardTitle>
-                    </CardHeader>
-                    <CardContent className="p-3 pt-0">
-                      <p className="text-xs font-mono">Workshop-294100</p>
-                    </CardContent>
-                  </Card>
+                <div className="space-y-3 rounded-lg border border-border/60 bg-background/60 p-4">
+                  {renderDescriptionBlocks(selectedMod.description)}
                 </div>
               </section>
+
+              <section className="space-y-3">
+                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                  Mod Path
+                </p>
+                <div className="rounded-lg border border-border/60 bg-background/60 p-4">
+                  <p className="break-all font-mono text-xs">
+                    {selectedMod.windowsPath}
+                  </p>
+                </div>
+              </section>
+
+              <section className="space-y-3">
+                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                  About.xml
+                </p>
+                <div className="rounded-lg border border-border/60 bg-background/60 p-4 text-sm">
+                  <p>
+                    Manifest path: {formatPathValue(selectedMod.manifestPath)}
+                  </p>
+                  <p className="mt-2">
+                    WSL path: {formatPathValue(selectedMod.wslPath)}
+                  </p>
+                </div>
+              </section>
+
+              {selectedMod.notes.length ? (
+                <section className="space-y-3">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                    Notes
+                  </p>
+                  <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-4">
+                    <ul className="list-disc space-y-1 pl-5 text-sm text-amber-800">
+                      {selectedMod.notes.map((note) => (
+                        <li key={note}>{note}</li>
+                      ))}
+                    </ul>
+                  </div>
+                </section>
+              ) : null}
+
+              {modLibrary.errors.length ? (
+                <section className="space-y-3">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                    Scan Warnings
+                  </p>
+                  <div className="space-y-3">
+                    {modLibrary.errors.map((error) => (
+                      <div
+                        key={`${error.code}:${error.message}`}
+                        className="rounded-lg border border-destructive/40 bg-destructive/10 p-4"
+                      >
+                        <p className="text-sm font-bold text-destructive">
+                          {error.message}
+                        </p>
+                        {error.detail ? (
+                          <p className="mt-1 text-sm text-destructive/80">
+                            {error.detail}
+                          </p>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              ) : null}
             </div>
           </div>
         ) : (
-          <div className="flex-1 flex items-center justify-center p-12 text-center text-muted-foreground">
-            <div>
-              <FolderOpen className="w-16 h-16 mx-auto mb-4 opacity-20" />
-              <p className="text-lg font-medium">No Mod Selected</p>
-              <p className="text-sm">Select a mod from the list to view its details</p>
+          <div className="flex h-full items-center justify-center p-12 text-center">
+            <div className="space-y-3">
+              <Package className="mx-auto h-10 w-10 text-muted-foreground" />
+              <p className="text-lg font-black uppercase tracking-[0.2em] rw-text">
+                No Mod Selected
+              </p>
             </div>
           </div>
         )}

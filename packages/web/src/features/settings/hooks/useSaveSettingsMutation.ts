@@ -13,6 +13,7 @@ export function useSaveSettingsMutation() {
     onSuccess: async (savedSettings) => {
       queryClient.setQueryData(["settings"], savedSettings.settings);
       await queryClient.invalidateQueries({ queryKey: ["bootstrap"] });
+      await queryClient.invalidateQueries({ queryKey: ["mod-library"] });
     },
   });
 }

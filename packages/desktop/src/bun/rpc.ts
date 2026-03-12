@@ -1,10 +1,12 @@
 import type {
   DetectPathsInput,
+  PathSelection,
   RimunRpcContract,
   SaveSettingsInput,
 } from "@rimun/shared";
 import { rimunRpcSchemas } from "@rimun/shared";
 import { BrowserView } from "electrobun/bun";
+import { scanModLibrary } from "./mods";
 import type { SettingsRepository } from "./persistence";
 import { detectPaths, getExecutionEnvironment, validatePath } from "./platform";
 
@@ -15,25 +17,31 @@ function assertRequestSchema<T>(
   return schema.parse(value);
 }
 
-function resolveBootstrap(repository: SettingsRepository) {
+function resolvePreferredSelection(repository: SettingsRepository): PathSelection | null {
   const settings = repository.getSettings();
   const detection = detectPaths({
     preferredChannels: ["steam"],
     allowFallbackToManual: true,
   });
 
+  return settings.installationPath
+    ? {
+        channel: settings.channel,
+        installationPath: settings.installationPath,
+        workshopPath: settings.workshopPath,
+        configPath: settings.configPath,
+      }
+    : detection.preferredSelection;
+}
+
+function resolveBootstrap(repository: SettingsRepository) {
+  const settings = repository.getSettings();
+
   return rimunRpcSchemas.bun.requests.getBootstrap.response.parse({
     environment: getExecutionEnvironment(),
     settings,
     supportedChannels: ["steam", "manual"],
-    preferredSelection: settings.installationPath
-      ? {
-          channel: settings.channel,
-          installationPath: settings.installationPath,
-          workshopPath: settings.workshopPath,
-          configPath: settings.configPath,
-        }
-      : detection.preferredSelection,
+    preferredSelection: resolvePreferredSelection(repository),
   });
 }
 
@@ -51,6 +59,16 @@ export function createMainWindowRpc(
             params,
           );
           return resolveBootstrap(repository);
+        },
+        getModLibrary: (params) => {
+          assertRequestSchema(
+            rimunRpcSchemas.bun.requests.getModLibrary.params,
+            params,
+          );
+
+          return rimunRpcSchemas.bun.requests.getModLibrary.response.parse(
+            scanModLibrary(resolvePreferredSelection(repository)),
+          );
         },
         getSettings: (params) => {
           assertRequestSchema(
