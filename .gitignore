@@ -1,0 +1,12 @@
+node_modules/
+bun.lock
+packages/*/node_modules/
+packages/*/bun.lock
+packages/*/build/
+packages/*/dist/
+packages/*/artifacts/
+*.db
+*.db-shm
+*.db-wal
+coverage/
+

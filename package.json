@@ -1,0 +1,21 @@
+{
+  "name": "rimun",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "bun@1.3.10",
+  "workspaces": ["packages/*"],
+  "scripts": {
+    "dev": "BUN_TMPDIR=/tmp BUN_INSTALL=/tmp/bun-install bash ./tools/dev.sh",
+    "build": "BUN_TMPDIR=/tmp BUN_INSTALL=/tmp/bun-install bash ./tools/build.sh",
+    "test": "BUN_TMPDIR=/tmp BUN_INSTALL=/tmp/bun-install bash ./tools/test.sh",
+    "typecheck": "BUN_TMPDIR=/tmp BUN_INSTALL=/tmp/bun-install bash ./tools/typecheck.sh",
+    "lint": "biome check .",
+    "check": "bun run typecheck && bun run lint && bun run test",
+    "format": "biome format --write ."
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@biomejs/biome": "^1.9.4",
+    "typescript": "^5.9.2"
+  }
+}
