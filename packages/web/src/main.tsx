@@ -1,3 +1,4 @@
+import "./globals.css";
 import { App } from "@/app/App";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
