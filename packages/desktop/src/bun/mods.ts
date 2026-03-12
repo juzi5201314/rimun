@@ -33,6 +33,81 @@ function createAppError(
   };
 }
 
+function decodeUtf16Le(fileContent: Uint8Array) {
+  return Buffer.from(fileContent).toString("utf16le");
+}
+
+function decodeUtf16Be(fileContent: Uint8Array) {
+  const swapped = Buffer.from(fileContent);
+
+  for (let index = 0; index + 1 < swapped.length; index += 2) {
+    const current = swapped[index];
+    swapped[index] = swapped[index + 1] ?? current;
+    swapped[index + 1] = current;
+  }
+
+  return swapped.toString("utf16le");
+}
+
+function decodeXmlFileContent(fileContent: Uint8Array) {
+  if (
+    fileContent.length >= 2 &&
+    fileContent[0] === 0xff &&
+    fileContent[1] === 0xfe
+  ) {
+    return decodeUtf16Le(fileContent.subarray(2));
+  }
+
+  if (
+    fileContent.length >= 2 &&
+    fileContent[0] === 0xfe &&
+    fileContent[1] === 0xff
+  ) {
+    return decodeUtf16Be(fileContent.subarray(2));
+  }
+
+  if (
+    fileContent.length >= 3 &&
+    fileContent[0] === 0xef &&
+    fileContent[1] === 0xbb &&
+    fileContent[2] === 0xbf
+  ) {
+    return new TextDecoder("utf-8").decode(fileContent);
+  }
+
+  const sampleSize = Math.min(fileContent.length - (fileContent.length % 2), 128);
+  let zeroOnEven = 0;
+  let zeroOnOdd = 0;
+
+  for (let index = 0; index < sampleSize; index += 2) {
+    if (fileContent[index] === 0) {
+      zeroOnEven += 1;
+    }
+
+    if (fileContent[index + 1] === 0) {
+      zeroOnOdd += 1;
+    }
+  }
+
+  if (sampleSize > 0) {
+    const pairCount = sampleSize / 2;
+
+    if (zeroOnOdd / pairCount > 0.3) {
+      return decodeUtf16Le(fileContent);
+    }
+
+    if (zeroOnEven / pairCount > 0.3) {
+      return decodeUtf16Be(fileContent);
+    }
+  }
+
+  return new TextDecoder("utf-8").decode(fileContent);
+}
+
+function readXmlFile(filePath: string) {
+  return decodeXmlFileContent(readFileSync(filePath));
+}
+
 function decodeXmlEntities(value: string) {
   return value
     .replaceAll("&lt;", "<")
@@ -44,8 +119,25 @@ function decodeXmlEntities(value: string) {
 
 function normalizeText(value: string) {
   return decodeXmlEntities(value.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1"))
+    .replace(/\u0000/g, "")
+    .replace(/[\u0001-\u0008\u000b\u000c\u000e-\u001f]/g, " ")
     .replace(/<[^>]+>/g, " ")
     .replace(/\s+/g, " ")
+    .trim();
+}
+
+function normalizeMultilineText(value: string) {
+  return decodeXmlEntities(value.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1"))
+    .replace(/\u0000/g, "")
+    .replace(/[\u0001-\u0008\u000b\u000c\u000e-\u001f]/g, "")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/p>/gi, "\n\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/\r\n/g, "\n")
+    .split("\n")
+    .map((line) => line.trimEnd())
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
 
@@ -56,6 +148,15 @@ function extractTagText(xml: string, tagName: string) {
   ).exec(xml);
 
   return match ? normalizeText(match[1]) || null : null;
+}
+
+function extractTagMultilineText(xml: string, tagName: string) {
+  const match = new RegExp(
+    `<${tagName}>([\\s\\S]*?)</${tagName}>`,
+    "i",
+  ).exec(xml);
+
+  return match ? normalizeMultilineText(match[1]) || null : null;
 }
 
 function extractTagList(xml: string, tagName: string) {
@@ -93,7 +194,7 @@ export function parseAboutXml(xml: string) {
       extractTagText(xml, "targetVersion") ??
       supportedVersions[0] ??
       null,
-    description: extractTagText(xml, "description"),
+    description: extractTagMultilineText(xml, "description"),
   };
 }
 
@@ -165,7 +266,7 @@ function scanRoot(
       const aboutWindowsPath = win32.join(modWindowsPath, "About", "About.xml");
       const hasAboutXml = existsSync(aboutReadablePath);
       const parsedAbout = hasAboutXml
-        ? parseAboutXml(readFileSync(aboutReadablePath, "utf8"))
+        ? parseAboutXml(readXmlFile(aboutReadablePath))
         : null;
       const notes = hasAboutXml ? [] : ["About/About.xml was not found."];
 
@@ -237,9 +338,7 @@ export function scanModLibrary(
     const readableModsConfigPath = toReadablePath(modsConfigPath);
 
     if (readableModsConfigPath && existsSync(readableModsConfigPath)) {
-      activePackageIds = parseModsConfigXml(
-        readFileSync(readableModsConfigPath, "utf8"),
-      ).activePackageIds;
+      activePackageIds = parseModsConfigXml(readXmlFile(readableModsConfigPath)).activePackageIds;
     } else {
       errors.push(
         createAppError(

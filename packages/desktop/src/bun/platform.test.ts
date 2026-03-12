@@ -1,5 +1,11 @@
 import { describe, expect, it } from "bun:test";
-import { detectPaths, validatePath, windowsPathToWslPath } from "./platform";
+import {
+  detectPaths,
+  parseSteamLibraryFoldersVdf,
+  resolveSteamLibraryRoots,
+  validatePath,
+  windowsPathToWslPath,
+} from "./platform";
 
 describe("platform helpers", () => {
   it("converts a Windows path to a WSL path", () => {
@@ -16,6 +22,55 @@ describe("platform helpers", () => {
     });
 
     expect(result.issues.length).toBeGreaterThan(0);
+  });
+
+  it("parses steam secondary library roots from libraryfolders.vdf", () => {
+    const parsed = parseSteamLibraryFoldersVdf(`
+      "libraryfolders"
+      {
+        "0"
+        {
+          "path"    "C:\\Program Files (x86)\\Steam"
+        }
+        "1"
+        {
+          "path"    "E:\\SteamLibrary"
+        }
+      }
+    `);
+
+    expect(parsed).toContain("E:\\SteamLibrary");
+  });
+
+  it("includes secondary steam libraries and SteamLibrary fallbacks", () => {
+    const roots = resolveSteamLibraryRoots(
+      {
+        platform: "linux",
+        isWsl: true,
+        wslDistro: "Ubuntu",
+      },
+      {
+        pathExists: (path) =>
+          path ===
+          "/mnt/c/Program Files (x86)/Steam/steamapps/libraryfolders.vdf",
+        readTextFile: () => `
+          "libraryfolders"
+          {
+            "0"
+            {
+              "path"    "C:\\Program Files (x86)\\Steam"
+            }
+            "1"
+            {
+              "path"    "E:\\SteamLibrary"
+            }
+          }
+        `,
+      },
+    );
+
+    expect(roots).toContain("E:\\SteamLibrary");
+    expect(roots).toContain("D:\\SteamLibrary");
   });
 
   it("returns a structured detection result", () => {

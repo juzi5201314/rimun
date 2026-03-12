@@ -1,5 +1,5 @@
 import { accessSync, existsSync, readFileSync, readdirSync } from "node:fs";
-import { join } from "node:path";
+import { join, win32 } from "node:path";
 import type {
   AppError,
   DetectPathsInput,
@@ -23,6 +23,11 @@ const WINDOWS_USER_CONFIG_SUFFIX = [
   "RimWorld by Ludeon Studios",
   "Config",
 ];
+
+type SteamLibraryResolverOptions = {
+  pathExists?: (path: string) => boolean;
+  readTextFile?: (path: string) => string;
+};
 
 function detectPlatform(): ExecutionEnvironment["platform"] {
   if (process.platform === "win32") {
@@ -167,7 +172,11 @@ function dedupe<T>(values: T[]) {
   return [...new Set(values)];
 }
 
-function resolveSteamRoots(environment: ExecutionEnvironment) {
+function normalizeWindowsPath(path: string) {
+  return path.replaceAll("/", "\\").replace(/\\+/g, "\\").trim();
+}
+
+function resolveSteamInstallRoots(environment: ExecutionEnvironment) {
   if (environment.isWsl) {
     return WINDOWS_DRIVES.flatMap((driveLetter) => [
       `/mnt/${driveLetter.toLowerCase()}/Program Files (x86)/Steam`,
@@ -189,35 +198,87 @@ function resolveSteamRoots(environment: ExecutionEnvironment) {
   return [];
 }
 
-function resolveInstallCandidates(environment: ExecutionEnvironment) {
-  const steamRoots = resolveSteamRoots(environment);
-
+function resolveReadableSteamPath(environment: ExecutionEnvironment, windowsPath: string) {
   if (environment.isWsl) {
-    return dedupe(
-      steamRoots
-        .map((root) => join(root, "steamapps", "common", "RimWorld"))
-        .map((wslPath) => wslPathToWindowsPath(wslPath))
-        .filter((value): value is string => Boolean(value)),
-    );
+    return windowsPathToWslPath(windowsPath);
   }
 
-  return steamRoots.map((root) => `${root}\\steamapps\\common\\RimWorld`);
+  if (environment.platform === "windows") {
+    return windowsPath;
+  }
+
+  return null;
+}
+
+export function parseSteamLibraryFoldersVdf(vdfContent: string) {
+  const nestedPathMatches = [
+    ...vdfContent.matchAll(/"path"\s*"([^"]+)"/gi),
+  ].map((match) => normalizeWindowsPath(match[1] ?? ""));
+  const flatPathMatches = [
+    ...vdfContent.matchAll(/^\s*"\d+"\s*"([A-Za-z]:[^"]+)"\s*$/gim),
+  ].map((match) => normalizeWindowsPath(match[1] ?? ""));
+
+  return dedupe([...nestedPathMatches, ...flatPathMatches].filter(Boolean));
+}
+
+export function resolveSteamLibraryRoots(
+  environment: ExecutionEnvironment,
+  options: SteamLibraryResolverOptions = {},
+) {
+  const pathExists = options.pathExists ?? existsSync;
+  const readTextFile = options.readTextFile ?? ((path: string) => readFileSync(path, "utf8"));
+  const steamInstallRoots = environment.isWsl
+    ? resolveSteamInstallRoots(environment)
+        .map((wslPath) => wslPathToWindowsPath(wslPath))
+        .filter((value): value is string => Boolean(value))
+    : resolveSteamInstallRoots(environment);
+  const fallbackLibraryRoots = WINDOWS_DRIVES.map(
+    (driveLetter) => `${driveLetter}:\\SteamLibrary`,
+  );
+  const libraryRootsFromVdf = steamInstallRoots.flatMap((steamInstallRoot) => {
+    const readableSteamRoot = resolveReadableSteamPath(environment, steamInstallRoot);
+
+    if (!readableSteamRoot) {
+      return [];
+    }
+
+    const libraryFoldersPath = join(
+      readableSteamRoot,
+      "steamapps",
+      "libraryfolders.vdf",
+    );
+
+    if (!pathExists(libraryFoldersPath)) {
+      return [];
+    }
+
+    try {
+      return parseSteamLibraryFoldersVdf(readTextFile(libraryFoldersPath));
+    } catch {
+      return [];
+    }
+  });
+
+  return dedupe([
+    ...steamInstallRoots.map((root) => normalizeWindowsPath(root)),
+    ...libraryRootsFromVdf,
+    ...fallbackLibraryRoots,
+  ]);
+}
+
+function resolveInstallCandidates(environment: ExecutionEnvironment) {
+  const steamLibraryRoots = resolveSteamLibraryRoots(environment);
+
+  return steamLibraryRoots.map((root) =>
+    win32.join(root, "steamapps", "common", "RimWorld"),
+  );
 }
 
 function resolveWorkshopCandidates(environment: ExecutionEnvironment) {
-  const steamRoots = resolveSteamRoots(environment);
+  const steamLibraryRoots = resolveSteamLibraryRoots(environment);
 
-  if (environment.isWsl) {
-    return dedupe(
-      steamRoots
-        .map((root) => join(root, "steamapps", "workshop", "content", "294100"))
-        .map((wslPath) => wslPathToWindowsPath(wslPath))
-        .filter((value): value is string => Boolean(value)),
-    );
-  }
-
-  return steamRoots.map(
-    (root) => `${root}\\steamapps\\workshop\\content\\294100`,
+  return steamLibraryRoots.map((root) =>
+    win32.join(root, "steamapps", "workshop", "content", "294100"),
   );
 }
 

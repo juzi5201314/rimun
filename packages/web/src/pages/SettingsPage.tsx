@@ -297,6 +297,11 @@ export function SettingsPage() {
   }
 
   if (settingsQuery.isError) {
+    const message =
+      settingsQuery.error instanceof Error
+        ? settingsQuery.error.message
+        : "Failed to load settings data.";
+
     return (
       <div className="flex h-full items-center justify-center p-8">
         <Card className="max-w-md border-destructive">
@@ -308,6 +313,7 @@ export function SettingsPage() {
           </CardHeader>
           <CardContent>
             <p className="text-sm font-bold">Failed to load settings data.</p>
+            <p className="mt-2 text-sm text-destructive/80">{message}</p>
           </CardContent>
         </Card>
       </div>

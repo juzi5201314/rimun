@@ -189,4 +189,81 @@ describe("mod scanner", () => {
     expect(result.mods[0]?.enabled).toBe(false);
     expect(result.errors).toHaveLength(1);
   });
+
+  it("decodes UTF-16 encoded About.xml content and preserves rich description text", () => {
+    const sandboxRoot = mkdtempSync(join(tmpdir(), "rimun-mod-scan-"));
+    const installationModsRoot = join(sandboxRoot, "installation", "Mods");
+    const configRoot = join(sandboxRoot, "config");
+
+    mkdirSync(join(installationModsRoot, "UnicodeMod", "About"), {
+      recursive: true,
+    });
+    mkdirSync(configRoot, { recursive: true });
+
+    writeFileSync(
+      join(installationModsRoot, "UnicodeMod", "About", "About.xml"),
+      Buffer.concat([
+        Buffer.from([0xff, 0xfe]),
+        Buffer.from(
+          `
+            <ModMetaData>
+              <name>Unicode Mod</name>
+              <packageId>example.unicode</packageId>
+              <description>First line
+
+- Alpha
+- Beta</description>
+            </ModMetaData>
+          `,
+          "utf16le",
+        ),
+      ]),
+    );
+    writeFileSync(
+      join(configRoot, "ModsConfig.xml"),
+      `
+        <ModsConfigData>
+          <activeMods>
+            <li>example.unicode</li>
+          </activeMods>
+        </ModsConfigData>
+      `,
+    );
+
+    const result = scanModLibrary(
+      {
+        channel: "steam",
+        installationPath: "C:\\Games\\RimWorld",
+        workshopPath: null,
+        configPath:
+          "C:\\Users\\alice\\AppData\\LocalLow\\Ludeon Studios\\RimWorld by Ludeon Studios\\Config",
+      },
+      {
+        environment: {
+          platform: "linux",
+          isWsl: true,
+          wslDistro: "Ubuntu",
+        },
+        toReadablePath: (windowsPath) => {
+          if (windowsPath === "C:\\Games\\RimWorld\\Mods") {
+            return installationModsRoot;
+          }
+
+          if (
+            windowsPath ===
+            "C:\\Users\\alice\\AppData\\LocalLow\\Ludeon Studios\\RimWorld by Ludeon Studios\\Config\\ModsConfig.xml"
+          ) {
+            return join(configRoot, "ModsConfig.xml");
+          }
+
+          return null;
+        },
+      },
+    );
+
+    expect(result.mods).toHaveLength(1);
+    expect(result.mods[0]?.name).toBe("Unicode Mod");
+    expect(result.mods[0]?.enabled).toBe(true);
+    expect(result.mods[0]?.description).toBe("First line\n\n- Alpha\n- Beta");
+  });
 });
