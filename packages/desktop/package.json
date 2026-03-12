@@ -1,0 +1,23 @@
+{
+  "name": "@rimun/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "electrobun dev",
+    "dev:watch": "electrobun dev --watch",
+    "run": "electrobun run",
+    "build": "electrobun build --env=stable",
+    "build:dev": "electrobun build --env=dev",
+    "test": "bun test",
+    "check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@rimun/shared": "workspace:*",
+    "drizzle-orm": "^0.44.5",
+    "electrobun": "1.15.1"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  }
+}
