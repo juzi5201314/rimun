@@ -371,7 +371,26 @@ export function HomePage() {
   const analysis = isDirty ? null : analysisQuery.data;
   const routeBlocker = useBlocker(isDirty);
   const term = searchQuery.trim().toLowerCase();
-  const filteredMods = mods.filter((mod) => {
+
+  const sortedMods = [...mods].sort((a, b) => {
+    const aPackageId = a.dependencyMetadata.packageIdNormalized;
+    const bPackageId = b.dependencyMetadata.packageIdNormalized;
+
+    if (a.enabled && b.enabled) {
+      if (!aPackageId || !bPackageId) return 0;
+      return (
+        draftActivePackageIds.indexOf(aPackageId) -
+        draftActivePackageIds.indexOf(bPackageId)
+      );
+    }
+
+    if (a.enabled) return -1;
+    if (b.enabled) return 1;
+
+    return a.name.localeCompare(b.name);
+  });
+
+  const filteredMods = sortedMods.filter((mod) => {
     if (!term) {
       return true;
     }
@@ -1143,6 +1162,7 @@ export function HomePage() {
               filteredMods.map((mod, index) => {
                 const isSelected = selectedMod?.id === mod.id;
                 const packageId = mod.dependencyMetadata.packageIdNormalized;
+                const activeIndex = packageId ? draftActivePackageIds.indexOf(packageId) : -1;
 
                 return (
                   <button
@@ -1150,12 +1170,12 @@ export function HomePage() {
                     type="button"
                     onClick={() => setSelectedModId(mod.id)}
                     className={cn(
-                      "flex w-full items-center border-b border-border/10 px-6 py-2 text-left transition-colors",
+                      "group flex w-full items-center border-b border-border/10 px-6 py-2 text-left transition-colors",
                       isSelected ? "bg-accent/40" : index % 2 === 0 ? "bg-background/20" : "bg-muted/10",
                       "hover:bg-accent/20"
                     )}
                   >
-                    <div className="flex w-10 justify-center">
+                    <div className="flex w-10 justify-center shrink-0">
                       <Checkbox
                         aria-label={`Toggle ${mod.name}`}
                         checked={mod.enabled}
@@ -1170,31 +1190,72 @@ export function HomePage() {
                         onClick={(event) => event.stopPropagation()}
                       />
                     </div>
+                    
+                    <div className="w-8 flex flex-col items-center justify-center shrink-0 mr-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      {mod.enabled && (
+                        <>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-4 w-4 p-0 hover:bg-primary/20"
+                            disabled={isBusy || activeIndex === 0}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (packageId) moveActivePackageId(packageId, "up");
+                            }}
+                          >
+                            <ArrowUp className="h-3 w-3" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-4 w-4 p-0 hover:bg-primary/20"
+                            disabled={isBusy || activeIndex === draftActivePackageIds.length - 1}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (packageId) moveActivePackageId(packageId, "down");
+                            }}
+                          >
+                            <ArrowDown className="h-3 w-3" />
+                          </Button>
+                        </>
+                      )}
+                    </div>
+
                     <div className="min-w-0 flex-1 flex items-center gap-3">
-                      <span className={cn(
-                        "truncate text-xs font-bold",
-                        !mod.enabled && "text-muted-foreground font-medium"
-                      )}>
-                        {mod.name}
-                      </span>
-                      <div className="flex items-center gap-1.5 shrink-0">
+                      <div className="flex flex-col min-w-0">
+                        <div className="flex items-center gap-2">
+                          {mod.enabled && (
+                            <span className="text-[10px] font-black text-primary/70 shrink-0 w-4">
+                              {activeIndex + 1}.
+                            </span>
+                          )}
+                          <span className={cn(
+                            "truncate text-xs font-bold",
+                            !mod.enabled && "text-muted-foreground font-medium"
+                          )}>
+                            {mod.name}
+                          </span>
+                        </div>
+                        <span className="truncate font-mono text-[9px] text-muted-foreground/60">
+                          {mod.packageId ?? mod.windowsPath}
+                        </span>
+                      </div>
+                      
+                      <div className="flex items-center gap-1.5 shrink-0 ml-auto">
                         {mod.isOfficial && (
                           <Badge variant="secondary" className="h-4 text-[8px] px-1 uppercase">Official</Badge>
                         )}
                         {!mod.hasAboutXml && (
                           <Badge variant="destructive" className="h-4 text-[8px] px-1 uppercase">No Meta</Badge>
                         )}
+                        <Badge variant="outline" className="h-4 text-[8px] px-1 uppercase opacity-70">
+                          {mod.source}
+                        </Badge>
                       </div>
-                      <span className="truncate font-mono text-[9px] text-muted-foreground/60 ml-auto">
-                        {mod.packageId ?? mod.windowsPath}
-                      </span>
                     </div>
-                    <div className="w-24 text-center">
-                      <Badge variant="outline" className="h-4 text-[8px] px-1 uppercase opacity-70">
-                        {mod.source}
-                      </Badge>
-                    </div>
-                    <div className="w-20 text-right text-[9px] font-bold text-muted-foreground/80">
+
+                    <div className="w-20 text-right text-[9px] font-bold text-muted-foreground/80 shrink-0">
                       {mod.version ?? "?.?"}
                     </div>
                   </button>
@@ -1236,80 +1297,6 @@ export function HomePage() {
           className="flex min-w-0 flex-col bg-card/10 overflow-hidden"
           style={{ width: `${asideWidth}%` }}
         >
-          <div className="border-b border-border/40 bg-background/30 px-6 py-4 shrink-0">
-            <div className="flex items-center justify-between gap-3 mb-3">
-              <div className="flex items-center gap-2">
-                <span className="text-[9px] font-black uppercase tracking-[0.2em] text-muted-foreground">
-                  Active Load Order
-                </span>
-                <Badge variant={isDirty ? "secondary" : "outline"} className="h-5 text-[9px] px-1.5">
-                  {draftActivePackageIds.length} Mods
-                </Badge>
-              </div>
-              <h3 className="text-sm font-black uppercase tracking-wide rw-text truncate max-w-[150px]">
-                {draftProfileName.trim() || currentProfile?.name || "Profile"}
-              </h3>
-            </div>
-
-            <div className="max-h-48 space-y-1.5 overflow-y-auto pr-1">
-              {activeEntries.length ? (
-                activeEntries.map((entry, index) => (
-                  <div
-                    key={entry.packageId}
-                    className="group rounded-md border border-border/40 bg-background/40 p-2 hover:bg-background/60 transition-colors"
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="min-w-0 flex-1">
-                        <p className="text-xs font-bold truncate">
-                          {index + 1}. {entry.modName}
-                        </p>
-                        <p className="font-mono text-[9px] text-muted-foreground truncate">
-                          {entry.packageId}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-6 w-6 p-0"
-                          disabled={isBusy || index === 0}
-                          onClick={() => moveActivePackageId(entry.packageId, "up")}
-                          title="Move Up"
-                        >
-                          <ArrowUp className="h-3 w-3" />
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-6 w-6 p-0"
-                          disabled={isBusy || index === activeEntries.length - 1}
-                          onClick={() => moveActivePackageId(entry.packageId, "down")}
-                          title="Move Down"
-                        >
-                          <ArrowDown className="h-3 w-3" />
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-6 w-6 p-0 hover:bg-destructive/10 hover:text-destructive"
-                          disabled={isBusy}
-                          onClick={() => toggleMod(entry.packageId)}
-                          title="Remove"
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="py-4 text-center text-[10px] text-muted-foreground italic">
-                  No active mods.
-                </div>
-              )}
-            </div>
-          </div>
-
           {selectedMod ? (
             <div className="flex min-h-0 flex-1 flex-col">
               <header className="border-b border-border/40 bg-background/30 p-6">
