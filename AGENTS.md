@@ -48,6 +48,8 @@
 # 开发命令约定
 
 - 本地开发默认命令：`bun run dev`。
+- 浏览器开发与浏览器自动化测试统一入口：`bun run dev:web`。
+- `bun run dev:web` 必须同时启动 Web UI 与真实 Bun dev host；后续凡是需要让 LLM / browser agent 通过浏览器模拟用户操作的场景，默认都从这个入口启动。
 - 生产构建默认命令：`bun run build`。
 - 单元测试默认命令：`bun run test`。
 - 静态检查默认命令：`bun run lint` 或 `bun run check`。
@@ -59,6 +61,8 @@
 - 测试优先覆盖路径转换、目录扫描、配置解析、mod 元数据处理等核心逻辑。
 - 单元测试应尽量避免依赖真实的 RimWorld 安装目录，优先使用 fixture、临时目录与 mock 数据。
 - 涉及 Windows / WSL 桥接的测试，优先拆成可重复执行的纯逻辑测试与少量人工验证步骤。
+- 浏览器自动化测试默认使用 `bun run dev:web` 作为被测入口，并优先使用 `agent-browser` 之类的浏览器代理直接驱动页面，而不是要求先打开 Electrobun GUI。
+- `bun run dev:web` 对应真实 Bun host，默认视为接近桌面客户端行为的测试入口；除非任务明确要求隔离环境，否则浏览器自动化可按真实本地数据路径进行验证。
 - 需要真实 Windows 环境才能完成的验证，应明确标注为手工验证，不污染默认自动化测试链路。
 
 # 目录结构约定
