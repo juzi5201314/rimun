@@ -6,7 +6,7 @@
   "workspaces": ["packages/*"],
   "scripts": {
     "dev": "BUN_TMPDIR=/tmp BUN_INSTALL=/tmp/bun-install bash ./tools/dev.sh",
-    "dev:web": "BUN_TMPDIR=/tmp BUN_INSTALL=/tmp/bun-install bun run --cwd packages/web dev -- --host 127.0.0.1 --port 5173",
+    "dev:web": "RIMUN_DEV_MODE=web BUN_TMPDIR=/tmp BUN_INSTALL=/tmp/bun-install bash ./tools/dev.sh",
     "build": "BUN_TMPDIR=/tmp BUN_INSTALL=/tmp/bun-install bash ./tools/build.sh",
     "test": "BUN_TMPDIR=/tmp BUN_INSTALL=/tmp/bun-install bash ./tools/test.sh",
     "typecheck": "BUN_TMPDIR=/tmp BUN_INSTALL=/tmp/bun-install bash ./tools/typecheck.sh",
