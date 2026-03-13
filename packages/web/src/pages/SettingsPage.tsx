@@ -1,4 +1,3 @@
-import { useBootstrapQuery } from "@/features/bootstrap/hooks/useBootstrapQuery";
 import { useDetectPathsMutation } from "@/features/settings/hooks/useDetectPathsMutation";
 import { useSaveSettingsMutation } from "@/features/settings/hooks/useSaveSettingsMutation";
 import { useSettingsQuery } from "@/features/settings/hooks/useSettingsQuery";
@@ -16,6 +15,7 @@ import { Input } from "@/shared/components/ui/input";
 import type {
   AppError,
   AppSettings,
+  BootstrapPayload,
   DistributionChannel,
   PathSelection,
   SaveSettingsInput,
@@ -31,6 +31,9 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+
+const FALLBACK_SUPPORTED_CHANNELS: DistributionChannel[] = ["steam", "manual"];
 
 type SettingsFormState = {
   channel: DistributionChannel;
@@ -188,10 +191,10 @@ function DetectionErrors({ errors }: { errors: AppError[] }) {
 }
 
 export function SettingsPage() {
-  const bootstrapQuery = useBootstrapQuery();
   const settingsQuery = useSettingsQuery();
   const detectPathsMutation = useDetectPathsMutation();
   const saveSettingsMutation = useSaveSettingsMutation();
+  const queryClient = useQueryClient();
   const [draft, setDraft] = useState<SettingsFormState>({
     channel: "steam",
     installationPath: "",
@@ -207,7 +210,10 @@ export function SettingsPage() {
     }
   }, [settingsQuery.data]);
 
-  const supportedChannels = bootstrapQuery.data?.supportedChannels ?? [draft.channel];
+  const cachedBootstrap =
+    queryClient.getQueryData<BootstrapPayload>(["bootstrap"]);
+  const supportedChannels =
+    cachedBootstrap?.supportedChannels ?? FALLBACK_SUPPORTED_CHANNELS;
   const selectableChannels = Array.from(new Set(supportedChannels));
   const detectableChannels = selectableChannels.filter(
     (channel) => channel !== "manual",
@@ -367,7 +373,7 @@ export function SettingsPage() {
           </div>
         ) : null}
 
-        {bootstrapQuery.data ? (
+        {cachedBootstrap ? (
           <Card className="border-border/60 bg-card/60">
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Backend Capability Snapshot</CardTitle>
@@ -394,22 +400,11 @@ export function SettingsPage() {
                   Runtime
                 </p>
                 <p className="text-sm font-bold">
-                  {bootstrapQuery.data.environment.isWsl
-                    ? `${bootstrapQuery.data.environment.platform} / WSL`
-                    : bootstrapQuery.data.environment.platform}
+                  {cachedBootstrap.environment.isWsl
+                    ? `${cachedBootstrap.environment.platform} / WSL`
+                    : cachedBootstrap.environment.platform}
                 </p>
               </div>
-            </CardContent>
-          </Card>
-        ) : null}
-
-        {bootstrapQuery.isError ? (
-          <Card className="border-destructive/60 bg-destructive/10">
-            <CardContent className="p-4">
-              <p className="text-sm font-bold text-destructive">
-                Bootstrap data could not be loaded. Channel options are limited to
-                the currently selected value.
-              </p>
             </CardContent>
           </Card>
         ) : null}
