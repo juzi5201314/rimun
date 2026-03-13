@@ -183,6 +183,8 @@ export function HomePage() {
     string | null
   >(null);
   const [asideWidth, setAsideWidth] = useState(44); // percentage
+  const [activationFilter, setActivationFilter] = useState<"all" | "active" | "inactive">("all");
+  const [sourceFilter, setSourceFilter] = useState<"all" | "local" | "workshop">("all");
 
   const handleMouseDown = (e: React.MouseEvent) => {
     const startX = e.clientX;
@@ -391,6 +393,15 @@ export function HomePage() {
   });
 
   const filteredMods = sortedMods.filter((mod) => {
+    // 1. Activation Filter
+    if (activationFilter === "active" && !mod.enabled) return false;
+    if (activationFilter === "inactive" && mod.enabled) return false;
+
+    // 2. Source Filter
+    if (sourceFilter === "local" && mod.source !== "installation") return false;
+    if (sourceFilter === "workshop" && mod.source !== "workshop") return false;
+
+    // 3. Search Term
     if (!term) {
       return true;
     }
@@ -926,6 +937,60 @@ export function HomePage() {
                 </div>
 
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                  <div className="flex items-center gap-1 rounded-lg border border-border/60 bg-background/40 p-1">
+                    <Button
+                      variant={activationFilter === "all" ? "secondary" : "ghost"}
+                      size="sm"
+                      className="h-7 text-[10px] px-2 font-bold uppercase"
+                      onClick={() => setActivationFilter("all")}
+                    >
+                      All
+                    </Button>
+                    <Button
+                      variant={activationFilter === "active" ? "secondary" : "ghost"}
+                      size="sm"
+                      className="h-7 text-[10px] px-2 font-bold uppercase"
+                      onClick={() => setActivationFilter("active")}
+                    >
+                      Active
+                    </Button>
+                    <Button
+                      variant={activationFilter === "inactive" ? "secondary" : "ghost"}
+                      size="sm"
+                      className="h-7 text-[10px] px-2 font-bold uppercase"
+                      onClick={() => setActivationFilter("inactive")}
+                    >
+                      Inactive
+                    </Button>
+                  </div>
+
+                  <div className="flex items-center gap-1 rounded-lg border border-border/60 bg-background/40 p-1">
+                    <Button
+                      variant={sourceFilter === "all" ? "secondary" : "ghost"}
+                      size="sm"
+                      className="h-7 text-[10px] px-2 font-bold uppercase"
+                      onClick={() => setSourceFilter("all")}
+                    >
+                      All Sources
+                    </Button>
+                    <Button
+                      variant={sourceFilter === "local" ? "secondary" : "ghost"}
+                      size="sm"
+                      className="h-7 text-[10px] px-2 font-bold uppercase"
+                      onClick={() => setSourceFilter("local")}
+                    >
+                      Local
+                    </Button>
+                    <Button
+                      variant={sourceFilter === "workshop" ? "secondary" : "ghost"}
+                      size="sm"
+                      className="h-7 text-[10px] px-2 font-bold uppercase"
+                      onClick={() => setSourceFilter("workshop")}
+                    >
+                      Workshop
+                    </Button>
+                  </div>
+
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                     <Input
@@ -1157,7 +1222,6 @@ export function HomePage() {
           <div className="sticky top-0 z-10 flex items-center px-6 py-2 text-[9px] font-black uppercase tracking-widest text-muted-foreground bg-background border-b border-border/20">
             <div className="w-10 text-center">Use</div>
             <div className="flex-1">Mod</div>
-            <div className="w-24 text-center">Source</div>
             <div className="w-20 text-right">Version</div>
           </div>
 
@@ -1253,9 +1317,6 @@ export function HomePage() {
                         {!mod.hasAboutXml && (
                           <Badge variant="destructive" className="h-4 text-[8px] px-1 uppercase">No Meta</Badge>
                         )}
-                        <Badge variant="outline" className="h-4 text-[8px] px-1 uppercase opacity-70">
-                          {mod.source}
-                        </Badge>
                       </div>
                     </div>
 
