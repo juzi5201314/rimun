@@ -17,21 +17,24 @@ function assertRequestSchema<T>(
   return schema.parse(value);
 }
 
-function resolvePreferredSelection(repository: SettingsRepository): PathSelection | null {
+function resolvePreferredSelection(
+  repository: SettingsRepository,
+): PathSelection | null {
   const settings = repository.getSettings();
-  const detection = detectPaths({
+
+  if (settings.installationPath) {
+    return {
+      channel: settings.channel,
+      installationPath: settings.installationPath,
+      workshopPath: settings.workshopPath,
+      configPath: settings.configPath,
+    };
+  }
+
+  return detectPaths({
     preferredChannels: ["steam"],
     allowFallbackToManual: true,
-  });
-
-  return settings.installationPath
-    ? {
-        channel: settings.channel,
-        installationPath: settings.installationPath,
-        workshopPath: settings.workshopPath,
-        configPath: settings.configPath,
-      }
-    : detection.preferredSelection;
+  }).preferredSelection;
 }
 
 function resolveBootstrap(repository: SettingsRepository) {
@@ -50,7 +53,7 @@ export function createMainWindowRpc(
   _getWindow: () => unknown,
 ) {
   return BrowserView.defineRPC<RimunRpcContract>({
-    maxRequestTime: 10_000,
+    maxRequestTime: 30_000,
     handlers: {
       requests: {
         getBootstrap: (params) => {
@@ -60,14 +63,14 @@ export function createMainWindowRpc(
           );
           return resolveBootstrap(repository);
         },
-        getModLibrary: (params) => {
+        getModLibrary: async (params) => {
           assertRequestSchema(
             rimunRpcSchemas.bun.requests.getModLibrary.params,
             params,
           );
 
           return rimunRpcSchemas.bun.requests.getModLibrary.response.parse(
-            scanModLibrary(resolvePreferredSelection(repository)),
+            await scanModLibrary(resolvePreferredSelection(repository)),
           );
         },
         getSettings: (params) => {

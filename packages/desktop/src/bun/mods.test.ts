@@ -1,9 +1,99 @@
-import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { describe, expect, it } from "bun:test";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import type { PathSelection } from "@rimun/shared";
 import { parseAboutXml, parseModsConfigXml, scanModLibrary } from "./mods";
+
+function createSandboxLayout() {
+  const sandboxRoot = mkdtempSync(join("/tmp", "rimun-mod-scan-"));
+  const installationModsRoot = join(sandboxRoot, "installation", "Mods");
+  const workshopRoot = join(sandboxRoot, "workshop");
+  const configRoot = join(sandboxRoot, "config");
+
+  mkdirSync(installationModsRoot, { recursive: true });
+  mkdirSync(workshopRoot, { recursive: true });
+  mkdirSync(configRoot, { recursive: true });
+
+  return {
+    configRoot,
+    installationModsRoot,
+    sandboxRoot,
+    workshopRoot,
+  };
+}
+
+function createSelection(
+  overrides: Partial<PathSelection> = {},
+): PathSelection {
+  return {
+    channel: "steam",
+    installationPath: "C:\\Games\\RimWorld",
+    workshopPath: "C:\\Games\\Steam\\steamapps\\workshop\\content\\294100",
+    configPath:
+      "C:\\Users\\alice\\AppData\\LocalLow\\Ludeon Studios\\RimWorld by Ludeon Studios\\Config",
+    ...overrides,
+  };
+}
+
+function createReadablePathResolver(paths: {
+  configRoot?: string;
+  installationModsRoot?: string;
+  workshopRoot?: string;
+}) {
+  return (windowsPath: string) => {
+    if (
+      paths.installationModsRoot &&
+      windowsPath === "C:\\Games\\RimWorld\\Mods"
+    ) {
+      return paths.installationModsRoot;
+    }
+
+    if (
+      paths.workshopRoot &&
+      windowsPath === "C:\\Games\\Steam\\steamapps\\workshop\\content\\294100"
+    ) {
+      return paths.workshopRoot;
+    }
+
+    if (
+      paths.configRoot &&
+      windowsPath ===
+        "C:\\Users\\alice\\AppData\\LocalLow\\Ludeon Studios\\RimWorld by Ludeon Studios\\Config\\ModsConfig.xml"
+    ) {
+      return join(paths.configRoot, "ModsConfig.xml");
+    }
+
+    return null;
+  };
+}
+
+function writeAboutXml(
+  modsRoot: string,
+  folderName: string,
+  content: string | Uint8Array,
+) {
+  mkdirSync(join(modsRoot, folderName, "About"), { recursive: true });
+  writeFileSync(join(modsRoot, folderName, "About", "About.xml"), content);
+}
+
+function writeModsConfigXml(configRoot: string, activePackageIds: string[]) {
+  writeFileSync(
+    join(configRoot, "ModsConfig.xml"),
+    `
+      <ModsConfigData>
+        <activeMods>
+          ${activePackageIds.map((packageId) => `<li>${packageId}</li>`).join("\n")}
+        </activeMods>
+      </ModsConfigData>
+    `,
+  );
+}
+
+const testEnvironment = {
+  platform: "linux",
+  isWsl: true,
+  wslDistro: "Ubuntu",
+} as const;
 
 describe("mod scanner", () => {
   it("parses core About.xml fields", () => {
@@ -39,18 +129,13 @@ describe("mod scanner", () => {
     expect(parsed.activePackageIds.has("unlimitedhugs.hugslib")).toBe(true);
   });
 
-  it("scans installation and workshop roots into mod records", () => {
-    const sandboxRoot = mkdtempSync(join(tmpdir(), "rimun-mod-scan-"));
-    const installationModsRoot = join(sandboxRoot, "installation", "Mods");
-    const workshopRoot = join(sandboxRoot, "workshop");
-    const configRoot = join(sandboxRoot, "config");
+  it("scans installation and workshop roots into mod records", async () => {
+    const { configRoot, installationModsRoot, workshopRoot } =
+      createSandboxLayout();
 
-    mkdirSync(join(installationModsRoot, "Core", "About"), { recursive: true });
-    mkdirSync(join(workshopRoot, "818773962", "About"), { recursive: true });
-    mkdirSync(configRoot, { recursive: true });
-
-    writeFileSync(
-      join(installationModsRoot, "Core", "About", "About.xml"),
+    writeAboutXml(
+      installationModsRoot,
+      "Core",
       `
         <ModMetaData>
           <name>Core</name>
@@ -61,8 +146,9 @@ describe("mod scanner", () => {
         </ModMetaData>
       `,
     );
-    writeFileSync(
-      join(workshopRoot, "818773962", "About", "About.xml"),
+    writeAboutXml(
+      workshopRoot,
+      "818773962",
       `
         <ModMetaData>
           <name>HugsLib</name>
@@ -77,51 +163,18 @@ describe("mod scanner", () => {
         </ModMetaData>
       `,
     );
-    writeFileSync(
-      join(configRoot, "ModsConfig.xml"),
-      `
-        <ModsConfigData>
-          <activeMods>
-            <li>ludeon.rimworld</li>
-            <li>unlimitedhugs.hugslib</li>
-          </activeMods>
-        </ModsConfigData>
-      `,
-    );
+    writeModsConfigXml(configRoot, [
+      "ludeon.rimworld",
+      "unlimitedhugs.hugslib",
+    ]);
 
-    const selection: PathSelection = {
-      channel: "steam",
-      installationPath: "C:\\Games\\RimWorld",
-      workshopPath: "C:\\Games\\Steam\\steamapps\\workshop\\content\\294100",
-      configPath: "C:\\Users\\alice\\AppData\\LocalLow\\Ludeon Studios\\RimWorld by Ludeon Studios\\Config",
-    };
-
-    const result = scanModLibrary(selection, {
-      environment: {
-        platform: "linux",
-        isWsl: true,
-        wslDistro: "Ubuntu",
-      },
-      toReadablePath: (windowsPath) => {
-        if (windowsPath === "C:\\Games\\RimWorld\\Mods") {
-          return installationModsRoot;
-        }
-
-        if (
-          windowsPath === "C:\\Games\\Steam\\steamapps\\workshop\\content\\294100"
-        ) {
-          return workshopRoot;
-        }
-
-        if (
-          windowsPath ===
-          "C:\\Users\\alice\\AppData\\LocalLow\\Ludeon Studios\\RimWorld by Ludeon Studios\\Config\\ModsConfig.xml"
-        ) {
-          return join(configRoot, "ModsConfig.xml");
-        }
-
-        return null;
-      },
+    const result = await scanModLibrary(createSelection(), {
+      environment: testEnvironment,
+      toReadablePath: createReadablePathResolver({
+        configRoot,
+        installationModsRoot,
+        workshopRoot,
+      }),
     });
 
     expect(result.requiresConfiguration).toBe(false);
@@ -135,13 +188,9 @@ describe("mod scanner", () => {
     expect(result.errors).toHaveLength(0);
   });
 
-  it("returns a recoverable configuration error when install path is missing", () => {
-    const result = scanModLibrary(null, {
-      environment: {
-        platform: "linux",
-        isWsl: true,
-        wslDistro: "Ubuntu",
-      },
+  it("returns a recoverable configuration error when install path is missing", async () => {
+    const result = await scanModLibrary(null, {
+      environment: testEnvironment,
       toReadablePath: () => null,
     });
 
@@ -150,13 +199,12 @@ describe("mod scanner", () => {
     expect(result.mods).toHaveLength(0);
   });
 
-  it("keeps scanning mods when config path is missing but reports enabled-state fallback", () => {
-    const sandboxRoot = mkdtempSync(join(tmpdir(), "rimun-mod-scan-"));
-    const installationModsRoot = join(sandboxRoot, "installation", "Mods");
+  it("keeps scanning mods when config path is missing but reports enabled-state fallback", async () => {
+    const { installationModsRoot } = createSandboxLayout();
 
-    mkdirSync(join(installationModsRoot, "Core", "About"), { recursive: true });
-    writeFileSync(
-      join(installationModsRoot, "Core", "About", "About.xml"),
+    writeAboutXml(
+      installationModsRoot,
+      "Core",
       `
         <ModMetaData>
           <name>Core</name>
@@ -165,23 +213,16 @@ describe("mod scanner", () => {
       `,
     );
 
-    const result = scanModLibrary(
-      {
-        channel: "steam",
-        installationPath: "C:\\Games\\RimWorld",
+    const result = await scanModLibrary(
+      createSelection({
         workshopPath: null,
         configPath: null,
-      },
+      }),
       {
-        environment: {
-          platform: "linux",
-          isWsl: true,
-          wslDistro: "Ubuntu",
-        },
-        toReadablePath: (windowsPath) =>
-          windowsPath === "C:\\Games\\RimWorld\\Mods"
-            ? installationModsRoot
-            : null,
+        environment: testEnvironment,
+        toReadablePath: createReadablePathResolver({
+          installationModsRoot,
+        }),
       },
     );
 
@@ -190,18 +231,12 @@ describe("mod scanner", () => {
     expect(result.errors).toHaveLength(1);
   });
 
-  it("decodes UTF-16 encoded About.xml content and preserves rich description text", () => {
-    const sandboxRoot = mkdtempSync(join(tmpdir(), "rimun-mod-scan-"));
-    const installationModsRoot = join(sandboxRoot, "installation", "Mods");
-    const configRoot = join(sandboxRoot, "config");
+  it("decodes UTF-16 encoded About.xml content and preserves rich description text", async () => {
+    const { configRoot, installationModsRoot } = createSandboxLayout();
 
-    mkdirSync(join(installationModsRoot, "UnicodeMod", "About"), {
-      recursive: true,
-    });
-    mkdirSync(configRoot, { recursive: true });
-
-    writeFileSync(
-      join(installationModsRoot, "UnicodeMod", "About", "About.xml"),
+    writeAboutXml(
+      installationModsRoot,
+      "UnicodeMod",
       Buffer.concat([
         Buffer.from([0xff, 0xfe]),
         Buffer.from(
@@ -219,45 +254,18 @@ describe("mod scanner", () => {
         ),
       ]),
     );
-    writeFileSync(
-      join(configRoot, "ModsConfig.xml"),
-      `
-        <ModsConfigData>
-          <activeMods>
-            <li>example.unicode</li>
-          </activeMods>
-        </ModsConfigData>
-      `,
-    );
+    writeModsConfigXml(configRoot, ["example.unicode"]);
 
-    const result = scanModLibrary(
-      {
-        channel: "steam",
-        installationPath: "C:\\Games\\RimWorld",
+    const result = await scanModLibrary(
+      createSelection({
         workshopPath: null,
-        configPath:
-          "C:\\Users\\alice\\AppData\\LocalLow\\Ludeon Studios\\RimWorld by Ludeon Studios\\Config",
-      },
+      }),
       {
-        environment: {
-          platform: "linux",
-          isWsl: true,
-          wslDistro: "Ubuntu",
-        },
-        toReadablePath: (windowsPath) => {
-          if (windowsPath === "C:\\Games\\RimWorld\\Mods") {
-            return installationModsRoot;
-          }
-
-          if (
-            windowsPath ===
-            "C:\\Users\\alice\\AppData\\LocalLow\\Ludeon Studios\\RimWorld by Ludeon Studios\\Config\\ModsConfig.xml"
-          ) {
-            return join(configRoot, "ModsConfig.xml");
-          }
-
-          return null;
-        },
+        environment: testEnvironment,
+        toReadablePath: createReadablePathResolver({
+          configRoot,
+          installationModsRoot,
+        }),
       },
     );
 
@@ -265,5 +273,112 @@ describe("mod scanner", () => {
     expect(result.mods[0]?.name).toBe("Unicode Mod");
     expect(result.mods[0]?.enabled).toBe(true);
     expect(result.mods[0]?.description).toBe("First line\n\n- Alpha\n- Beta");
+  });
+
+  it("scans more mods than a single worker chunk without losing records", async () => {
+    const { configRoot, installationModsRoot } = createSandboxLayout();
+    const activePackageIds: string[] = [];
+
+    for (let index = 0; index < 60; index += 1) {
+      const packageId = `example.mod${index}`;
+      activePackageIds.push(packageId);
+      writeAboutXml(
+        installationModsRoot,
+        `Mod${index}`,
+        `
+          <ModMetaData>
+            <name>Mod ${String(index).padStart(2, "0")}</name>
+            <packageId>${packageId}</packageId>
+            <author>Tester</author>
+            <description>Fixture ${index}</description>
+          </ModMetaData>
+        `,
+      );
+    }
+
+    writeModsConfigXml(configRoot, activePackageIds);
+
+    const result = await scanModLibrary(
+      createSelection({
+        workshopPath: null,
+      }),
+      {
+        environment: testEnvironment,
+        toReadablePath: createReadablePathResolver({
+          configRoot,
+          installationModsRoot,
+        }),
+      },
+    );
+
+    expect(result.mods).toHaveLength(60);
+    expect(result.mods.every((mod) => mod.enabled)).toBe(true);
+    expect(result.mods[0]?.name).toBe("Mod 00");
+    expect(result.mods.at(-1)?.name).toBe("Mod 59");
+    expect(result.errors).toHaveLength(0);
+  });
+
+  it("falls back to the main thread when the worker pool fails", async () => {
+    const { configRoot, installationModsRoot } = createSandboxLayout();
+
+    writeAboutXml(
+      installationModsRoot,
+      "FallbackMod",
+      `
+        <ModMetaData>
+          <name>Fallback Mod</name>
+          <packageId>example.fallback</packageId>
+          <description>Recovered after worker failure</description>
+        </ModMetaData>
+      `,
+    );
+    writeModsConfigXml(configRoot, ["example.fallback"]);
+
+    const result = await scanModLibrary(
+      createSelection({
+        workshopPath: null,
+      }),
+      {
+        environment: testEnvironment,
+        runWorkerChunks: async () => {
+          throw new Error("synthetic worker crash");
+        },
+        toReadablePath: createReadablePathResolver({
+          configRoot,
+          installationModsRoot,
+        }),
+      },
+    );
+
+    expect(result.mods).toHaveLength(1);
+    expect(result.mods[0]?.name).toBe("Fallback Mod");
+    expect(result.mods[0]?.enabled).toBe(true);
+    expect(result.errors).toHaveLength(1);
+    expect(result.errors[0]?.code).toBe("unknown_error");
+  });
+
+  it("reports missing About.xml without aborting the scan", async () => {
+    const { configRoot, installationModsRoot } = createSandboxLayout();
+
+    mkdirSync(join(installationModsRoot, "MissingAbout"), { recursive: true });
+    writeModsConfigXml(configRoot, []);
+
+    const result = await scanModLibrary(
+      createSelection({
+        workshopPath: null,
+      }),
+      {
+        environment: testEnvironment,
+        toReadablePath: createReadablePathResolver({
+          configRoot,
+          installationModsRoot,
+        }),
+      },
+    );
+
+    expect(result.mods).toHaveLength(1);
+    expect(result.mods[0]?.hasAboutXml).toBe(false);
+    expect(result.mods[0]?.manifestPath).toBeNull();
+    expect(result.mods[0]?.notes).toEqual(["About/About.xml was not found."]);
   });
 });
