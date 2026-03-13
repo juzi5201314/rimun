@@ -916,9 +916,13 @@ export function HomePage() {
                   <h2 className="text-2xl font-black uppercase tracking-tight rw-text whitespace-nowrap">
                     Mod Library
                   </h2>
-                  <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">
-                    {modLibrary.mods.length} mods loaded
-                  </span>
+                  <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground whitespace-nowrap">
+                    <Badge variant="outline" className="h-5 px-1.5 text-[10px] font-bold border-primary/20 bg-primary/5 text-primary">
+                      {draftActivePackageIds.length} Active
+                    </Badge>
+                    <span>/</span>
+                    <span>{modLibrary.mods.length} Total</span>
+                  </div>
                 </div>
 
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
