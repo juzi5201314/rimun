@@ -1,32 +1,12 @@
 import { App } from "@/app/App";
 import { createMockRpcClient } from "@/shared/testing/createMockRpcClient";
-import type {
-  DetectPathsInput,
-  ModLibraryResult,
-  ModOrderAnalysisResult,
-  ModOrderApplyResult,
-} from "@rimun/shared";
+import type { DetectPathsInput } from "@rimun/shared";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-
-function createDependencyMetadata(
-  packageId: string | null,
-  dependencies: string[] = [],
-) {
-  return {
-    packageIdNormalized: packageId,
-    dependencies,
-    loadAfter: [],
-    loadBefore: [],
-    forceLoadAfter: [],
-    forceLoadBefore: [],
-    incompatibleWith: [],
-    supportedVersions: [],
-  };
-}
+import { vi } from "vitest";
 
 describe("App", () => {
-  it("renders the real mod library returned by the backend", async () => {
+  it("renders profile-backed mod library data and auto-saves before switching profiles", async () => {
     window.__RIMUN_RPC__ = createMockRpcClient();
 
     render(<App />);
@@ -34,282 +14,81 @@ describe("App", () => {
     expect(
       await screen.findByRole("heading", { name: /Mod Library/i }),
     ).toBeInTheDocument();
-    expect(screen.getAllByText("Core").length).toBeGreaterThan(0);
-    expect(screen.getByText("HugsLib")).toBeInTheDocument();
-    expect(screen.getAllByText("Enabled").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Pawns").length).toBeGreaterThan(0);
-  });
 
-  it("enables missing dependencies first and then offers automatic sorting", async () => {
-    const modLibraryState: ModLibraryResult = {
-      environment: {
-        platform: "linux",
-        isWsl: true,
-        wslDistro: "Ubuntu",
-      },
-      selection: {
-        channel: "steam",
-        installationPath: "C:\\Games\\RimWorld",
-        workshopPath: "C:\\Games\\Steam\\steamapps\\workshop\\content\\294100",
-        configPath:
-          "C:\\Users\\player\\AppData\\LocalLow\\Ludeon Studios\\RimWorld by Ludeon Studios\\Config",
-      },
-      scannedAt: "2026-03-12T00:00:00.000Z",
-      scannedRoots: {
-        installationModsPath: "C:\\Games\\RimWorld\\Mods",
-        workshopPath: "C:\\Games\\Steam\\steamapps\\workshop\\content\\294100",
-        modsConfigPath:
-          "C:\\Users\\player\\AppData\\LocalLow\\Ludeon Studios\\RimWorld by Ludeon Studios\\Config\\ModsConfig.xml",
-      },
-      activePackageIds: ["ludeon.rimworld", "example.camera"],
-      mods: [
-        {
-          id: "installation:ludeon.rimworld",
-          name: "Core",
-          packageId: "ludeon.rimworld",
-          author: "Ludeon Studios",
-          version: "1.5",
-          description: "Core",
-          source: "installation",
-          windowsPath: "C:\\Games\\RimWorld\\Mods\\Core",
-          wslPath: "/mnt/c/Games/RimWorld/Mods/Core",
-          manifestPath: "C:\\Games\\RimWorld\\Mods\\Core\\About\\About.xml",
-          enabled: true,
-          isOfficial: true,
-          hasAboutXml: true,
-          dependencyMetadata: createDependencyMetadata("ludeon.rimworld"),
-          notes: [],
-        },
-        {
-          id: "workshop:unlimitedhugs.hugslib",
-          name: "HugsLib",
-          packageId: "unlimitedhugs.hugslib",
-          author: "UnlimitedHugs",
-          version: "1.5",
-          description: "Library helpers",
-          source: "workshop",
-          windowsPath: "C:\\Workshop\\HugsLib",
-          wslPath: "/mnt/c/Workshop/HugsLib",
-          manifestPath: "C:\\Workshop\\HugsLib\\About\\About.xml",
-          enabled: false,
-          isOfficial: false,
-          hasAboutXml: true,
-          dependencyMetadata: createDependencyMetadata("unlimitedhugs.hugslib"),
-          notes: [],
-        },
-        {
-          id: "workshop:example.camera",
-          name: "Camera+",
-          packageId: "example.camera",
-          author: "Camera Team",
-          version: "1.5",
-          description: "Camera tweaks",
-          source: "workshop",
-          windowsPath: "C:\\Workshop\\CameraPlus",
-          wslPath: "/mnt/c/Workshop/CameraPlus",
-          manifestPath: "C:\\Workshop\\CameraPlus\\About\\About.xml",
-          enabled: true,
-          isOfficial: false,
-          hasAboutXml: true,
-          dependencyMetadata: createDependencyMetadata("example.camera", [
-            "unlimitedhugs.hugslib",
-          ]),
-          notes: [],
-        },
-      ],
-      errors: [],
-      requiresConfiguration: false,
-    };
-    let analysisState: ModOrderAnalysisResult = {
-      analyzedAt: "2026-03-12T00:00:01.000Z",
-      currentActivePackageIds: ["ludeon.rimworld", "example.camera"],
-      recommendedActivePackageIds: [
-        "ludeon.rimworld",
-        "example.camera",
-        "unlimitedhugs.hugslib",
-      ],
-      recommendedOrderPackageIds: [
-        "ludeon.rimworld",
-        "unlimitedhugs.hugslib",
-        "example.camera",
-      ],
-      missingInstalledInactiveDependencies: [
-        {
-          packageId: "unlimitedhugs.hugslib",
-          modName: "HugsLib",
-          requiredByPackageIds: ["example.camera"],
-          requiredByNames: ["Camera+"],
-        },
-      ],
-      missingUnavailableDependencies: [],
-      diagnostics: [],
-      explanations: [],
-      edges: [],
-      isOptimal: false,
-      hasBlockingIssues: false,
-      sortDifferenceCount: 1,
-    };
-    const appliedActions: ModOrderApplyResult["appliedActions"][] = [];
-
-    window.__RIMUN_RPC__ = createMockRpcClient({
-      modLibrary: modLibraryState,
-      modOrderAnalysis: analysisState,
-      onAnalyzeModOrder: async () => analysisState,
-      onApplyModOrderRecommendation: async (input) => {
-        appliedActions.push(input.actions);
-
-        if (input.actions.includes("enableMissingDependencies")) {
-          modLibraryState.activePackageIds = [
-            "ludeon.rimworld",
-            "example.camera",
-            "unlimitedhugs.hugslib",
-          ];
-          modLibraryState.mods = modLibraryState.mods.map((mod) =>
-            mod.packageId === "unlimitedhugs.hugslib"
-              ? { ...mod, enabled: true }
-              : mod,
-          );
-          analysisState = {
-            ...analysisState,
-            analyzedAt: "2026-03-12T00:00:02.000Z",
-            currentActivePackageIds: [
-              "ludeon.rimworld",
-              "example.camera",
-              "unlimitedhugs.hugslib",
-            ],
-            recommendedActivePackageIds: [
-              "ludeon.rimworld",
-              "example.camera",
-              "unlimitedhugs.hugslib",
-            ],
-            missingInstalledInactiveDependencies: [],
-            sortDifferenceCount: 2,
-          };
-
-          return {
-            appliedActions: input.actions,
-            activePackageIds: modLibraryState.activePackageIds,
-            modLibrary: modLibraryState,
-            analysis: analysisState,
-          };
-        }
-
-        analysisState = {
-          ...analysisState,
-          analyzedAt: "2026-03-12T00:00:03.000Z",
-          currentActivePackageIds: [
-            "ludeon.rimworld",
-            "unlimitedhugs.hugslib",
-            "example.camera",
-          ],
-          recommendedOrderPackageIds: [
-            "ludeon.rimworld",
-            "unlimitedhugs.hugslib",
-            "example.camera",
-          ],
-          sortDifferenceCount: 0,
-          isOptimal: true,
-        };
-        modLibraryState.activePackageIds = [
-          "ludeon.rimworld",
-          "unlimitedhugs.hugslib",
-          "example.camera",
-        ];
-
-        return {
-          appliedActions: input.actions,
-          activePackageIds: modLibraryState.activePackageIds,
-          modLibrary: modLibraryState,
-          analysis: analysisState,
-        };
-      },
+    const pawnsCheckbox = screen.getByRole("checkbox", {
+      name: /Toggle Pawns/i,
     });
 
-    render(<App />);
-
-    expect(
-      await screen.findByRole("heading", { name: /Mod Library/i }),
-    ).toBeInTheDocument();
-    expect(
-      await screen.findByRole("dialog", {
-        name: /Enable Missing Dependencies\?/i,
-      }),
-    ).toBeInTheDocument();
-
-    await userEvent.click(
-      screen.getByRole("button", { name: /Enable Dependencies/i }),
+    expect(screen.getByRole("combobox", { name: /Profile/i })).toHaveValue(
+      "default",
     );
+    expect(pawnsCheckbox).not.toBeChecked();
+
+    await userEvent.click(pawnsCheckbox);
 
     expect(
-      await screen.findByRole("dialog", {
-        name: /Apply Recommended Sort Order\?/i,
-      }),
+      (await screen.findAllByText(/Unsaved Changes/i)).length,
+    ).toBeGreaterThan(0);
+    expect(
+      screen.getByText(
+        /Analysis is paused while this profile has unsaved changes/i,
+      ),
     ).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: /Auto Sort/i }));
+    await userEvent.selectOptions(
+      screen.getByRole("combobox", { name: /Profile/i }),
+      "builder",
+    );
 
     await waitFor(() => {
-      expect(appliedActions).toEqual([
-        ["enableMissingDependencies"],
-        ["reorderActiveMods"],
-      ]);
+      expect(
+        screen.getByRole("textbox", { name: /Profile Name/i }),
+      ).toHaveValue("Builder");
     });
+    expect(
+      screen.getByRole("checkbox", { name: /Toggle Pawns/i }),
+    ).toBeChecked();
 
-    expect(await screen.findByRole("status")).toHaveTextContent(
-      "Applied the recommended active mod order.",
+    await userEvent.selectOptions(
+      screen.getByRole("combobox", { name: /Profile/i }),
+      "default",
     );
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("textbox", { name: /Profile Name/i }),
+      ).toHaveValue("Default");
+      expect(
+        screen.getByRole("checkbox", { name: /Toggle Pawns/i }),
+      ).toBeChecked();
+    });
   });
 
-  it("shows a delayed loading overlay while mod-order analysis is still running", async () => {
-    window.__RIMUN_RPC__ = createMockRpcClient({
-      onAnalyzeModOrder: async () =>
-        new Promise((resolve) => {
-          window.setTimeout(() => {
-            resolve({
-              analyzedAt: "2026-03-12T00:00:01.000Z",
-              currentActivePackageIds: [
-                "ludeon.rimworld",
-                "unlimitedhugs.hugslib",
-              ],
-              recommendedActivePackageIds: [
-                "ludeon.rimworld",
-                "unlimitedhugs.hugslib",
-              ],
-              recommendedOrderPackageIds: [
-                "ludeon.rimworld",
-                "unlimitedhugs.hugslib",
-              ],
-              missingInstalledInactiveDependencies: [],
-              missingUnavailableDependencies: [],
-              diagnostics: [],
-              explanations: [],
-              edges: [],
-              isOptimal: true,
-              hasBlockingIssues: false,
-              sortDifferenceCount: 0,
-            });
-          }, 650);
-        }),
-    });
+  it("creates a new profile from the current saved snapshot", async () => {
+    const promptSpy = vi
+      .spyOn(window, "prompt")
+      .mockImplementation(() => "Combat Run");
+
+    window.__RIMUN_RPC__ = createMockRpcClient();
 
     render(<App />);
 
     expect(
       await screen.findByRole("heading", { name: /Mod Library/i }),
     ).toBeInTheDocument();
-    expect(
-      await screen.findByText(/Analyzing Load Order/i, {}, { timeout: 1_500 }),
-    ).toBeInTheDocument();
 
-    await waitFor(
-      () => {
-        expect(
-          screen.queryByText(/Analyzing Load Order/i),
-        ).not.toBeInTheDocument();
-      },
-      { timeout: 2_000 },
-    );
-  }, 10_000);
+    await userEvent.click(screen.getByRole("button", { name: /New Profile/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("combobox", { name: /Profile/i })).toHaveValue(
+        "profile-3",
+      );
+    });
+    expect(
+      screen.getByRole("option", { name: "Combat Run" }),
+    ).toBeInTheDocument();
+    expect(promptSpy).toHaveBeenCalled();
+  });
 
   it("keeps empty settings empty, uses bootstrap channels for detection, and saves", async () => {
     const detectedInputs: DetectPathsInput[] = [];

@@ -3,10 +3,15 @@ import { describe, expect, it } from "bun:test";
 import {
   applyModOrderRecommendationInputSchema,
   bootstrapPayloadSchema,
+  createProfileInputSchema,
   detectPathsResultSchema,
   modLibraryResultSchema,
   modOrderAnalysisResultSchema,
+  profileCatalogResultSchema,
+  profileScopedInputSchema,
   rimunRpcSchemas,
+  saveProfileInputSchema,
+  saveProfileResultSchema,
   saveSettingsInputSchema,
   validatePathResultSchema,
 } from "../src/index";
@@ -160,6 +165,23 @@ describe("shared schemas", () => {
     expect(parsed.activePackageIds).toEqual(["ludeon.rimworld"]);
   });
 
+  it("accepts a profile catalog payload", () => {
+    const parsed = profileCatalogResultSchema.parse({
+      currentProfileId: "default",
+      profiles: [
+        {
+          id: "default",
+          name: "Default",
+          createdAt: "2026-03-13T10:00:00.000Z",
+          updatedAt: "2026-03-13T10:00:00.000Z",
+        },
+      ],
+    });
+
+    expect(parsed.currentProfileId).toBe("default");
+    expect(parsed.profiles[0]?.name).toBe("Default");
+  });
+
   it("accepts a mod order analysis payload", () => {
     const parsed = modOrderAnalysisResultSchema.parse({
       analyzedAt: "2026-03-13T10:00:00.000Z",
@@ -220,10 +242,96 @@ describe("shared schemas", () => {
 
   it("accepts apply recommendation input", () => {
     const parsed = applyModOrderRecommendationInputSchema.parse({
+      profileId: "default",
       actions: ["enableMissingDependencies", "reorderActiveMods"],
     });
 
     expect(parsed.actions).toHaveLength(2);
+  });
+
+  it("accepts a profile-scoped request input", () => {
+    const parsed = profileScopedInputSchema.parse({
+      profileId: "default",
+    });
+
+    expect(parsed.profileId).toBe("default");
+  });
+
+  it("accepts create profile input", () => {
+    const parsed = createProfileInputSchema.parse({
+      name: "Combat Run",
+      sourceProfileId: "default",
+    });
+
+    expect(parsed.name).toBe("Combat Run");
+  });
+
+  it("accepts save profile input and result", () => {
+    const input = saveProfileInputSchema.parse({
+      profileId: "default",
+      name: "Default",
+      activePackageIds: ["ludeon.rimworld", "unlimitedhugs.hugslib"],
+      applyToGame: true,
+    });
+    const result = saveProfileResultSchema.parse({
+      profile: {
+        id: "default",
+        name: "Default",
+        createdAt: "2026-03-13T10:00:00.000Z",
+        updatedAt: "2026-03-13T10:30:00.000Z",
+      },
+      modLibrary: {
+        environment: {
+          platform: "linux",
+          isWsl: true,
+          wslDistro: "Ubuntu",
+        },
+        selection: {
+          channel: "steam",
+          installationPath:
+            "C:\\Program Files (x86)\\Steam\\steamapps\\common\\RimWorld",
+          workshopPath:
+            "C:\\Program Files (x86)\\Steam\\steamapps\\workshop\\content\\294100",
+          configPath: null,
+        },
+        scannedAt: "2026-03-13T10:30:00.000Z",
+        scannedRoots: {
+          installationModsPath:
+            "C:\\Program Files (x86)\\Steam\\steamapps\\common\\RimWorld\\Mods",
+          workshopPath:
+            "C:\\Program Files (x86)\\Steam\\steamapps\\workshop\\content\\294100",
+          modsConfigPath:
+            "C:\\Users\\alice\\AppData\\LocalLow\\Ludeon Studios\\RimWorld by Ludeon Studios\\Config\\ModsConfig.xml",
+        },
+        activePackageIds: ["ludeon.rimworld", "unlimitedhugs.hugslib"],
+        mods: [],
+        errors: [],
+        requiresConfiguration: false,
+      },
+      analysis: {
+        analyzedAt: "2026-03-13T10:30:00.000Z",
+        currentActivePackageIds: ["ludeon.rimworld", "unlimitedhugs.hugslib"],
+        recommendedActivePackageIds: [
+          "ludeon.rimworld",
+          "unlimitedhugs.hugslib",
+        ],
+        recommendedOrderPackageIds: [
+          "ludeon.rimworld",
+          "unlimitedhugs.hugslib",
+        ],
+        missingInstalledInactiveDependencies: [],
+        missingUnavailableDependencies: [],
+        diagnostics: [],
+        explanations: [],
+        edges: [],
+        isOptimal: true,
+        hasBlockingIssues: false,
+        sortDifferenceCount: 0,
+      },
+    });
+
+    expect(input.activePackageIds).toHaveLength(2);
+    expect(result.profile.updatedAt).toBe("2026-03-13T10:30:00.000Z");
   });
 });
 
@@ -234,11 +342,17 @@ describe("rpc schema map", () => {
     expect(Object.keys(requests).sort()).toEqual([
       "analyzeModOrder",
       "applyModOrderRecommendation",
+      "createProfile",
+      "deleteProfile",
       "detectPaths",
       "getBootstrap",
       "getModLibrary",
+      "getProfileCatalog",
       "getSettings",
+      "renameProfile",
+      "saveProfile",
       "saveSettings",
+      "switchProfile",
       "validatePath",
     ]);
   });

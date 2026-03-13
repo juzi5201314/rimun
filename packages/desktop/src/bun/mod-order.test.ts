@@ -292,7 +292,7 @@ describe("mod order analyzer", () => {
     ).toBe(true);
   });
 
-  it("writes enabled dependencies and recommended order back to ModsConfig.xml", async () => {
+  it("returns enabled dependencies and recommended order without mutating ModsConfig.xml", async () => {
     const sandbox = createSandbox();
     const selection = createSelection();
     const toReadablePath = createReadablePathResolver(
@@ -352,8 +352,10 @@ describe("mod order analyzer", () => {
     const enableResult = await applyModOrderRecommendation(
       selection,
       {
+        profileId: "default",
         actions: ["enableMissingDependencies"],
       },
+      ["ludeon.rimworld", "example.camera"],
       {
         environment: {
           platform: "linux",
@@ -373,8 +375,10 @@ describe("mod order analyzer", () => {
     const reorderResult = await applyModOrderRecommendation(
       selection,
       {
+        profileId: "default",
         actions: ["reorderActiveMods"],
       },
+      enableResult.activePackageIds,
       {
         environment: {
           platform: "linux",
@@ -397,9 +401,6 @@ describe("mod order analyzer", () => {
     );
 
     expect(savedXml).toContain("<knownExpansions>");
-    expect(savedXml).toContain("<li>unlimitedhugs.hugslib</li>");
-    expect(savedXml.indexOf("unlimitedhugs.hugslib")).toBeLessThan(
-      savedXml.indexOf("example.camera"),
-    );
+    expect(savedXml).not.toContain("<li>unlimitedhugs.hugslib</li>");
   });
 });

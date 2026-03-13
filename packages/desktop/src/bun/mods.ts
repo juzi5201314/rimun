@@ -55,6 +55,7 @@ type WorkerScanMetrics = {
 };
 
 type ScanModLibraryOptions = {
+  activePackageIdsOverride?: string[];
   environment?: ExecutionEnvironment;
   runWorkerChunks?: (
     chunks: ScanTask[][],
@@ -108,6 +109,29 @@ function createAppError(
 
 function decodeUtf16Le(fileContent: Uint8Array) {
   return Buffer.from(fileContent).toString("utf16le");
+}
+
+function createParsedActivePackageIds(
+  activePackageIds: string[],
+): ParsedModsConfig {
+  const normalizedActivePackageIds: string[] = [];
+  const seen = new Set<string>();
+
+  for (const packageId of activePackageIds) {
+    const normalizedPackageId = packageId.trim().toLowerCase();
+
+    if (!normalizedPackageId || seen.has(normalizedPackageId)) {
+      continue;
+    }
+
+    seen.add(normalizedPackageId);
+    normalizedActivePackageIds.push(normalizedPackageId);
+  }
+
+  return {
+    activePackageIds: new Set(normalizedActivePackageIds),
+    activePackageIdsOrdered: normalizedActivePackageIds,
+  };
 }
 
 function decodeUtf16Be(fileContent: Uint8Array) {
@@ -365,14 +389,7 @@ export function parseAboutXml(xml: string) {
 }
 
 export function parseModsConfigXml(xml: string): ParsedModsConfig {
-  const activePackageIdsOrdered = extractTagList(xml, "activeMods").map(
-    (packageId) => packageId.toLowerCase(),
-  );
-
-  return {
-    activePackageIds: new Set(activePackageIdsOrdered),
-    activePackageIdsOrdered,
-  };
+  return createParsedActivePackageIds(extractTagList(xml, "activeMods"));
 }
 
 function escapeXmlText(value: string) {
@@ -668,6 +685,24 @@ async function resolveActivePackageIds(
       activePackageIdsOrdered: [],
     };
   }
+}
+
+export async function readActivePackageIdsFromSelection(
+  selection: PathSelection | null,
+  options: Pick<ScanModLibraryOptions, "toReadablePath"> = {},
+) {
+  const errors: AppError[] = [];
+  const toReadablePath = options.toReadablePath ?? createReadablePathResolver();
+  const modsConfigPath = selection?.configPath
+    ? win32.join(selection.configPath, "ModsConfig.xml")
+    : null;
+  const parsed = await resolveActivePackageIds(
+    modsConfigPath,
+    toReadablePath,
+    errors,
+  );
+
+  return parsed.activePackageIdsOrdered;
 }
 
 function buildWorkerSource() {
@@ -1053,11 +1088,12 @@ export async function scanModLibrary(
   }
 
   const configStart = performance.now();
-  const activePackageIdsPromise = resolveActivePackageIds(
-    modsConfigPath,
-    toReadablePath,
-    errors,
-  );
+  const activePackageIdsPromise =
+    options.activePackageIdsOverride !== undefined
+      ? Promise.resolve(
+          createParsedActivePackageIds(options.activePackageIdsOverride),
+        )
+      : resolveActivePackageIds(modsConfigPath, toReadablePath, errors);
   const rootsStart = performance.now();
   const installationTasksPromise = listRootScanTasks(
     "installation",

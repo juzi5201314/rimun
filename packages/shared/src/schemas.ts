@@ -1,6 +1,8 @@
 import { z } from "zod";
 
 export const emptyParamsSchema = z.object({}).strict();
+export const profileIdSchema = z.string().trim().min(1);
+export const profileNameSchema = z.string().trim().min(1).max(64);
 
 export const executionPlatformSchema = z.enum([
   "windows",
@@ -182,6 +184,22 @@ export const bootstrapPayloadSchema = z.object({
   preferredSelection: pathSelectionSchema.nullable(),
 });
 
+export const modProfileSummarySchema = z.object({
+  id: profileIdSchema,
+  name: profileNameSchema,
+  createdAt: isoDateTimeSchema,
+  updatedAt: isoDateTimeSchema,
+});
+
+export const profileCatalogResultSchema = z.object({
+  currentProfileId: profileIdSchema,
+  profiles: z.array(modProfileSummarySchema).min(1),
+});
+
+export const profileScopedInputSchema = z.object({
+  profileId: profileIdSchema,
+});
+
 export const modLibraryResultSchema = z.object({
   environment: executionEnvironmentSchema,
   selection: pathSelectionSchema.nullable(),
@@ -217,6 +235,7 @@ export const modOrderAnalysisResultSchema = z.object({
 });
 
 export const applyModOrderRecommendationInputSchema = z.object({
+  profileId: profileIdSchema,
   actions: z.array(modOrderRecommendationActionSchema).min(1),
 });
 
@@ -271,7 +290,40 @@ export const saveSettingsResultSchema = z.object({
   validation: z.array(validatePathResultSchema),
 });
 
+export const createProfileInputSchema = z.object({
+  name: profileNameSchema,
+  sourceProfileId: profileIdSchema,
+});
+
+export const renameProfileInputSchema = z.object({
+  profileId: profileIdSchema,
+  name: profileNameSchema,
+});
+
+export const deleteProfileInputSchema = z.object({
+  profileId: profileIdSchema,
+});
+
+export const switchProfileInputSchema = z.object({
+  profileId: profileIdSchema,
+});
+
+export const saveProfileInputSchema = z.object({
+  profileId: profileIdSchema,
+  name: profileNameSchema,
+  activePackageIds: z.array(z.string().trim().min(1)).default([]),
+  applyToGame: z.boolean().default(true),
+});
+
+export const saveProfileResultSchema = z.object({
+  profile: modProfileSummarySchema,
+  modLibrary: modLibraryResultSchema,
+  analysis: modOrderAnalysisResultSchema,
+});
+
 export type EmptyParams = z.infer<typeof emptyParamsSchema>;
+export type ProfileId = z.infer<typeof profileIdSchema>;
+export type ProfileName = z.infer<typeof profileNameSchema>;
 export type ExecutionPlatform = z.infer<typeof executionPlatformSchema>;
 export type DistributionChannel = z.infer<typeof distributionChannelSchema>;
 export type PathKind = z.infer<typeof pathKindSchema>;
@@ -302,6 +354,9 @@ export type ModOrderDependencyIssue = z.infer<
 >;
 export type ModOrderExplanation = z.infer<typeof modOrderExplanationSchema>;
 export type BootstrapPayload = z.infer<typeof bootstrapPayloadSchema>;
+export type ModProfileSummary = z.infer<typeof modProfileSummarySchema>;
+export type ProfileCatalogResult = z.infer<typeof profileCatalogResultSchema>;
+export type ProfileScopedInput = z.infer<typeof profileScopedInputSchema>;
 export type ModLibraryResult = z.infer<typeof modLibraryResultSchema>;
 export type ModOrderAnalysisResult = z.infer<
   typeof modOrderAnalysisResultSchema
@@ -312,6 +367,12 @@ export type ValidatePathInput = z.infer<typeof validatePathInputSchema>;
 export type ValidatePathResult = z.infer<typeof validatePathResultSchema>;
 export type SaveSettingsInput = z.infer<typeof saveSettingsInputSchema>;
 export type SaveSettingsResult = z.infer<typeof saveSettingsResultSchema>;
+export type CreateProfileInput = z.infer<typeof createProfileInputSchema>;
+export type RenameProfileInput = z.infer<typeof renameProfileInputSchema>;
+export type DeleteProfileInput = z.infer<typeof deleteProfileInputSchema>;
+export type SwitchProfileInput = z.infer<typeof switchProfileInputSchema>;
+export type SaveProfileInput = z.infer<typeof saveProfileInputSchema>;
+export type SaveProfileResult = z.infer<typeof saveProfileResultSchema>;
 export type ApplyModOrderRecommendationInput = z.infer<
   typeof applyModOrderRecommendationInputSchema
 >;

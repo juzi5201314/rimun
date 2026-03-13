@@ -243,6 +243,58 @@ describe("mod scanner", () => {
     expect(result.errors).toHaveLength(1);
   });
 
+  it("uses active package id overrides for profile-backed scans", async () => {
+    const { configRoot, installationModsRoot } = createSandboxLayout();
+
+    writeAboutXml(
+      installationModsRoot,
+      "Core",
+      `
+        <ModMetaData>
+          <name>Core</name>
+          <packageId>ludeon.rimworld</packageId>
+        </ModMetaData>
+      `,
+    );
+    writeAboutXml(
+      installationModsRoot,
+      "Ideology",
+      `
+        <ModMetaData>
+          <name>Ideology</name>
+          <packageId>ludeon.rimworld.ideology</packageId>
+        </ModMetaData>
+      `,
+    );
+    writeModsConfigXml(configRoot, ["ludeon.rimworld"]);
+
+    const result = await scanModLibrary(
+      createSelection({
+        workshopPath: null,
+      }),
+      {
+        activePackageIdsOverride: [
+          "ludeon.rimworld",
+          "ludeon.rimworld.ideology",
+        ],
+        environment: testEnvironment,
+        toReadablePath: createReadablePathResolver({
+          configRoot,
+          installationModsRoot,
+        }),
+      },
+    );
+
+    expect(result.activePackageIds).toEqual([
+      "ludeon.rimworld",
+      "ludeon.rimworld.ideology",
+    ]);
+    expect(
+      result.mods.filter((mod) => mod.enabled).map((mod) => mod.packageId),
+    ).toEqual(["ludeon.rimworld", "ludeon.rimworld.ideology"]);
+    expect(result.errors).toHaveLength(0);
+  });
+
   it("decodes UTF-16 encoded About.xml content and preserves rich description text", async () => {
     const { configRoot, installationModsRoot } = createSandboxLayout();
 

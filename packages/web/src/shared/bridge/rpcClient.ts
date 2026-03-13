@@ -2,22 +2,36 @@ import type {
   AppSettings,
   ApplyModOrderRecommendationInput,
   BootstrapPayload,
+  CreateProfileInput,
+  DeleteProfileInput,
   DetectPathsInput,
   DetectPathsResult,
   ModLibraryResult,
   ModOrderAnalysisResult,
   ModOrderApplyResult,
+  ProfileCatalogResult,
+  ProfileScopedInput,
+  RenameProfileInput,
   RimunRpc,
+  SaveProfileInput,
+  SaveProfileResult,
   SaveSettingsInput,
   SaveSettingsResult,
+  SwitchProfileInput,
   ValidatePathInput,
   ValidatePathResult,
 } from "@rimun/shared";
 
 export type RimunRpcClient = {
   getBootstrap(): Promise<BootstrapPayload>;
-  getModLibrary(): Promise<ModLibraryResult>;
-  analyzeModOrder(): Promise<ModOrderAnalysisResult>;
+  getProfileCatalog(): Promise<ProfileCatalogResult>;
+  createProfile(input: CreateProfileInput): Promise<ProfileCatalogResult>;
+  renameProfile(input: RenameProfileInput): Promise<ProfileCatalogResult>;
+  saveProfile(input: SaveProfileInput): Promise<SaveProfileResult>;
+  deleteProfile(input: DeleteProfileInput): Promise<ProfileCatalogResult>;
+  switchProfile(input: SwitchProfileInput): Promise<ProfileCatalogResult>;
+  getModLibrary(input: ProfileScopedInput): Promise<ModLibraryResult>;
+  analyzeModOrder(input: ProfileScopedInput): Promise<ModOrderAnalysisResult>;
   applyModOrderRecommendation(
     input: ApplyModOrderRecommendationInput,
   ): Promise<ModOrderApplyResult>;
@@ -131,10 +145,22 @@ async function createElectrobunRpcClient(): Promise<RimunRpcClient> {
   return {
     getBootstrap: async () =>
       callWithReadySocket(() => typedRpc.request.getBootstrap({})),
-    getModLibrary: async () =>
-      callWithReadySocket(() => typedRpc.request.getModLibrary({})),
-    analyzeModOrder: async () =>
-      callWithReadySocket(() => typedRpc.request.analyzeModOrder({})),
+    getProfileCatalog: async () =>
+      callWithReadySocket(() => typedRpc.request.getProfileCatalog({})),
+    createProfile: async (input) =>
+      callWithReadySocket(() => typedRpc.request.createProfile(input)),
+    renameProfile: async (input) =>
+      callWithReadySocket(() => typedRpc.request.renameProfile(input)),
+    saveProfile: async (input) =>
+      callWithReadySocket(() => typedRpc.request.saveProfile(input)),
+    deleteProfile: async (input) =>
+      callWithReadySocket(() => typedRpc.request.deleteProfile(input)),
+    switchProfile: async (input) =>
+      callWithReadySocket(() => typedRpc.request.switchProfile(input)),
+    getModLibrary: async (input) =>
+      callWithReadySocket(() => typedRpc.request.getModLibrary(input)),
+    analyzeModOrder: async (input) =>
+      callWithReadySocket(() => typedRpc.request.analyzeModOrder(input)),
     applyModOrderRecommendation: async (input) =>
       callWithReadySocket(() =>
         typedRpc.request.applyModOrderRecommendation(input),

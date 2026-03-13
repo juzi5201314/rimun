@@ -2,14 +2,22 @@ import type {
   AppSettings,
   ApplyModOrderRecommendationInput,
   BootstrapPayload,
+  CreateProfileInput,
+  DeleteProfileInput,
   DetectPathsInput,
   DetectPathsResult,
   EmptyParams,
   ModLibraryResult,
   ModOrderAnalysisResult,
   ModOrderApplyResult,
+  ProfileCatalogResult,
+  ProfileScopedInput,
+  RenameProfileInput,
+  SaveProfileInput,
+  SaveProfileResult,
   SaveSettingsInput,
   SaveSettingsResult,
+  SwitchProfileInput,
   ValidatePathInput,
   ValidatePathResult,
 } from "./schemas";
@@ -17,14 +25,22 @@ import {
   appSettingsSchema,
   applyModOrderRecommendationInputSchema,
   bootstrapPayloadSchema,
+  createProfileInputSchema,
+  deleteProfileInputSchema,
   detectPathsInputSchema,
   detectPathsResultSchema,
   emptyParamsSchema,
   modLibraryResultSchema,
   modOrderAnalysisResultSchema,
   modOrderApplyResultSchema,
+  profileCatalogResultSchema,
+  profileScopedInputSchema,
+  renameProfileInputSchema,
+  saveProfileInputSchema,
+  saveProfileResultSchema,
   saveSettingsInputSchema,
   saveSettingsResultSchema,
+  switchProfileInputSchema,
   validatePathInputSchema,
   validatePathResultSchema,
 } from "./schemas";
@@ -48,8 +64,17 @@ export type RpcSchema<
 
 export type RimunBunRequests = {
   getBootstrap: RpcRequestDefinition<EmptyParams, BootstrapPayload>;
-  getModLibrary: RpcRequestDefinition<EmptyParams, ModLibraryResult>;
-  analyzeModOrder: RpcRequestDefinition<EmptyParams, ModOrderAnalysisResult>;
+  getProfileCatalog: RpcRequestDefinition<EmptyParams, ProfileCatalogResult>;
+  createProfile: RpcRequestDefinition<CreateProfileInput, ProfileCatalogResult>;
+  renameProfile: RpcRequestDefinition<RenameProfileInput, ProfileCatalogResult>;
+  saveProfile: RpcRequestDefinition<SaveProfileInput, SaveProfileResult>;
+  deleteProfile: RpcRequestDefinition<DeleteProfileInput, ProfileCatalogResult>;
+  switchProfile: RpcRequestDefinition<SwitchProfileInput, ProfileCatalogResult>;
+  getModLibrary: RpcRequestDefinition<ProfileScopedInput, ModLibraryResult>;
+  analyzeModOrder: RpcRequestDefinition<
+    ProfileScopedInput,
+    ModOrderAnalysisResult
+  >;
   applyModOrderRecommendation: RpcRequestDefinition<
     ApplyModOrderRecommendationInput,
     ModOrderApplyResult
@@ -84,12 +109,36 @@ export const rimunRpcSchemas = {
         params: emptyParamsSchema,
         response: bootstrapPayloadSchema,
       },
-      getModLibrary: {
+      getProfileCatalog: {
         params: emptyParamsSchema,
+        response: profileCatalogResultSchema,
+      },
+      createProfile: {
+        params: createProfileInputSchema,
+        response: profileCatalogResultSchema,
+      },
+      renameProfile: {
+        params: renameProfileInputSchema,
+        response: profileCatalogResultSchema,
+      },
+      saveProfile: {
+        params: saveProfileInputSchema,
+        response: saveProfileResultSchema,
+      },
+      deleteProfile: {
+        params: deleteProfileInputSchema,
+        response: profileCatalogResultSchema,
+      },
+      switchProfile: {
+        params: switchProfileInputSchema,
+        response: profileCatalogResultSchema,
+      },
+      getModLibrary: {
+        params: profileScopedInputSchema,
         response: modLibraryResultSchema,
       },
       analyzeModOrder: {
-        params: emptyParamsSchema,
+        params: profileScopedInputSchema,
         response: modOrderAnalysisResultSchema,
       },
       applyModOrderRecommendation: {

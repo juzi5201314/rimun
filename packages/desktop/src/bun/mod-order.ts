@@ -12,11 +12,7 @@ import type {
   ModRecord,
   PathSelection,
 } from "@rimun/shared";
-import {
-  createReadablePathResolver,
-  scanModLibrary,
-  writeActiveModsToConfig,
-} from "./mods";
+import { createReadablePathResolver, scanModLibrary } from "./mods";
 import { getExecutionEnvironment } from "./platform";
 
 type ModOrderServiceOptions = {
@@ -639,11 +635,13 @@ export function analyzeModOrder(
 
 export async function analyzeModOrderFromSelection(
   selection: PathSelection | null,
+  activePackageIds: string[],
   options: ModOrderServiceOptions = {},
 ) {
   const environment = options.environment ?? getExecutionEnvironment();
   const toReadablePath = options.toReadablePath ?? createReadablePathResolver();
   const modLibrary = await scanModLibrary(selection, {
+    activePackageIdsOverride: activePackageIds,
     environment,
     toReadablePath,
   });
@@ -654,11 +652,13 @@ export async function analyzeModOrderFromSelection(
 export async function applyModOrderRecommendation(
   selection: PathSelection | null,
   input: ApplyModOrderRecommendationInput,
+  activePackageIds: string[],
   options: ModOrderServiceOptions = {},
 ): Promise<ModOrderApplyResult> {
   const environment = options.environment ?? getExecutionEnvironment();
   const toReadablePath = options.toReadablePath ?? createReadablePathResolver();
   const modLibrary = await scanModLibrary(selection, {
+    activePackageIdsOverride: activePackageIds,
     environment,
     toReadablePath,
   });
@@ -688,12 +688,8 @@ export async function applyModOrderRecommendation(
     nextActivePackageIds = [...orderedPackageIds, ...leftovers];
   }
 
-  writeActiveModsToConfig(selection, nextActivePackageIds, {
-    environment,
-    toReadablePath,
-  });
-
   const nextModLibrary = await scanModLibrary(selection, {
+    activePackageIdsOverride: nextActivePackageIds,
     environment,
     toReadablePath,
   });

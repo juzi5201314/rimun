@@ -1,6 +1,7 @@
 import { useModLibraryQuery } from "@/features/mod-library/hooks/useModLibraryQuery";
 import { useApplyModOrderRecommendationMutation } from "@/features/mod-order/hooks/useApplyModOrderRecommendationMutation";
 import { useModOrderAnalysisQuery } from "@/features/mod-order/hooks/useModOrderAnalysisQuery";
+import { getRimunRpcClient } from "@/shared/bridge/rpcClient";
 import { AlertDialog } from "@/shared/components/ui/alert-dialog";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
@@ -11,20 +12,28 @@ import {
   CardHeader,
   CardTitle,
 } from "@/shared/components/ui/card";
+import { Checkbox } from "@/shared/components/ui/checkbox";
 import { Input } from "@/shared/components/ui/input";
 import { useDelayedBusy } from "@/shared/hooks/useDelayedBusy";
+import { queryKeys } from "@/shared/lib/queryKeys";
 import { cn } from "@/shared/lib/utils";
+import type { ProfileCatalogResult } from "@rimun/shared";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
+  ArrowDown,
+  ArrowUp,
   ArrowUpDown,
   FolderSearch,
   HardDrive,
   Link2,
   LoaderCircle,
   Package,
+  Save,
   Search,
   ShieldCheck,
   Sparkles,
+  Trash2,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
@@ -93,24 +102,73 @@ function renderPackageList(items: string[]) {
   );
 }
 
+function areStringArraysEqual(left: string[], right: string[]) {
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  return left.every((item, index) => item === right[index]);
+}
+
+function moveItem(items: string[], currentIndex: number, nextIndex: number) {
+  if (
+    currentIndex < 0 ||
+    currentIndex >= items.length ||
+    nextIndex < 0 ||
+    nextIndex >= items.length ||
+    currentIndex === nextIndex
+  ) {
+    return items;
+  }
+
+  const nextItems = [...items];
+  const [movedItem] = nextItems.splice(currentIndex, 1);
+
+  if (!movedItem) {
+    return items;
+  }
+
+  nextItems.splice(nextIndex, 0, movedItem);
+
+  return nextItems;
+}
+
 type FeedbackTone = "success" | "warning" | "error";
 
+type FeedbackState = {
+  tone: FeedbackTone;
+  message: string;
+} | null;
+
+type ActiveModEntry = {
+  packageId: string;
+  modName: string;
+  source: string | null;
+  isOfficial: boolean;
+};
+
 export function HomePage() {
-  const modLibraryQuery = useModLibraryQuery();
-  const analysisQuery = useModOrderAnalysisQuery(
-    Boolean(
-      modLibraryQuery.data &&
-        !modLibraryQuery.isError &&
-        !modLibraryQuery.data.requiresConfiguration,
-    ),
-  );
-  const applyRecommendationMutation = useApplyModOrderRecommendationMutation();
+  const queryClient = useQueryClient();
+  const profileCatalogQuery = useQuery({
+    queryKey: queryKeys.profileCatalog(),
+    queryFn: async () => {
+      const rpcClient = await getRimunRpcClient();
+      return rpcClient.getProfileCatalog();
+    },
+  });
+  const currentProfileId = profileCatalogQuery.data?.currentProfileId ?? null;
+  const currentProfile =
+    profileCatalogQuery.data?.profiles.find(
+      (profile) => profile.id === currentProfileId,
+    ) ?? null;
+  const modLibraryQuery = useModLibraryQuery(currentProfileId);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedModId, setSelectedModId] = useState<string | null>(null);
-  const [feedback, setFeedback] = useState<{
-    tone: FeedbackTone;
-    message: string;
-  } | null>(null);
+  const [draftProfileName, setDraftProfileName] = useState("");
+  const [draftActivePackageIds, setDraftActivePackageIds] = useState<string[]>(
+    [],
+  );
+  const [feedback, setFeedback] = useState<FeedbackState>(null);
   const [isDependencyDialogOpen, setIsDependencyDialogOpen] = useState(false);
   const [isSortDialogOpen, setIsSortDialogOpen] = useState(false);
   const [dismissedDependencyAnalysisAt, setDismissedDependencyAnalysisAt] =
@@ -118,8 +176,171 @@ export function HomePage() {
   const [dismissedSortAnalysisAt, setDismissedSortAnalysisAt] = useState<
     string | null
   >(null);
-  const mods = modLibraryQuery.data?.mods ?? [];
-  const analysis = analysisQuery.data;
+
+  const createProfileMutation = useMutation({
+    mutationFn: async (input: { name: string; sourceProfileId: string }) => {
+      const rpcClient = await getRimunRpcClient();
+      return rpcClient.createProfile(input);
+    },
+    onSuccess: async (result) => {
+      queryClient.setQueryData(queryKeys.profileCatalog(), result);
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.profileCatalog(),
+      });
+    },
+  });
+  const switchProfileMutation = useMutation({
+    mutationFn: async (input: { profileId: string }) => {
+      const rpcClient = await getRimunRpcClient();
+      return rpcClient.switchProfile(input);
+    },
+    onSuccess: async (result) => {
+      queryClient.setQueryData(queryKeys.profileCatalog(), result);
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.modLibraryRoot(),
+      });
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.modOrderAnalysisRoot(),
+      });
+    },
+  });
+  const deleteProfileMutation = useMutation({
+    mutationFn: async (input: { profileId: string }) => {
+      const rpcClient = await getRimunRpcClient();
+      return rpcClient.deleteProfile(input);
+    },
+    onSuccess: async (result) => {
+      queryClient.setQueryData(queryKeys.profileCatalog(), result);
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.modLibraryRoot(),
+      });
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.modOrderAnalysisRoot(),
+      });
+    },
+  });
+  const saveProfileMutation = useMutation({
+    mutationFn: async (input: {
+      profileId: string;
+      name: string;
+      activePackageIds: string[];
+      applyToGame: boolean;
+    }) => {
+      const rpcClient = await getRimunRpcClient();
+      return rpcClient.saveProfile(input);
+    },
+    onSuccess: async (result, variables) => {
+      queryClient.setQueryData(
+        queryKeys.modLibrary(variables.profileId),
+        result.modLibrary,
+      );
+      queryClient.setQueryData(
+        queryKeys.modOrderAnalysis(variables.profileId),
+        result.analysis,
+      );
+      queryClient.setQueryData(
+        queryKeys.profileCatalog(),
+        (current: ProfileCatalogResult | undefined) => {
+          if (!current) {
+            return current;
+          }
+
+          return {
+            ...current,
+            profiles: current.profiles.map((profile) =>
+              profile.id === result.profile.id ? result.profile : profile,
+            ),
+          };
+        },
+      );
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.profileCatalog(),
+      });
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.modLibrary(variables.profileId),
+      });
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.modOrderAnalysis(variables.profileId),
+      });
+    },
+  });
+  const applyRecommendationMutation = useApplyModOrderRecommendationMutation();
+
+  const modLibrary = modLibraryQuery.data;
+  const savedProfileName = currentProfile?.name ?? "";
+  const savedActivePackageIds = modLibrary?.activePackageIds ?? [];
+  const isDirty =
+    currentProfile !== null &&
+    ((draftProfileName.trim() || savedProfileName) !== savedProfileName ||
+      !areStringArraysEqual(draftActivePackageIds, savedActivePackageIds));
+  const analysisQuery = useModOrderAnalysisQuery(
+    currentProfileId,
+    Boolean(
+      currentProfileId &&
+        modLibrary &&
+        !modLibraryQuery.isError &&
+        !modLibrary.requiresConfiguration &&
+        !isDirty,
+    ),
+  );
+
+  useEffect(() => {
+    if (!currentProfileId) {
+      return;
+    }
+
+    setSearchQuery("");
+    setSelectedModId(null);
+    setFeedback(null);
+    setIsDependencyDialogOpen(false);
+    setIsSortDialogOpen(false);
+    setDismissedDependencyAnalysisAt(null);
+    setDismissedSortAnalysisAt(null);
+  }, [currentProfileId]);
+
+  useEffect(() => {
+    if (!currentProfile || !modLibrary) {
+      return;
+    }
+
+    setDraftProfileName(currentProfile.name);
+    setDraftActivePackageIds(modLibrary.activePackageIds);
+  }, [currentProfile, modLibrary]);
+
+  const loadingOverlayVisible = useDelayedBusy(
+    analysisQuery.isPending ||
+      applyRecommendationMutation.isPending ||
+      createProfileMutation.isPending ||
+      switchProfileMutation.isPending ||
+      deleteProfileMutation.isPending ||
+      saveProfileMutation.isPending,
+    400,
+  );
+  const draftActiveSet = new Set(draftActivePackageIds);
+  const mods = (modLibrary?.mods ?? []).map((mod) => ({
+    ...mod,
+    enabled: mod.dependencyMetadata.packageIdNormalized
+      ? draftActiveSet.has(mod.dependencyMetadata.packageIdNormalized)
+      : false,
+  }));
+  const modByPackageId = new Map(
+    mods
+      .filter((mod) => mod.dependencyMetadata.packageIdNormalized)
+      .map((mod) => [mod.dependencyMetadata.packageIdNormalized ?? "", mod]),
+  );
+  const activeEntries: ActiveModEntry[] = draftActivePackageIds.map(
+    (packageId) => {
+      const mod = modByPackageId.get(packageId);
+
+      return {
+        packageId,
+        modName: mod?.name ?? packageId,
+        source: mod?.source ?? null,
+        isOfficial: mod?.isOfficial ?? false,
+      };
+    },
+  );
+  const analysis = isDirty ? null : analysisQuery.data;
   const term = searchQuery.trim().toLowerCase();
   const filteredMods = mods.filter((mod) => {
     if (!term) {
@@ -132,7 +353,9 @@ export function HomePage() {
   });
   const selectedMod =
     filteredMods.find((mod) => mod.id === selectedModId) ??
+    mods.find((mod) => mod.id === selectedModId) ??
     filteredMods[0] ??
+    mods[0] ??
     null;
   const selectedPackageId =
     selectedMod?.dependencyMetadata.packageIdNormalized ?? null;
@@ -142,13 +365,15 @@ export function HomePage() {
           (explanation) => explanation.packageId === selectedPackageId,
         ) ?? null)
       : null;
-  const loadingOverlayVisible = useDelayedBusy(
-    analysisQuery.isPending || applyRecommendationMutation.isPending,
-    400,
-  );
+  const isBusy =
+    createProfileMutation.isPending ||
+    switchProfileMutation.isPending ||
+    deleteProfileMutation.isPending ||
+    saveProfileMutation.isPending ||
+    applyRecommendationMutation.isPending;
 
   useEffect(() => {
-    if (!analysis || applyRecommendationMutation.isPending) {
+    if (!analysis || applyRecommendationMutation.isPending || isDirty) {
       return;
     }
 
@@ -171,15 +396,244 @@ export function HomePage() {
     applyRecommendationMutation.isPending,
     dismissedDependencyAnalysisAt,
     dismissedSortAnalysisAt,
+    isDirty,
   ]);
 
+  function updateDraftActivePackageIds(
+    updater: (activePackageIds: string[]) => string[],
+  ) {
+    setFeedback(null);
+    setDraftActivePackageIds((currentActivePackageIds) =>
+      updater(currentActivePackageIds),
+    );
+  }
+
+  function toggleMod(packageId: string) {
+    updateDraftActivePackageIds((currentActivePackageIds) =>
+      currentActivePackageIds.includes(packageId)
+        ? currentActivePackageIds.filter((currentId) => currentId !== packageId)
+        : [...currentActivePackageIds, packageId],
+    );
+  }
+
+  function moveActivePackageId(
+    packageId: string,
+    direction: "up" | "down" | "top" | "bottom",
+  ) {
+    updateDraftActivePackageIds((currentActivePackageIds) => {
+      const currentIndex = currentActivePackageIds.indexOf(packageId);
+
+      if (currentIndex < 0) {
+        return currentActivePackageIds;
+      }
+
+      switch (direction) {
+        case "up":
+          return moveItem(
+            currentActivePackageIds,
+            currentIndex,
+            currentIndex - 1,
+          );
+        case "down":
+          return moveItem(
+            currentActivePackageIds,
+            currentIndex,
+            currentIndex + 1,
+          );
+        case "top":
+          return moveItem(currentActivePackageIds, currentIndex, 0);
+        case "bottom":
+          return moveItem(
+            currentActivePackageIds,
+            currentIndex,
+            currentActivePackageIds.length - 1,
+          );
+      }
+    });
+  }
+
+  async function persistDraft(options: {
+    applyToGame: boolean;
+    feedbackMessage: string;
+  }) {
+    if (!currentProfileId || !currentProfile) {
+      throw new Error("No profile is selected.");
+    }
+
+    const nextName = draftProfileName.trim() || currentProfile.name;
+    const result = await saveProfileMutation.mutateAsync({
+      profileId: currentProfileId,
+      name: nextName,
+      activePackageIds: draftActivePackageIds,
+      applyToGame: options.applyToGame,
+    });
+
+    setFeedback({
+      tone: "success",
+      message: options.feedbackMessage,
+    });
+
+    return result;
+  }
+
+  async function handleSaveProfile() {
+    try {
+      await persistDraft({
+        applyToGame: true,
+        feedbackMessage: "Profile saved and applied to RimWorld.",
+      });
+    } catch (error) {
+      setFeedback({
+        tone: "error",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Failed to save the profile.",
+      });
+    }
+  }
+
+  async function handleProfileSwitch(nextProfileId: string) {
+    if (!currentProfileId || nextProfileId === currentProfileId) {
+      return;
+    }
+
+    try {
+      if (isDirty) {
+        await persistDraft({
+          applyToGame: true,
+          feedbackMessage: "Saved current profile before switching.",
+        });
+      }
+
+      const catalog = await switchProfileMutation.mutateAsync({
+        profileId: nextProfileId,
+      });
+      const switchedProfile =
+        catalog.profiles.find((profile) => profile.id === nextProfileId) ??
+        null;
+
+      setFeedback({
+        tone: "success",
+        message: switchedProfile
+          ? `Switched to ${switchedProfile.name}.`
+          : "Switched profile.",
+      });
+    } catch (error) {
+      setFeedback({
+        tone: "error",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Failed to switch mod profile.",
+      });
+    }
+  }
+
+  async function handleCreateProfile() {
+    if (!currentProfileId || !currentProfile) {
+      return;
+    }
+
+    const requestedName = window.prompt(
+      "New profile name",
+      `Copy of ${currentProfile.name}`,
+    );
+    const name = requestedName?.trim();
+
+    if (!name) {
+      return;
+    }
+
+    try {
+      if (isDirty) {
+        await persistDraft({
+          applyToGame: true,
+          feedbackMessage: "Saved current profile before creating a new one.",
+        });
+      }
+
+      const catalog = await createProfileMutation.mutateAsync({
+        name,
+        sourceProfileId: currentProfileId,
+      });
+      const createdProfile = catalog.profiles.at(-1);
+
+      if (!createdProfile) {
+        throw new Error("The new profile could not be resolved.");
+      }
+
+      await switchProfileMutation.mutateAsync({
+        profileId: createdProfile.id,
+      });
+      setFeedback({
+        tone: "success",
+        message: `Created and switched to ${createdProfile.name}.`,
+      });
+    } catch (error) {
+      setFeedback({
+        tone: "error",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Failed to create a new profile.",
+      });
+    }
+  }
+
+  async function handleDeleteProfile() {
+    if (!currentProfileId || !currentProfile) {
+      return;
+    }
+
+    const shouldDelete = window.confirm(
+      isDirty
+        ? `Delete ${currentProfile.name}? Unsaved changes in this profile will be discarded.`
+        : `Delete ${currentProfile.name}?`,
+    );
+
+    if (!shouldDelete) {
+      return;
+    }
+
+    try {
+      const catalog = await deleteProfileMutation.mutateAsync({
+        profileId: currentProfileId,
+      });
+      const nextProfile =
+        catalog.profiles.find(
+          (profile) => profile.id === catalog.currentProfileId,
+        ) ?? null;
+
+      setFeedback({
+        tone: "success",
+        message: nextProfile
+          ? `Deleted ${currentProfile.name}. Active profile is now ${nextProfile.name}.`
+          : `Deleted ${currentProfile.name}.`,
+      });
+    } catch (error) {
+      setFeedback({
+        tone: "error",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Failed to delete the profile.",
+      });
+    }
+  }
+
   async function handleEnableMissingDependencies() {
-    const previousActiveCount = analysis?.currentActivePackageIds.length ?? 0;
+    if (!currentProfileId || !analysis) {
+      return;
+    }
+
+    const previousActiveCount = analysis.currentActivePackageIds.length;
 
     try {
       setFeedback(null);
       setIsDependencyDialogOpen(false);
       const result = await applyRecommendationMutation.mutateAsync({
+        profileId: currentProfileId,
         actions: ["enableMissingDependencies"],
       });
       setDismissedDependencyAnalysisAt(result.analysis.analyzedAt);
@@ -199,10 +653,15 @@ export function HomePage() {
   }
 
   async function handleAutoSort() {
+    if (!currentProfileId) {
+      return;
+    }
+
     try {
       setFeedback(null);
       setIsSortDialogOpen(false);
       const result = await applyRecommendationMutation.mutateAsync({
+        profileId: currentProfileId,
         actions: ["reorderActiveMods"],
       });
       setDismissedSortAnalysisAt(result.analysis.analyzedAt);
@@ -219,12 +678,30 @@ export function HomePage() {
     }
   }
 
-  if (modLibraryQuery.isPending) {
+  if (profileCatalogQuery.isPending || modLibraryQuery.isPending) {
     return (
       <div className="flex h-full items-center justify-center bg-background/40">
         <p className="font-black uppercase tracking-widest text-primary rw-text animate-pulse">
-          Scanning Mod Library...
+          Loading Profiles...
         </p>
+      </div>
+    );
+  }
+
+  if (profileCatalogQuery.isError) {
+    return (
+      <div className="flex h-full items-center justify-center p-8">
+        <Card className="max-w-xl border-destructive bg-destructive/10">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="h-5 w-5" />
+              Failed To Load Profiles
+            </CardTitle>
+            <CardDescription>
+              The desktop backend did not return the available mod profiles.
+            </CardDescription>
+          </CardHeader>
+        </Card>
       </div>
     );
   }
@@ -247,7 +724,9 @@ export function HomePage() {
     );
   }
 
-  const modLibrary = modLibraryQuery.data;
+  if (!modLibrary) {
+    return null;
+  }
 
   if (modLibrary.requiresConfiguration) {
     return (
@@ -305,12 +784,28 @@ export function HomePage() {
               <p className="mt-4 text-xs font-black uppercase tracking-[0.3em] text-primary">
                 {applyRecommendationMutation.isPending
                   ? "Applying Recommendation"
-                  : "Analyzing Load Order"}
+                  : saveProfileMutation.isPending
+                    ? "Saving Profile"
+                    : switchProfileMutation.isPending
+                      ? "Switching Profile"
+                      : createProfileMutation.isPending
+                        ? "Creating Profile"
+                        : deleteProfileMutation.isPending
+                          ? "Deleting Profile"
+                          : "Analyzing Load Order"}
               </p>
               <p className="mt-2 text-sm text-muted-foreground">
                 {applyRecommendationMutation.isPending
-                  ? "Writing the updated active mod list into ModsConfig.xml."
-                  : "Building the dependency graph and checking the current active order."}
+                  ? "Updating the active mod list for the current profile."
+                  : saveProfileMutation.isPending
+                    ? "Writing the current draft into the selected profile and RimWorld."
+                    : switchProfileMutation.isPending
+                      ? "Applying the selected profile into ModsConfig.xml."
+                      : createProfileMutation.isPending
+                        ? "Cloning the current saved profile."
+                        : deleteProfileMutation.isPending
+                          ? "Removing the selected profile and applying the fallback."
+                          : "Building the dependency graph for the current saved profile."}
               </p>
             </div>
           </div>
@@ -318,45 +813,133 @@ export function HomePage() {
 
         <section className="flex w-[56%] min-w-0 flex-col border-r border-border/60">
           <div className="border-b border-border/40 bg-card/10 px-6 py-5">
-            <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-              <div className="space-y-2">
-                <p className="text-[10px] font-black uppercase tracking-[0.3em] text-primary">
-                  Backend Mod Scan
-                </p>
-                <h2 className="text-3xl font-black uppercase tracking-tight rw-text">
-                  Mod Library
-                </h2>
-                <p className="text-sm font-medium text-muted-foreground">
-                  {modLibrary.mods.length} mods loaded from configured
-                  installation and workshop roots.
-                </p>
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+                <div className="space-y-2">
+                  <p className="text-[10px] font-black uppercase tracking-[0.3em] text-primary">
+                    Profile-Backed Mod Scan
+                  </p>
+                  <h2 className="text-3xl font-black uppercase tracking-tight rw-text">
+                    Mod Library
+                  </h2>
+                  <p className="text-sm font-medium text-muted-foreground">
+                    {modLibrary.mods.length} mods loaded from configured
+                    installation and workshop roots.
+                  </p>
+                </div>
+
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    placeholder="Filter Mods..."
+                    className="w-72 pl-10 font-bold"
+                    value={searchQuery}
+                    onChange={(event) => setSearchQuery(event.target.value)}
+                  />
+                </div>
               </div>
 
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  placeholder="Filter Mods..."
-                  className="w-72 pl-10 font-bold"
-                  value={searchQuery}
-                  onChange={(event) => setSearchQuery(event.target.value)}
-                />
+              <div className="grid gap-4 xl:grid-cols-[1.3fr_minmax(0,1fr)_auto]">
+                <div className="rounded-xl border border-border/60 bg-background/50 p-4">
+                  <p className="text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground">
+                    Active Profile
+                  </p>
+                  <div className="mt-3 flex flex-col gap-3 xl:flex-row xl:items-center">
+                    <select
+                      aria-label="Profile"
+                      className="h-10 rounded-md border border-input bg-background px-3 py-2 text-sm font-bold"
+                      disabled={isBusy || !currentProfileId}
+                      value={currentProfileId ?? ""}
+                      onChange={(event) =>
+                        void handleProfileSwitch(event.target.value)
+                      }
+                    >
+                      {profileCatalogQuery.data?.profiles.map((profile) => (
+                        <option key={profile.id} value={profile.id}>
+                          {profile.name}
+                        </option>
+                      ))}
+                    </select>
+                    <Button
+                      variant="outline"
+                      className="gap-2"
+                      disabled={isBusy || !currentProfileId}
+                      onClick={() => void handleCreateProfile()}
+                    >
+                      <Package className="h-4 w-4" />
+                      New Profile
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="gap-2"
+                      disabled={isBusy || !currentProfileId}
+                      onClick={() => void handleDeleteProfile()}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      Delete
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-border/60 bg-background/50 p-4">
+                  <p className="text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground">
+                    Profile Name
+                  </p>
+                  <Input
+                    aria-label="Profile Name"
+                    className="mt-3 font-bold"
+                    disabled={isBusy || !currentProfile}
+                    value={draftProfileName}
+                    onChange={(event) => {
+                      setFeedback(null);
+                      setDraftProfileName(event.target.value);
+                    }}
+                  />
+                </div>
+
+                <div className="flex flex-col justify-end gap-3">
+                  <Button
+                    className="gap-2"
+                    disabled={isBusy || !currentProfile || !isDirty}
+                    onClick={() => void handleSaveProfile()}
+                  >
+                    <Save className="h-4 w-4" />
+                    Save Profile
+                  </Button>
+                  {isDirty ? (
+                    <Badge variant="secondary" className="justify-center">
+                      Unsaved Changes
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="justify-center">
+                      Saved
+                    </Badge>
+                  )}
+                </div>
               </div>
+
+              {feedback ? (
+                <output
+                  aria-live="polite"
+                  className={
+                    feedback.tone === "success"
+                      ? "rounded-lg border border-primary/40 bg-primary/10 px-4 py-3 text-sm font-bold text-primary"
+                      : feedback.tone === "warning"
+                        ? "rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm font-bold text-amber-700"
+                        : "rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm font-bold text-destructive"
+                  }
+                >
+                  {feedback.message}
+                </output>
+              ) : null}
+
+              {isDirty ? (
+                <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm font-bold text-amber-700">
+                  This draft differs from the saved profile. Save the profile
+                  before re-running dependency fixes or automatic sorting.
+                </div>
+              ) : null}
             </div>
-
-            {feedback ? (
-              <output
-                aria-live="polite"
-                className={
-                  feedback.tone === "success"
-                    ? "mt-4 rounded-lg border border-primary/40 bg-primary/10 px-4 py-3 text-sm font-bold text-primary"
-                    : feedback.tone === "warning"
-                      ? "mt-4 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm font-bold text-amber-700"
-                      : "mt-4 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm font-bold text-destructive"
-                }
-              >
-                {feedback.message}
-              </output>
-            ) : null}
           </div>
 
           <div className="grid grid-cols-2 gap-4 border-b border-border/40 bg-background/30 px-6 py-5 xl:grid-cols-4">
@@ -366,13 +949,15 @@ export function HomePage() {
                   Status
                 </p>
                 <p className="mt-2 text-sm font-black uppercase tracking-wide">
-                  {analysis
-                    ? analysis.isOptimal
-                      ? "Optimal"
-                      : "Needs Action"
-                    : analysisQuery.isPending
-                      ? "Analyzing"
-                      : "Unavailable"}
+                  {isDirty
+                    ? "Unsaved Draft"
+                    : analysis
+                      ? analysis.isOptimal
+                        ? "Optimal"
+                        : "Needs Action"
+                      : analysisQuery.isPending
+                        ? "Analyzing"
+                        : "Unavailable"}
                 </p>
               </CardContent>
             </Card>
@@ -384,7 +969,9 @@ export function HomePage() {
                 <p className="mt-2 text-sm font-black">
                   {analysis
                     ? analysis.missingUnavailableDependencies.length
-                    : "—"}
+                    : isDirty
+                      ? "Save First"
+                      : "—"}
                 </p>
               </CardContent>
             </Card>
@@ -396,7 +983,9 @@ export function HomePage() {
                 <p className="mt-2 text-sm font-black">
                   {analysis
                     ? analysis.missingInstalledInactiveDependencies.length
-                    : "—"}
+                    : isDirty
+                      ? "Save First"
+                      : "—"}
                 </p>
               </CardContent>
             </Card>
@@ -406,7 +995,11 @@ export function HomePage() {
                   Sort Differences
                 </p>
                 <p className="mt-2 text-sm font-black">
-                  {analysis ? analysis.sortDifferenceCount : "—"}
+                  {analysis
+                    ? analysis.sortDifferenceCount
+                    : isDirty
+                      ? "Save First"
+                      : "—"}
                 </p>
               </CardContent>
             </Card>
@@ -443,11 +1036,17 @@ export function HomePage() {
             </div>
           ) : analysisQuery.isError ? (
             <div className="border-b border-destructive/30 bg-destructive/10 px-6 py-4 text-sm font-bold text-destructive">
-              Failed to analyze mod order. Try reloading the page.
+              Failed to analyze mod order. Try saving the profile and reloading
+              the page.
+            </div>
+          ) : isDirty ? (
+            <div className="border-b border-amber-500/30 bg-amber-500/10 px-6 py-4 text-sm font-bold text-amber-700">
+              Analysis is paused while this profile has unsaved changes.
             </div>
           ) : null}
 
           <div className="flex items-center px-6 py-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+            <div className="w-12 text-center">Use</div>
             <div className="flex-1">Mod</div>
             <div className="w-28 text-center">Source</div>
             <div className="w-24 text-right">Version</div>
@@ -457,6 +1056,7 @@ export function HomePage() {
             {filteredMods.length ? (
               filteredMods.map((mod) => {
                 const isSelected = selectedMod?.id === mod.id;
+                const packageId = mod.dependencyMetadata.packageIdNormalized;
 
                 return (
                   <button
@@ -468,6 +1068,21 @@ export function HomePage() {
                       isSelected ? "bg-accent/40" : "hover:bg-muted/30",
                     )}
                   >
+                    <div className="flex w-12 justify-center">
+                      <Checkbox
+                        aria-label={`Toggle ${mod.name}`}
+                        checked={mod.enabled}
+                        disabled={!packageId || isBusy}
+                        onChange={() => {
+                          if (!packageId) {
+                            return;
+                          }
+
+                          toggleMod(packageId);
+                        }}
+                        onClick={(event) => event.stopPropagation()}
+                      />
+                    </div>
                     <div className="min-w-0 flex-1 space-y-2">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="truncate text-sm font-bold">
@@ -522,8 +1137,119 @@ export function HomePage() {
         </section>
 
         <aside className="flex w-[44%] min-w-0 flex-col bg-card/10">
+          <div className="border-b border-border/40 bg-background/30 p-6">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground">
+                  Active Load Order
+                </p>
+                <h3 className="mt-2 text-2xl font-black uppercase tracking-wide rw-text">
+                  {draftProfileName.trim() || currentProfile?.name || "Profile"}
+                </h3>
+              </div>
+              <Badge variant={isDirty ? "secondary" : "outline"}>
+                {draftActivePackageIds.length} Active
+              </Badge>
+            </div>
+
+            <div className="max-h-64 space-y-3 overflow-y-auto pr-1">
+              {activeEntries.length ? (
+                activeEntries.map((entry, index) => (
+                  <div
+                    key={entry.packageId}
+                    className="rounded-lg border border-border/60 bg-background/60 p-3"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-bold">
+                          {index + 1}. {entry.modName}
+                        </p>
+                        <p className="mt-1 break-all font-mono text-xs text-muted-foreground">
+                          {entry.packageId}
+                        </p>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {entry.source ? (
+                            <Badge variant="outline" className="uppercase">
+                              {entry.source}
+                            </Badge>
+                          ) : null}
+                          {entry.isOfficial ? (
+                            <Badge variant="secondary">Official</Badge>
+                          ) : null}
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={isBusy || index === 0}
+                          onClick={() =>
+                            moveActivePackageId(entry.packageId, "top")
+                          }
+                        >
+                          Top
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={
+                            isBusy || index === activeEntries.length - 1
+                          }
+                          onClick={() =>
+                            moveActivePackageId(entry.packageId, "bottom")
+                          }
+                        >
+                          Bottom
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="gap-1"
+                          disabled={isBusy || index === 0}
+                          onClick={() =>
+                            moveActivePackageId(entry.packageId, "up")
+                          }
+                        >
+                          <ArrowUp className="h-4 w-4" />
+                          Up
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="gap-1"
+                          disabled={
+                            isBusy || index === activeEntries.length - 1
+                          }
+                          onClick={() =>
+                            moveActivePackageId(entry.packageId, "down")
+                          }
+                        >
+                          <ArrowDown className="h-4 w-4" />
+                          Down
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          className="col-span-2"
+                          disabled={isBusy}
+                          onClick={() => toggleMod(entry.packageId)}
+                        >
+                          Remove
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="rounded-lg border border-dashed border-border/60 bg-background/40 p-6 text-center text-sm text-muted-foreground">
+                  No mods are active in this draft profile yet.
+                </div>
+              )}
+            </div>
+          </div>
+
           {selectedMod ? (
-            <div className="flex h-full flex-col">
+            <div className="flex min-h-0 flex-1 flex-col">
               <div className="border-b border-border/40 bg-background/30 p-8">
                 <div className="mb-5 flex items-start justify-between gap-4">
                   <div className="space-y-3">
@@ -815,7 +1541,7 @@ export function HomePage() {
       <AlertDialog
         open={isSortDialogOpen}
         title="Apply Recommended Sort Order?"
-        description="The current active mod order is not the recommended load order. Rimun can rewrite ModsConfig.xml with the suggested sequence."
+        description="The current active mod order is not the recommended load order. Rimun can update the current profile and rewrite ModsConfig.xml with the suggested sequence."
         confirmLabel="Auto Sort"
         cancelLabel="Keep Current Order"
         tone="default"
