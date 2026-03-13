@@ -79,11 +79,11 @@ export function AlertDialog({
         open
         aria-labelledby="alert-dialog-title"
         className={cn(
-          "relative z-10 w-full max-w-xl rounded-xl border bg-card/95 p-0 shadow-2xl",
+          "relative z-10 w-full max-w-xl max-h-[90vh] overflow-y-auto rounded-xl border bg-card/95 p-0 shadow-2xl flex flex-col",
           toneClasses[tone],
         )}
       >
-        <div className="space-y-3 border-b border-border/60 px-6 py-5">
+        <div className="shrink-0 space-y-3 border-b border-border/60 px-6 py-5">
           <p className="text-[10px] font-black uppercase tracking-[0.3em] text-primary">
             Action Required
           </p>
@@ -98,9 +98,11 @@ export function AlertDialog({
           ) : null}
         </div>
 
-        {children ? <div className="px-6 py-5">{children}</div> : null}
+        {children ? (
+          <div className="flex-1 overflow-y-auto px-6 py-5">{children}</div>
+        ) : null}
 
-        <div className="flex justify-end gap-3 border-t border-border/60 px-6 py-4">
+        <div className="shrink-0 flex justify-end gap-3 border-t border-border/60 px-6 py-4 bg-card/50">
           <Button
             type="button"
             variant="outline"

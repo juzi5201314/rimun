@@ -182,6 +182,28 @@ export function HomePage() {
   const [dismissedSortAnalysisAt, setDismissedSortAnalysisAt] = useState<
     string | null
   >(null);
+  const [asideWidth, setAsideWidth] = useState(44); // percentage
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    const startX = e.clientX;
+    const startWidth = asideWidth;
+    
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const deltaX = moveEvent.clientX - startX;
+      const deltaPercent = (deltaX / window.innerWidth) * 100;
+      // Limit width between 20% and 70%
+      const newWidth = Math.min(Math.max(startWidth - deltaPercent, 20), 70);
+      setAsideWidth(newWidth);
+    };
+
+    const handleMouseUp = () => {
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+    };
+
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+  };
 
   const createProfileMutation = useMutation({
     mutationFn: async (input: { name: string; sourceProfileId: string }) => {
@@ -864,36 +886,36 @@ export function HomePage() {
           </div>
         ) : null}
 
-        <section className="flex w-[56%] min-w-0 flex-col border-r border-border/60">
-          <div className="border-b border-border/40 bg-card/10 px-6 py-5">
+        <section 
+          className="flex min-w-0 flex-col border-r border-border/60"
+          style={{ width: `${100 - asideWidth}%` }}
+        >
+          <header className="border-b border-border/40 bg-card/10 px-6 py-4">
             <div className="flex flex-col gap-4">
-              <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-                <div className="space-y-2">
-                  <p className="text-[10px] font-black uppercase tracking-[0.3em] text-primary">
-                    Profile-Backed Mod Scan
-                  </p>
-                  <h2 className="text-3xl font-black uppercase tracking-tight rw-text">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <div className="flex items-baseline gap-3">
+                  <h2 className="text-2xl font-black uppercase tracking-tight rw-text whitespace-nowrap">
                     Mod Library
                   </h2>
-                  <p className="text-sm font-medium text-muted-foreground">
-                    {modLibrary.mods.length} mods loaded from configured
-                    installation and workshop roots.
-                  </p>
+                  <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">
+                    {modLibrary.mods.length} mods loaded
+                  </span>
                 </div>
 
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                     <Input
                       placeholder="Filter Mods..."
-                      className="w-full pl-10 font-bold sm:w-72"
+                      className="h-9 w-full pl-9 text-xs font-bold sm:w-60"
                       value={searchQuery}
                       onChange={(event) => setSearchQuery(event.target.value)}
                     />
                   </div>
                   <Button
                     variant="outline"
-                    className="gap-2"
+                    size="sm"
+                    className="h-9 gap-2 text-xs"
                     disabled={
                       isBusy ||
                       isRescanning ||
@@ -908,60 +930,34 @@ export function HomePage() {
                     ) : (
                       <RefreshCcw className="h-4 w-4" />
                     )}
-                    Rescan Library
+                    Rescan
                   </Button>
                 </div>
               </div>
 
-              <div className="grid gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(16rem,1fr)_auto]">
-                <div className="rounded-xl border border-border/60 bg-background/50 p-4">
-                  <p className="whitespace-nowrap text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground">
-                    Active Profile
+              <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border/60 bg-background/50 p-3">
+                <div className="flex flex-1 items-center gap-2">
+                  <p className="text-[9px] font-black uppercase tracking-[0.2em] text-muted-foreground mr-1">
+                    Profile
                   </p>
-                  <div className="mt-3 flex flex-col gap-3 xl:flex-row xl:items-center">
-                    <select
-                      aria-label="Profile"
-                      className="h-10 rounded-md border border-input bg-background px-3 py-2 text-sm font-bold"
-                      disabled={isBusy || !currentProfileId}
-                      value={currentProfileId ?? ""}
-                      onChange={(event) =>
-                        void handleProfileSwitch(event.target.value)
-                      }
-                    >
-                      {profileCatalogQuery.data?.profiles.map((profile) => (
-                        <option key={profile.id} value={profile.id}>
-                          {profile.name}
-                        </option>
-                      ))}
-                    </select>
-                    <Button
-                      variant="outline"
-                      className="gap-2"
-                      disabled={isBusy || !currentProfileId}
-                      onClick={handleOpenCreateProfileDialog}
-                    >
-                      <Package className="h-4 w-4" />
-                      New Profile
-                    </Button>
-                    <Button
-                      variant="outline"
-                      className="gap-2"
-                      disabled={isBusy || !currentProfileId}
-                      onClick={handleOpenDeleteProfileDialog}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                      Delete
-                    </Button>
-                  </div>
-                </div>
-
-                <div className="rounded-xl border border-border/60 bg-background/50 p-4">
-                  <p className="whitespace-nowrap text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground">
-                    Profile Name
-                  </p>
+                  <select
+                    aria-label="Profile"
+                    className="h-8 rounded-md border border-input bg-background px-2 py-0 text-xs font-bold min-w-[120px]"
+                    disabled={isBusy || !currentProfileId}
+                    value={currentProfileId ?? ""}
+                    onChange={(event) =>
+                      void handleProfileSwitch(event.target.value)
+                    }
+                  >
+                    {profileCatalogQuery.data?.profiles.map((profile) => (
+                      <option key={profile.id} value={profile.id}>
+                        {profile.name}
+                      </option>
+                    ))}
+                  </select>
                   <Input
                     aria-label="Profile Name"
-                    className="mt-3 font-bold"
+                    className="h-8 max-w-[180px] text-xs font-bold"
                     disabled={isBusy || !currentProfile}
                     value={draftProfileName}
                     onChange={(event) => {
@@ -969,23 +965,46 @@ export function HomePage() {
                       setDraftProfileName(event.target.value);
                     }}
                   />
+                  <div className="flex gap-1 ml-1">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 w-8 p-0"
+                      title="New Profile"
+                      disabled={isBusy || !currentProfileId}
+                      onClick={handleOpenCreateProfileDialog}
+                    >
+                      <Package className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 w-8 p-0"
+                      title="Delete Profile"
+                      disabled={isBusy || !currentProfileId}
+                      onClick={handleOpenDeleteProfileDialog}
+                    >
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
+                  </div>
                 </div>
 
-                <div className="flex flex-col justify-end gap-3">
+                <div className="flex items-center gap-2">
                   <Button
-                    className="gap-2"
+                    size="sm"
+                    className="h-8 gap-2 text-xs"
                     disabled={isBusy || !currentProfile || !isDirty}
                     onClick={() => void handleSaveProfile()}
                   >
                     <Save className="h-4 w-4" />
-                    Save Profile
+                    Save Changes
                   </Button>
                   {isDirty ? (
-                    <Badge variant="secondary" className="justify-center">
-                      Unsaved Changes
+                    <Badge variant="secondary" className="h-6 text-[10px] px-2">
+                      Unsaved
                     </Badge>
                   ) : (
-                    <Badge variant="outline" className="justify-center">
+                    <Badge variant="outline" className="h-6 text-[10px] px-2 text-primary">
                       Saved
                     </Badge>
                   )}
@@ -997,10 +1016,10 @@ export function HomePage() {
                   aria-live="polite"
                   className={
                     feedback.tone === "success"
-                      ? "rounded-lg border border-primary/40 bg-primary/10 px-4 py-3 text-sm font-bold text-primary"
+                      ? "rounded-lg border border-primary/40 bg-primary/10 px-3 py-2 text-[11px] font-bold text-primary"
                       : feedback.tone === "warning"
-                        ? "rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm font-bold text-amber-700"
-                        : "rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm font-bold text-destructive"
+                        ? "rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-[11px] font-bold text-amber-700"
+                        : "rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-[11px] font-bold text-destructive"
                   }
                 >
                   {feedback.message}
@@ -1008,128 +1027,120 @@ export function HomePage() {
               ) : null}
 
               {isDirty ? (
-                <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm font-bold text-amber-700">
-                  This draft differs from the saved profile. Save the profile
-                  before re-running dependency fixes, rescanning, or automatic
-                  sorting.
+                <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-[11px] font-bold text-amber-700">
+                  Save profile to enable dependency fixes and auto-sorting.
                 </div>
               ) : null}
             </div>
-          </div>
+          </header>
 
-          <div className="grid grid-cols-2 gap-4 border-b border-border/40 bg-background/30 px-6 py-5 xl:grid-cols-4">
-            <Card className="border-border/60 bg-card/60">
-              <CardContent className="p-4">
-                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-                  Status
-                </p>
-                <p className="mt-2 text-sm font-black uppercase tracking-wide">
-                  {isDirty
-                    ? "Unsaved Draft"
-                    : analysis
-                      ? analysis.isOptimal
-                        ? "Optimal"
-                        : "Needs Action"
-                      : analysisQuery.isPending
-                        ? "Analyzing"
-                        : "Unavailable"}
-                </p>
-              </CardContent>
-            </Card>
-            <Card className="border-border/60 bg-card/60">
-              <CardContent className="p-4">
-                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-                  Missing Dependencies
-                </p>
-                <p className="mt-2 text-sm font-black">
-                  {analysis
-                    ? analysis.missingUnavailableDependencies.length
-                    : isDirty
-                      ? "Save First"
-                      : "—"}
-                </p>
-              </CardContent>
-            </Card>
-            <Card className="border-border/60 bg-card/60">
-              <CardContent className="p-4">
-                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-                  Auto-Enable Candidates
-                </p>
-                <p className="mt-2 text-sm font-black">
-                  {analysis
-                    ? analysis.missingInstalledInactiveDependencies.length
-                    : isDirty
-                      ? "Save First"
-                      : "—"}
-                </p>
-              </CardContent>
-            </Card>
-            <Card className="border-border/60 bg-card/60">
-              <CardContent className="p-4">
-                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-                  Sort Differences
-                </p>
-                <p className="mt-2 text-sm font-black">
-                  {analysis
-                    ? analysis.sortDifferenceCount
-                    : isDirty
-                      ? "Save First"
-                      : "—"}
-                </p>
-              </CardContent>
-            </Card>
+          <div className="flex items-center gap-3 border-b border-border/40 bg-background/30 px-6 py-3 overflow-x-auto no-scrollbar">
+            <div className="flex items-center gap-3 shrink-0">
+              <span className="text-[9px] font-black uppercase tracking-[0.2em] text-muted-foreground mr-1">
+                Status
+              </span>
+              <div className="flex items-center gap-2">
+                <Badge variant="outline" className="h-7 gap-2 px-3 border-border/60 bg-card/60">
+                  <span className="text-[9px] text-muted-foreground uppercase">Load Order</span>
+                  <span className="text-xs font-black">
+                    {isDirty
+                      ? "DRAFT"
+                      : analysis
+                        ? analysis.isOptimal
+                          ? "OPTIMAL"
+                          : "SUBOPTIMAL"
+                        : "—"}
+                  </span>
+                </Badge>
+                <Badge variant="outline" className="h-7 gap-2 px-3 border-border/60 bg-card/60">
+                  <span className="text-[9px] text-muted-foreground uppercase">Missing</span>
+                  <span className="text-xs font-black">
+                    {analysis ? analysis.missingUnavailableDependencies.length : "—"}
+                  </span>
+                </Badge>
+                <Badge variant="outline" className="h-7 gap-2 px-3 border-border/60 bg-card/60">
+                  <span className="text-[9px] text-muted-foreground uppercase">Auto-Fix</span>
+                  <span className="text-xs font-black">
+                    {analysis ? analysis.missingInstalledInactiveDependencies.length : "—"}
+                  </span>
+                </Badge>
+                <Badge variant="outline" className="h-7 gap-2 px-3 border-border/60 bg-card/60">
+                  <span className="text-[9px] text-muted-foreground uppercase">Diffs</span>
+                  <span className="text-xs font-black">
+                    {analysis ? analysis.sortDifferenceCount : "—"}
+                  </span>
+                </Badge>
+              </div>
+            </div>
           </div>
 
           {analysis ? (
-            <div className="border-b border-border/40 bg-card/10 px-6 py-4">
-              <div className="flex flex-wrap items-center gap-3">
-                <Badge variant={analysis.isOptimal ? "default" : "secondary"}>
-                  {analysis.isOptimal
-                    ? "Optimal Load Order"
-                    : "Review Recommended"}
-                </Badge>
-                {analysis.hasBlockingIssues ? (
-                  <Badge variant="destructive">Blocking Issues</Badge>
-                ) : null}
-                {analysis.sortDifferenceCount > 0 ? (
-                  <Badge variant="outline" className="gap-1">
-                    <ArrowUpDown className="h-3.5 w-3.5" />
-                    Reorder Suggested
+            <div className="border-b border-border/40 bg-card/10 px-6 py-2">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant={analysis.isOptimal ? "default" : "secondary"} className="h-6 text-[10px]">
+                    {analysis.isOptimal
+                      ? "Optimal Load Order"
+                      : "Review Recommended"}
                   </Badge>
-                ) : null}
-                {analysis.missingInstalledInactiveDependencies.length > 0 ? (
-                  <Badge variant="outline" className="gap-1">
-                    <Link2 className="h-3.5 w-3.5" />
-                    Missing Installed Dependencies
-                  </Badge>
-                ) : null}
-                <span className="text-xs text-muted-foreground">
-                  Last analysis:{" "}
-                  {new Date(analysis.analyzedAt).toLocaleString()}
-                </span>
+                  {analysis.hasBlockingIssues ? (
+                    <Badge variant="destructive" className="h-6 text-[10px]">Blocking Issues</Badge>
+                  ) : null}
+                  {analysis.sortDifferenceCount > 0 ? (
+                    <Badge variant="outline" className="h-6 text-[10px] gap-1">
+                      <ArrowUpDown className="h-3 w-3" />
+                      Reorder Suggested
+                    </Badge>
+                  ) : null}
+                </div>
+                
+                <div className="flex items-center gap-2">
+                  {!analysis.isOptimal && !isDirty && !analysis.hasBlockingIssues && analysis.sortDifferenceCount > 0 && (
+                    <Button 
+                      size="sm" 
+                      variant="secondary" 
+                      className="h-7 px-3 text-[10px] gap-1.5 font-black uppercase"
+                      onClick={() => void handleAutoSort()}
+                      disabled={isBusy}
+                    >
+                      <Sparkles className="h-3.5 w-3.5" />
+                      Auto Sort
+                    </Button>
+                  )}
+                  {analysis.missingInstalledInactiveDependencies.length > 0 && !isDirty && (
+                    <Button 
+                      size="sm" 
+                      variant="secondary" 
+                      className="h-7 px-3 text-[10px] gap-1.5 font-black uppercase"
+                      onClick={() => void handleEnableMissingDependencies()}
+                      disabled={isBusy}
+                    >
+                      <Link2 className="h-3.5 w-3.5" />
+                      Fix Dependencies
+                    </Button>
+                  )}
+                  <span className="text-[9px] font-medium text-muted-foreground ml-2">
+                    Analysis: {new Date(analysis.analyzedAt).toLocaleTimeString()}
+                  </span>
+                </div>
               </div>
             </div>
-          ) : analysisQuery.isError ? (
-            <div className="border-b border-destructive/30 bg-destructive/10 px-6 py-4 text-sm font-bold text-destructive">
-              Failed to analyze mod order. Try saving the profile and reloading
-              the page.
-            </div>
           ) : isDirty ? (
-            <div className="border-b border-amber-500/30 bg-amber-500/10 px-6 py-4 text-sm font-bold text-amber-700">
-              Analysis is paused while this profile has unsaved changes.
+            <div className="border-b border-amber-500/20 bg-amber-500/5 px-6 py-2 text-[10px] font-bold text-amber-700">
+              Analysis paused for unsaved changes.
             </div>
           ) : null}
 
-          <div className="flex items-center px-6 py-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-            <div className="w-12 text-center">Use</div>
+          <div className="sticky top-0 z-10 flex items-center px-6 py-2 text-[9px] font-black uppercase tracking-widest text-muted-foreground bg-background border-b border-border/20">
+            <div className="w-10 text-center">Use</div>
             <div className="flex-1">Mod</div>
-            <div className="w-28 text-center">Source</div>
-            <div className="w-24 text-right">Version</div>
+            <div className="w-24 text-center">Source</div>
+            <div className="w-20 text-right">Version</div>
           </div>
 
-          <div className="flex-1 overflow-y-auto border-y border-border/30">
+          <div className="flex-1 overflow-y-auto">
             {filteredMods.length ? (
-              filteredMods.map((mod) => {
+              filteredMods.map((mod, index) => {
                 const isSelected = selectedMod?.id === mod.id;
                 const packageId = mod.dependencyMetadata.packageIdNormalized;
 
@@ -1139,11 +1150,12 @@ export function HomePage() {
                     type="button"
                     onClick={() => setSelectedModId(mod.id)}
                     className={cn(
-                      "flex w-full items-center border-b border-border/20 px-6 py-4 text-left transition-colors",
-                      isSelected ? "bg-accent/40" : "hover:bg-muted/30",
+                      "flex w-full items-center border-b border-border/10 px-6 py-2 text-left transition-colors",
+                      isSelected ? "bg-accent/40" : index % 2 === 0 ? "bg-background/20" : "bg-muted/10",
+                      "hover:bg-accent/20"
                     )}
                   >
-                    <div className="flex w-12 justify-center">
+                    <div className="flex w-10 justify-center">
                       <Checkbox
                         aria-label={`Toggle ${mod.name}`}
                         checked={mod.enabled}
@@ -1158,32 +1170,32 @@ export function HomePage() {
                         onClick={(event) => event.stopPropagation()}
                       />
                     </div>
-                    <div className="min-w-0 flex-1 space-y-2">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="truncate text-sm font-bold">
-                          {mod.name}
-                        </span>
-                        <Badge variant={mod.enabled ? "default" : "outline"}>
-                          {mod.enabled ? "Enabled" : "Disabled"}
-                        </Badge>
-                        {mod.isOfficial ? (
-                          <Badge variant="secondary">Official</Badge>
-                        ) : null}
-                        {!mod.hasAboutXml ? (
-                          <Badge variant="destructive">Missing About.xml</Badge>
-                        ) : null}
+                    <div className="min-w-0 flex-1 flex items-center gap-3">
+                      <span className={cn(
+                        "truncate text-xs font-bold",
+                        !mod.enabled && "text-muted-foreground font-medium"
+                      )}>
+                        {mod.name}
+                      </span>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {mod.isOfficial && (
+                          <Badge variant="secondary" className="h-4 text-[8px] px-1 uppercase">Official</Badge>
+                        )}
+                        {!mod.hasAboutXml && (
+                          <Badge variant="destructive" className="h-4 text-[8px] px-1 uppercase">No Meta</Badge>
+                        )}
                       </div>
-                      <p className="truncate font-mono text-xs text-muted-foreground">
+                      <span className="truncate font-mono text-[9px] text-muted-foreground/60 ml-auto">
                         {mod.packageId ?? mod.windowsPath}
-                      </p>
+                      </span>
                     </div>
-                    <div className="w-28 text-center">
-                      <Badge variant="outline" className="uppercase">
+                    <div className="w-24 text-center">
+                      <Badge variant="outline" className="h-4 text-[8px] px-1 uppercase opacity-70">
                         {mod.source}
                       </Badge>
                     </div>
-                    <div className="w-24 text-right text-xs font-bold text-muted-foreground">
-                      {mod.version ?? "Unknown"}
+                    <div className="w-20 text-right text-[9px] font-bold text-muted-foreground/80">
+                      {mod.version ?? "?.?"}
                     </div>
                   </button>
                 );
@@ -1212,113 +1224,87 @@ export function HomePage() {
           </div>
         </section>
 
-        <aside className="flex w-[44%] min-w-0 flex-col bg-card/10">
-          <div className="border-b border-border/40 bg-background/30 p-6">
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground">
+        {/* Resizer Handle */}
+        <div 
+          className="w-1.5 h-full cursor-col-resize hover:bg-primary/20 transition-colors flex items-center justify-center shrink-0 z-20 group"
+          onMouseDown={handleMouseDown}
+        >
+          <div className="w-[1px] h-12 bg-border group-hover:bg-primary/50" />
+        </div>
+
+        <aside 
+          className="flex min-w-0 flex-col bg-card/10 overflow-hidden"
+          style={{ width: `${asideWidth}%` }}
+        >
+          <div className="border-b border-border/40 bg-background/30 px-6 py-4 shrink-0">
+            <div className="flex items-center justify-between gap-3 mb-3">
+              <div className="flex items-center gap-2">
+                <span className="text-[9px] font-black uppercase tracking-[0.2em] text-muted-foreground">
                   Active Load Order
-                </p>
-                <h3 className="mt-2 text-2xl font-black uppercase tracking-wide rw-text">
-                  {draftProfileName.trim() || currentProfile?.name || "Profile"}
-                </h3>
+                </span>
+                <Badge variant={isDirty ? "secondary" : "outline"} className="h-5 text-[9px] px-1.5">
+                  {draftActivePackageIds.length} Mods
+                </Badge>
               </div>
-              <Badge variant={isDirty ? "secondary" : "outline"}>
-                {draftActivePackageIds.length} Active
-              </Badge>
+              <h3 className="text-sm font-black uppercase tracking-wide rw-text truncate max-w-[150px]">
+                {draftProfileName.trim() || currentProfile?.name || "Profile"}
+              </h3>
             </div>
 
-            <div className="max-h-64 space-y-3 overflow-y-auto pr-1">
+            <div className="max-h-48 space-y-1.5 overflow-y-auto pr-1">
               {activeEntries.length ? (
                 activeEntries.map((entry, index) => (
                   <div
                     key={entry.packageId}
-                    className="rounded-lg border border-border/60 bg-background/60 p-3"
+                    className="group rounded-md border border-border/40 bg-background/40 p-2 hover:bg-background/60 transition-colors"
                   >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="text-sm font-bold">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-bold truncate">
                           {index + 1}. {entry.modName}
                         </p>
-                        <p className="mt-1 break-all font-mono text-xs text-muted-foreground">
+                        <p className="font-mono text-[9px] text-muted-foreground truncate">
                           {entry.packageId}
                         </p>
-                        <div className="mt-2 flex flex-wrap gap-2">
-                          {entry.source ? (
-                            <Badge variant="outline" className="uppercase">
-                              {entry.source}
-                            </Badge>
-                          ) : null}
-                          {entry.isOfficial ? (
-                            <Badge variant="secondary">Official</Badge>
-                          ) : null}
-                        </div>
                       </div>
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
                         <Button
                           size="sm"
-                          variant="outline"
+                          variant="ghost"
+                          className="h-6 w-6 p-0"
                           disabled={isBusy || index === 0}
-                          onClick={() =>
-                            moveActivePackageId(entry.packageId, "top")
-                          }
+                          onClick={() => moveActivePackageId(entry.packageId, "up")}
+                          title="Move Up"
                         >
-                          Top
+                          <ArrowUp className="h-3 w-3" />
                         </Button>
                         <Button
                           size="sm"
-                          variant="outline"
-                          disabled={
-                            isBusy || index === activeEntries.length - 1
-                          }
-                          onClick={() =>
-                            moveActivePackageId(entry.packageId, "bottom")
-                          }
+                          variant="ghost"
+                          className="h-6 w-6 p-0"
+                          disabled={isBusy || index === activeEntries.length - 1}
+                          onClick={() => moveActivePackageId(entry.packageId, "down")}
+                          title="Move Down"
                         >
-                          Bottom
+                          <ArrowDown className="h-3 w-3" />
                         </Button>
                         <Button
                           size="sm"
-                          variant="outline"
-                          className="gap-1"
-                          disabled={isBusy || index === 0}
-                          onClick={() =>
-                            moveActivePackageId(entry.packageId, "up")
-                          }
-                        >
-                          <ArrowUp className="h-4 w-4" />
-                          Up
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="gap-1"
-                          disabled={
-                            isBusy || index === activeEntries.length - 1
-                          }
-                          onClick={() =>
-                            moveActivePackageId(entry.packageId, "down")
-                          }
-                        >
-                          <ArrowDown className="h-4 w-4" />
-                          Down
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          className="col-span-2"
+                          variant="ghost"
+                          className="h-6 w-6 p-0 hover:bg-destructive/10 hover:text-destructive"
                           disabled={isBusy}
                           onClick={() => toggleMod(entry.packageId)}
+                          title="Remove"
                         >
-                          Remove
+                          <Trash2 className="h-3 w-3" />
                         </Button>
                       </div>
                     </div>
                   </div>
                 ))
               ) : (
-                <div className="rounded-lg border border-dashed border-border/60 bg-background/40 p-6 text-center text-sm text-muted-foreground">
-                  No mods are active in this draft profile yet.
+                <div className="py-4 text-center text-[10px] text-muted-foreground italic">
+                  No active mods.
                 </div>
               )}
             </div>
@@ -1326,169 +1312,117 @@ export function HomePage() {
 
           {selectedMod ? (
             <div className="flex min-h-0 flex-1 flex-col">
-              <div className="border-b border-border/40 bg-background/30 p-8">
-                <div className="mb-5 flex items-start justify-between gap-4">
-                  <div className="space-y-3">
-                    <h3 className="text-3xl font-black uppercase tracking-wide rw-text leading-tight">
+              <header className="border-b border-border/40 bg-background/30 p-6">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="space-y-2">
+                    <h3 className="text-2xl font-black uppercase tracking-wide rw-text leading-tight">
                       {selectedMod.name}
                     </h3>
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-wrap gap-1.5">
                       <Badge
                         variant={selectedMod.enabled ? "default" : "outline"}
+                        className="h-5 text-[9px]"
                       >
                         {selectedMod.enabled ? "Enabled" : "Disabled"}
                       </Badge>
-                      <Badge variant="outline" className="uppercase">
+                      <Badge variant="outline" className="h-5 text-[9px] uppercase">
                         {selectedMod.source}
                       </Badge>
                       {selectedMod.isOfficial ? (
-                        <Badge variant="secondary">Official</Badge>
-                      ) : null}
-                      {!selectedMod.hasAboutXml ? (
-                        <Badge variant="destructive">Metadata Missing</Badge>
+                        <Badge variant="secondary" className="h-5 text-[9px]">Official</Badge>
                       ) : null}
                     </div>
                   </div>
                   {selectedMod.isOfficial ? (
-                    <ShieldCheck className="h-8 w-8 text-primary" />
+                    <ShieldCheck className="h-6 w-6 text-primary shrink-0" />
                   ) : null}
                 </div>
 
-                <div className="grid gap-4 md:grid-cols-2">
-                  <Card className="bg-background/30">
-                    <CardContent className="p-4">
-                      <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-                        Package ID
-                      </p>
-                      <p className="mt-2 break-all font-mono text-xs">
-                        {selectedMod.packageId ?? "Not available"}
-                      </p>
-                    </CardContent>
-                  </Card>
-                  <Card className="bg-background/30">
-                    <CardContent className="p-4">
-                      <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-                        Author / Version
-                      </p>
-                      <p className="mt-2 text-sm font-bold">
-                        {selectedMod.author ?? "Unknown author"}
-                      </p>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        Version: {selectedMod.version ?? "Unknown"}
-                      </p>
-                    </CardContent>
-                  </Card>
+                <div className="mt-4 grid gap-3 grid-cols-2">
+                  <div className="rounded-lg border border-border/40 bg-background/20 p-2.5">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">
+                      Package ID
+                    </p>
+                    <p className="mt-1 break-all font-mono text-[10px] font-bold">
+                      {selectedMod.packageId ?? "—"}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-border/40 bg-background/20 p-2.5">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">
+                      Author / Version
+                    </p>
+                    <p className="mt-1 text-[11px] font-bold truncate">
+                      {selectedMod.author ?? "Unknown"}
+                    </p>
+                    <p className="text-[9px] text-muted-foreground">
+                      v{selectedMod.version ?? "Unknown"}
+                    </p>
+                  </div>
                 </div>
-              </div>
+              </header>
 
-              <div className="flex-1 space-y-6 overflow-y-auto p-8">
-                {analysis?.hasBlockingIssues ? (
-                  <section className="space-y-3">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+              <div className="flex-1 space-y-5 overflow-y-auto p-6 scrollbar-thin">
+                {analysis?.hasBlockingIssues && (
+                  <section className="space-y-2">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">
                       Blocking Diagnostics
                     </p>
-                    <div className="space-y-3 rounded-lg border border-destructive/40 bg-destructive/10 p-4">
-                      {analysis.missingUnavailableDependencies.length > 0 ? (
+                    <div className="space-y-2 rounded-lg border border-destructive/40 bg-destructive/5 p-3">
+                      {analysis.missingUnavailableDependencies.length > 0 && (
                         <div>
-                          <p className="text-sm font-bold text-destructive">
-                            Some required mods are not installed, so automatic
-                            sorting is paused.
+                          <p className="text-[11px] font-bold text-destructive">
+                            Uninstalled dependencies:
                           </p>
-                          <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-destructive/90">
-                            {analysis.missingUnavailableDependencies.map(
-                              (issue) => (
-                                <li key={issue.packageId}>
-                                  {issue.packageId} required by{" "}
-                                  {issue.requiredByNames.join(", ")}
-                                </li>
-                              ),
-                            )}
+                          <ul className="mt-1 list-disc space-y-1 pl-4 text-[10px] text-destructive/90">
+                            {analysis.missingUnavailableDependencies.map((issue) => (
+                              <li key={issue.packageId}>
+                                <span className="font-mono font-bold">{issue.packageId}</span> (required by {issue.requiredByNames.join(", ")})
+                              </li>
+                            ))}
                           </ul>
                         </div>
-                      ) : null}
-                      {analysis.diagnostics
-                        .filter(
-                          (diagnostic) =>
-                            diagnostic.isBlocking &&
-                            diagnostic.code !==
-                              "missing_unavailable_dependency",
-                        )
-                        .map((diagnostic) => (
-                          <p
-                            key={`${diagnostic.code}:${diagnostic.message}`}
-                            className="text-sm font-bold text-destructive"
-                          >
-                            {diagnostic.message}
-                          </p>
-                        ))}
+                      )}
                     </div>
                   </section>
-                ) : null}
+                )}
 
-                <section className="space-y-3">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                <section className="space-y-2">
+                  <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">
                     Description
                   </p>
-                  <div className="space-y-3 rounded-lg border border-border/60 bg-background/60 p-4">
+                  <div className="space-y-2.5 rounded-lg border border-border/40 bg-background/40 p-3.5 text-xs leading-relaxed">
                     {renderDescriptionBlocks(selectedMod.description)}
                   </div>
                 </section>
 
-                <section className="space-y-3">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                <section className="space-y-2">
+                  <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">
                     Dependency Hints
                   </p>
-                  <div className="space-y-4 rounded-lg border border-border/60 bg-background/60 p-4">
-                    <div>
-                      <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">
-                        Dependencies
-                      </p>
-                      <div className="mt-2">
-                        {renderPackageList(
-                          selectedMod.dependencyMetadata.dependencies,
-                        )}
+                  <div className="grid gap-3 rounded-lg border border-border/40 bg-background/40 p-3.5">
+                    {[
+                      { label: "Dependencies", items: selectedMod.dependencyMetadata.dependencies },
+                      { label: "Load After", items: selectedMod.dependencyMetadata.loadAfter },
+                      { label: "Load Before", items: selectedMod.dependencyMetadata.loadBefore },
+                      { label: "Incompatible", items: selectedMod.dependencyMetadata.incompatibleWith },
+                    ].map(({ label, items }) => (
+                      <div key={label}>
+                        <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground mb-1">
+                          {label}
+                        </p>
+                        {renderPackageList(items)}
                       </div>
-                    </div>
-                    <div>
-                      <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">
-                        Load After
-                      </p>
-                      <div className="mt-2">
-                        {renderPackageList(
-                          selectedMod.dependencyMetadata.loadAfter,
-                        )}
-                      </div>
-                    </div>
-                    <div>
-                      <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">
-                        Load Before
-                      </p>
-                      <div className="mt-2">
-                        {renderPackageList(
-                          selectedMod.dependencyMetadata.loadBefore,
-                        )}
-                      </div>
-                    </div>
-                    <div>
-                      <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">
-                        Incompatible With
-                      </p>
-                      <div className="mt-2">
-                        {renderPackageList(
-                          selectedMod.dependencyMetadata.incompatibleWith,
-                        )}
-                      </div>
-                    </div>
+                    ))}
                   </div>
                 </section>
 
                 {selectedExplanation?.reasons.length ? (
-                  <section className="space-y-3">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                  <section className="space-y-2">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">
                       Order Analysis
                     </p>
-                    <div className="rounded-lg border border-primary/30 bg-primary/10 p-4">
-                      <ul className="list-disc space-y-1 pl-5 text-sm text-foreground/90">
+                    <div className="rounded-lg border border-primary/20 bg-primary/5 p-3.5">
+                      <ul className="list-disc space-y-1.5 pl-4 text-[11px] text-foreground/80">
                         {selectedExplanation.reasons.map((reason) => (
                           <li key={reason}>{reason}</li>
                         ))}
@@ -1497,77 +1431,28 @@ export function HomePage() {
                   </section>
                 ) : null}
 
-                <section className="space-y-3">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-                    Mod Path
+                <section className="space-y-2">
+                  <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">
+                    Paths & Metadata
                   </p>
-                  <div className="rounded-lg border border-border/60 bg-background/60 p-4">
-                    <p className="break-all font-mono text-xs">
-                      {selectedMod.windowsPath}
-                    </p>
+                  <div className="rounded-lg border border-border/40 bg-background/40 p-3.5 space-y-2 font-mono text-[10px]">
+                    <div>
+                      <p className="text-[8px] text-muted-foreground uppercase mb-0.5">Physical Location</p>
+                      <p className="break-all">{selectedMod.windowsPath}</p>
+                    </div>
+                    <div>
+                      <p className="text-[8px] text-muted-foreground uppercase mb-0.5">About.xml</p>
+                      <p className="break-all">{selectedMod.manifestPath ?? "N/A"}</p>
+                    </div>
                   </div>
                 </section>
-
-                <section className="space-y-3">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-                    About.xml
-                  </p>
-                  <div className="rounded-lg border border-border/60 bg-background/60 p-4 text-sm">
-                    <p>
-                      Manifest path: {formatPathValue(selectedMod.manifestPath)}
-                    </p>
-                    <p className="mt-2">
-                      WSL path: {formatPathValue(selectedMod.wslPath)}
-                    </p>
-                  </div>
-                </section>
-
-                {selectedMod.notes.length ? (
-                  <section className="space-y-3">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-                      Notes
-                    </p>
-                    <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-4">
-                      <ul className="list-disc space-y-1 pl-5 text-sm text-amber-800">
-                        {selectedMod.notes.map((note) => (
-                          <li key={note}>{note}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  </section>
-                ) : null}
-
-                {modLibrary.errors.length ? (
-                  <section className="space-y-3">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-                      Scan Warnings
-                    </p>
-                    <div className="space-y-3">
-                      {modLibrary.errors.map((error) => (
-                        <div
-                          key={`${error.code}:${error.message}`}
-                          className="rounded-lg border border-destructive/40 bg-destructive/10 p-4"
-                        >
-                          <p className="text-sm font-bold text-destructive">
-                            {error.message}
-                          </p>
-                          {error.detail ? (
-                            <p className="mt-1 text-sm text-destructive/80">
-                              {error.detail}
-                            </p>
-                          ) : null}
-                        </div>
-                      ))}
-                    </div>
-                  </section>
-                ) : null}
               </div>
             </div>
           ) : (
             <div className="flex h-full items-center justify-center p-12 text-center">
-              <div className="space-y-3">
-                <Package className="mx-auto h-10 w-10 text-muted-foreground" />
-                <p className="text-lg font-black uppercase tracking-[0.2em] rw-text">
+              <div className="space-y-3 opacity-50">
+                <Package className="mx-auto h-12 w-12 text-muted-foreground" />
+                <p className="text-sm font-black uppercase tracking-[0.2em] rw-text">
                   No Mod Selected
                 </p>
               </div>
