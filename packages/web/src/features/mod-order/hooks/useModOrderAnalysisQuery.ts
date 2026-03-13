@@ -1,12 +1,13 @@
 import { getRimunRpcClient } from "@/shared/bridge/rpcClient";
 import { useQuery } from "@tanstack/react-query";
 
-export function useSettingsQuery() {
+export function useModOrderAnalysisQuery(enabled: boolean) {
   return useQuery({
-    queryKey: ["settings"],
+    queryKey: ["mod-order-analysis"],
+    enabled,
     queryFn: async () => {
       const rpcClient = await getRimunRpcClient();
-      return rpcClient.getSettings();
+      return rpcClient.analyzeModOrder();
     },
   });
 }

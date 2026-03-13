@@ -1,10 +1,13 @@
 import type { RimunRpcClient } from "@/shared/bridge/rpcClient";
 import type {
   AppSettings,
+  ApplyModOrderRecommendationInput,
   BootstrapPayload,
   DetectPathsInput,
   DetectPathsResult,
   ModLibraryResult,
+  ModOrderAnalysisResult,
+  ModOrderApplyResult,
   SaveSettingsInput,
   SaveSettingsResult,
   ValidatePathInput,
@@ -92,6 +95,19 @@ const defaultBootstrap: BootstrapPayload = {
   preferredSelection: defaultDetectPaths.preferredSelection,
 };
 
+function createDependencyMetadata(packageId: string | null) {
+  return {
+    packageIdNormalized: packageId,
+    dependencies: [],
+    loadAfter: [],
+    loadBefore: [],
+    forceLoadAfter: [],
+    forceLoadBefore: [],
+    incompatibleWith: [],
+    supportedVersions: [],
+  };
+}
+
 const defaultModLibrary: ModLibraryResult = {
   environment: defaultBootstrap.environment,
   selection: defaultBootstrap.preferredSelection,
@@ -104,6 +120,7 @@ const defaultModLibrary: ModLibraryResult = {
     modsConfigPath:
       "C:\\Users\\player\\AppData\\LocalLow\\Ludeon Studios\\RimWorld by Ludeon Studios\\Config\\ModsConfig.xml",
   },
+  activePackageIds: ["ludeon.rimworld", "unlimitedhugs.hugslib"],
   mods: [
     {
       id: "installation:ludeon.rimworld",
@@ -111,8 +128,7 @@ const defaultModLibrary: ModLibraryResult = {
       packageId: "ludeon.rimworld",
       author: "Ludeon Studios",
       version: "1.5.4062",
-      description:
-        "Core game systems.\n\n- Pawns\n- Factions\n- Incidents",
+      description: "Core game systems.\n\n- Pawns\n- Factions\n- Incidents",
       source: "installation",
       windowsPath:
         "C:\\Program Files (x86)\\Steam\\steamapps\\common\\RimWorld\\Mods\\Core",
@@ -123,6 +139,7 @@ const defaultModLibrary: ModLibraryResult = {
       enabled: true,
       isOfficial: true,
       hasAboutXml: true,
+      dependencyMetadata: createDependencyMetadata("ludeon.rimworld"),
       notes: [],
     },
     {
@@ -142,6 +159,30 @@ const defaultModLibrary: ModLibraryResult = {
       enabled: true,
       isOfficial: false,
       hasAboutXml: true,
+      dependencyMetadata: createDependencyMetadata("unlimitedhugs.hugslib"),
+      notes: [],
+    },
+    {
+      id: "workshop:example.pawns",
+      name: "Pawns",
+      packageId: "example.pawns",
+      author: "Storyteller",
+      version: "1.5",
+      description: "A content pack that depends on HugsLib.",
+      source: "workshop",
+      windowsPath:
+        "C:\\Program Files (x86)\\Steam\\steamapps\\workshop\\content\\294100\\999999999",
+      wslPath:
+        "/mnt/c/Program Files (x86)/Steam/steamapps/workshop/content/294100/999999999",
+      manifestPath:
+        "C:\\Program Files (x86)\\Steam\\steamapps\\workshop\\content\\294100\\999999999\\About\\About.xml",
+      enabled: false,
+      isOfficial: false,
+      hasAboutXml: true,
+      dependencyMetadata: {
+        ...createDependencyMetadata("example.pawns"),
+        dependencies: ["unlimitedhugs.hugslib"],
+      },
       notes: [],
     },
   ],
@@ -149,14 +190,53 @@ const defaultModLibrary: ModLibraryResult = {
   requiresConfiguration: false,
 };
 
+const defaultModOrderAnalysis: ModOrderAnalysisResult = {
+  analyzedAt: "2026-03-12T00:00:01.000Z",
+  currentActivePackageIds: ["ludeon.rimworld", "unlimitedhugs.hugslib"],
+  recommendedActivePackageIds: ["ludeon.rimworld", "unlimitedhugs.hugslib"],
+  recommendedOrderPackageIds: ["ludeon.rimworld", "unlimitedhugs.hugslib"],
+  missingInstalledInactiveDependencies: [],
+  missingUnavailableDependencies: [],
+  diagnostics: [],
+  explanations: [
+    {
+      packageId: "ludeon.rimworld",
+      modName: "Core",
+      reasons: [
+        "Should load before HugsLib: Core must load before every other mod.",
+      ],
+    },
+  ],
+  edges: [
+    {
+      fromPackageId: "ludeon.rimworld",
+      toPackageId: "unlimitedhugs.hugslib",
+      kind: "official_anchor",
+      source: "system",
+      isHard: true,
+      reason: "Core must load before every other mod.",
+    },
+  ],
+  isOptimal: true,
+  hasBlockingIssues: false,
+  sortDifferenceCount: 0,
+};
+
 type Overrides = Partial<{
   bootstrap: BootstrapPayload;
   modLibrary: ModLibraryResult;
+  modOrderAnalysis: ModOrderAnalysisResult;
   settings: AppSettings;
   detectPaths: DetectPathsResult;
   onDetectPaths: (
     input: DetectPathsInput,
   ) => DetectPathsResult | Promise<DetectPathsResult>;
+  onAnalyzeModOrder: () =>
+    | ModOrderAnalysisResult
+    | Promise<ModOrderAnalysisResult>;
+  onApplyModOrderRecommendation: (
+    input: ApplyModOrderRecommendationInput,
+  ) => ModOrderApplyResult | Promise<ModOrderApplyResult>;
   onSave: (
     input: SaveSettingsInput,
   ) => SaveSettingsResult | Promise<SaveSettingsResult>;
@@ -169,6 +249,29 @@ export function createMockRpcClient(overrides: Overrides = {}): RimunRpcClient {
   return {
     getBootstrap: async () => overrides.bootstrap ?? defaultBootstrap,
     getModLibrary: async () => overrides.modLibrary ?? defaultModLibrary,
+    analyzeModOrder: async () => {
+      if (overrides.onAnalyzeModOrder) {
+        return overrides.onAnalyzeModOrder();
+      }
+
+      return overrides.modOrderAnalysis ?? defaultModOrderAnalysis;
+    },
+    applyModOrderRecommendation: async (input) => {
+      if (overrides.onApplyModOrderRecommendation) {
+        return overrides.onApplyModOrderRecommendation(input);
+      }
+
+      return {
+        appliedActions: input.actions,
+        activePackageIds:
+          input.actions.includes("enableMissingDependencies") ||
+          input.actions.includes("reorderActiveMods")
+            ? defaultModOrderAnalysis.recommendedOrderPackageIds
+            : defaultModLibrary.activePackageIds,
+        modLibrary: overrides.modLibrary ?? defaultModLibrary,
+        analysis: overrides.modOrderAnalysis ?? defaultModOrderAnalysis,
+      };
+    },
     getSettings: async () => overrides.settings ?? defaultSettings,
     saveSettings: async (input) => {
       if (overrides.onSave) {

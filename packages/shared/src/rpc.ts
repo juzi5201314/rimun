@@ -1,10 +1,13 @@
 import type {
   AppSettings,
+  ApplyModOrderRecommendationInput,
   BootstrapPayload,
   DetectPathsInput,
   DetectPathsResult,
   EmptyParams,
   ModLibraryResult,
+  ModOrderAnalysisResult,
+  ModOrderApplyResult,
   SaveSettingsInput,
   SaveSettingsResult,
   ValidatePathInput,
@@ -12,11 +15,14 @@ import type {
 } from "./schemas";
 import {
   appSettingsSchema,
+  applyModOrderRecommendationInputSchema,
   bootstrapPayloadSchema,
   detectPathsInputSchema,
   detectPathsResultSchema,
   emptyParamsSchema,
   modLibraryResultSchema,
+  modOrderAnalysisResultSchema,
+  modOrderApplyResultSchema,
   saveSettingsInputSchema,
   saveSettingsResultSchema,
   validatePathInputSchema,
@@ -43,6 +49,11 @@ export type RpcSchema<
 export type RimunBunRequests = {
   getBootstrap: RpcRequestDefinition<EmptyParams, BootstrapPayload>;
   getModLibrary: RpcRequestDefinition<EmptyParams, ModLibraryResult>;
+  analyzeModOrder: RpcRequestDefinition<EmptyParams, ModOrderAnalysisResult>;
+  applyModOrderRecommendation: RpcRequestDefinition<
+    ApplyModOrderRecommendationInput,
+    ModOrderApplyResult
+  >;
   getSettings: RpcRequestDefinition<EmptyParams, AppSettings>;
   saveSettings: RpcRequestDefinition<SaveSettingsInput, SaveSettingsResult>;
   detectPaths: RpcRequestDefinition<DetectPathsInput, DetectPathsResult>;
@@ -76,6 +87,14 @@ export const rimunRpcSchemas = {
       getModLibrary: {
         params: emptyParamsSchema,
         response: modLibraryResultSchema,
+      },
+      analyzeModOrder: {
+        params: emptyParamsSchema,
+        response: modOrderAnalysisResultSchema,
+      },
+      applyModOrderRecommendation: {
+        params: applyModOrderRecommendationInputSchema,
+        response: modOrderApplyResultSchema,
       },
       getSettings: {
         params: emptyParamsSchema,

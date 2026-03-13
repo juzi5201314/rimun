@@ -1,9 +1,12 @@
 import type {
   AppSettings,
+  ApplyModOrderRecommendationInput,
   BootstrapPayload,
   DetectPathsInput,
   DetectPathsResult,
   ModLibraryResult,
+  ModOrderAnalysisResult,
+  ModOrderApplyResult,
   RimunRpc,
   SaveSettingsInput,
   SaveSettingsResult,
@@ -14,6 +17,10 @@ import type {
 export type RimunRpcClient = {
   getBootstrap(): Promise<BootstrapPayload>;
   getModLibrary(): Promise<ModLibraryResult>;
+  analyzeModOrder(): Promise<ModOrderAnalysisResult>;
+  applyModOrderRecommendation(
+    input: ApplyModOrderRecommendationInput,
+  ): Promise<ModOrderApplyResult>;
   getSettings(): Promise<AppSettings>;
   saveSettings(input: SaveSettingsInput): Promise<SaveSettingsResult>;
   detectPaths(input: DetectPathsInput): Promise<DetectPathsResult>;
@@ -76,7 +83,9 @@ async function waitForElectrobunSocket(
 
         function handleClose() {
           cleanup();
-          reject(new Error("Electrobun RPC socket closed before it was ready."));
+          reject(
+            new Error("Electrobun RPC socket closed before it was ready."),
+          );
         }
 
         activeSocket.addEventListener("open", handleOpen, { once: true });
@@ -124,6 +133,12 @@ async function createElectrobunRpcClient(): Promise<RimunRpcClient> {
       callWithReadySocket(() => typedRpc.request.getBootstrap({})),
     getModLibrary: async () =>
       callWithReadySocket(() => typedRpc.request.getModLibrary({})),
+    analyzeModOrder: async () =>
+      callWithReadySocket(() => typedRpc.request.analyzeModOrder({})),
+    applyModOrderRecommendation: async (input) =>
+      callWithReadySocket(() =>
+        typedRpc.request.applyModOrderRecommendation(input),
+      ),
     getSettings: async () =>
       callWithReadySocket(() => typedRpc.request.getSettings({})),
     saveSettings: async (input) =>

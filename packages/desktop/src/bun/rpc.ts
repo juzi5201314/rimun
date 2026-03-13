@@ -1,4 +1,5 @@
 import type {
+  ApplyModOrderRecommendationInput,
   DetectPathsInput,
   PathSelection,
   RimunRpcContract,
@@ -6,6 +7,10 @@ import type {
 } from "@rimun/shared";
 import { rimunRpcSchemas } from "@rimun/shared";
 import { BrowserView } from "electrobun/bun";
+import {
+  analyzeModOrderFromSelection,
+  applyModOrderRecommendation,
+} from "./mod-order";
 import { scanModLibrary } from "./mods";
 import type { SettingsRepository } from "./persistence";
 import { detectPaths, getExecutionEnvironment, validatePath } from "./platform";
@@ -17,7 +22,9 @@ function assertRequestSchema<T>(
   return schema.parse(value);
 }
 
-function resolvePreferredSelection(repository: SettingsRepository): PathSelection | null {
+function resolvePreferredSelection(
+  repository: SettingsRepository,
+): PathSelection | null {
   const settings = repository.getSettings();
   const detection = detectPaths({
     preferredChannels: ["steam"],
@@ -68,6 +75,31 @@ export function createMainWindowRpc(
 
           return rimunRpcSchemas.bun.requests.getModLibrary.response.parse(
             scanModLibrary(resolvePreferredSelection(repository)),
+          );
+        },
+        analyzeModOrder: (params) => {
+          assertRequestSchema(
+            rimunRpcSchemas.bun.requests.analyzeModOrder.params,
+            params,
+          );
+
+          return rimunRpcSchemas.bun.requests.analyzeModOrder.response.parse(
+            analyzeModOrderFromSelection(resolvePreferredSelection(repository)),
+          );
+        },
+        applyModOrderRecommendation: (
+          payload: ApplyModOrderRecommendationInput,
+        ) => {
+          const input = assertRequestSchema(
+            rimunRpcSchemas.bun.requests.applyModOrderRecommendation.params,
+            payload,
+          );
+
+          return rimunRpcSchemas.bun.requests.applyModOrderRecommendation.response.parse(
+            applyModOrderRecommendation(
+              resolvePreferredSelection(repository),
+              input,
+            ),
           );
         },
         getSettings: (params) => {

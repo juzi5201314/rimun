@@ -1,8 +1,9 @@
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join, win32 } from "node:path";
 import type {
   AppError,
   ExecutionEnvironment,
+  ModDependencyMetadata,
   ModLibraryResult,
   ModRecord,
   ModSource,
@@ -17,6 +18,14 @@ type ScanModLibraryOptions = {
 
 type ParsedModsConfig = {
   activePackageIds: Set<string>;
+  activePackageIdsOrdered: string[];
+};
+
+type XmlEncoding = "utf8" | "utf16le" | "utf16be";
+
+type WriteActiveModsOptions = {
+  environment?: ExecutionEnvironment;
+  toReadablePath?: (windowsPath: string) => string | null;
 };
 
 function createAppError(
@@ -49,6 +58,38 @@ function decodeUtf16Be(fileContent: Uint8Array) {
   return swapped.toString("utf16le");
 }
 
+function encodeUtf16Be(value: string) {
+  const buffer = Buffer.from(value, "utf16le");
+
+  for (let index = 0; index + 1 < buffer.length; index += 2) {
+    const current = buffer[index];
+    buffer[index] = buffer[index + 1] ?? current;
+    buffer[index + 1] = current;
+  }
+
+  return buffer;
+}
+
+function detectXmlEncoding(fileContent: Uint8Array): XmlEncoding {
+  if (
+    fileContent.length >= 2 &&
+    fileContent[0] === 0xff &&
+    fileContent[1] === 0xfe
+  ) {
+    return "utf16le";
+  }
+
+  if (
+    fileContent.length >= 2 &&
+    fileContent[0] === 0xfe &&
+    fileContent[1] === 0xff
+  ) {
+    return "utf16be";
+  }
+
+  return "utf8";
+}
+
 function decodeXmlFileContent(fileContent: Uint8Array) {
   if (
     fileContent.length >= 2 &&
@@ -75,7 +116,10 @@ function decodeXmlFileContent(fileContent: Uint8Array) {
     return new TextDecoder("utf-8").decode(fileContent);
   }
 
-  const sampleSize = Math.min(fileContent.length - (fileContent.length % 2), 128);
+  const sampleSize = Math.min(
+    fileContent.length - (fileContent.length % 2),
+    128,
+  );
   let zeroOnEven = 0;
   let zeroOnOdd = 0;
 
@@ -108,6 +152,15 @@ function readXmlFile(filePath: string) {
   return decodeXmlFileContent(readFileSync(filePath));
 }
 
+function readXmlFileWithEncoding(filePath: string) {
+  const fileContent = readFileSync(filePath);
+
+  return {
+    encoding: detectXmlEncoding(fileContent),
+    xml: decodeXmlFileContent(fileContent),
+  };
+}
+
 function decodeXmlEntities(value: string) {
   return value
     .replaceAll("&lt;", "<")
@@ -117,19 +170,42 @@ function decodeXmlEntities(value: string) {
     .replaceAll("&amp;", "&");
 }
 
+function removeControlCharacters(value: string, replacement: string) {
+  return value
+    .replaceAll("\0", "")
+    .split("")
+    .map((character) => {
+      const codePoint = character.charCodeAt(0);
+
+      if (
+        (codePoint >= 1 && codePoint <= 8) ||
+        codePoint === 11 ||
+        codePoint === 12 ||
+        (codePoint >= 14 && codePoint <= 31)
+      ) {
+        return replacement;
+      }
+
+      return character;
+    })
+    .join("");
+}
+
 function normalizeText(value: string) {
-  return decodeXmlEntities(value.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1"))
-    .replace(/\u0000/g, "")
-    .replace(/[\u0001-\u0008\u000b\u000c\u000e-\u001f]/g, " ")
+  return removeControlCharacters(
+    decodeXmlEntities(value.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")),
+    " ",
+  )
     .replace(/<[^>]+>/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
 
 function normalizeMultilineText(value: string) {
-  return decodeXmlEntities(value.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1"))
-    .replace(/\u0000/g, "")
-    .replace(/[\u0001-\u0008\u000b\u000c\u000e-\u001f]/g, "")
+  return removeControlCharacters(
+    decodeXmlEntities(value.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")),
+    "",
+  )
     .replace(/<br\s*\/?>/gi, "\n")
     .replace(/<\/p>/gi, "\n\n")
     .replace(/<[^>]+>/g, "")
@@ -141,29 +217,30 @@ function normalizeMultilineText(value: string) {
     .trim();
 }
 
+function normalizePackageId(value: string | null) {
+  return value?.trim().toLowerCase() ?? null;
+}
+
 function extractTagText(xml: string, tagName: string) {
-  const match = new RegExp(
-    `<${tagName}>([\\s\\S]*?)</${tagName}>`,
-    "i",
-  ).exec(xml);
+  const match = new RegExp(`<${tagName}>([\\s\\S]*?)</${tagName}>`, "i").exec(
+    xml,
+  );
 
   return match ? normalizeText(match[1]) || null : null;
 }
 
 function extractTagMultilineText(xml: string, tagName: string) {
-  const match = new RegExp(
-    `<${tagName}>([\\s\\S]*?)</${tagName}>`,
-    "i",
-  ).exec(xml);
+  const match = new RegExp(`<${tagName}>([\\s\\S]*?)</${tagName}>`, "i").exec(
+    xml,
+  );
 
   return match ? normalizeMultilineText(match[1]) || null : null;
 }
 
 function extractTagList(xml: string, tagName: string) {
-  const match = new RegExp(
-    `<${tagName}>([\\s\\S]*?)</${tagName}>`,
-    "i",
-  ).exec(xml);
+  const match = new RegExp(`<${tagName}>([\\s\\S]*?)</${tagName}>`, "i").exec(
+    xml,
+  );
 
   if (!match) {
     return [];
@@ -179,10 +256,11 @@ export function parseAboutXml(xml: string) {
   const authors = extractTagList(xml, "authors");
   const authorText = extractTagText(xml, "author");
   const supportedVersions = extractTagList(xml, "supportedVersions");
+  const packageId = extractTagText(xml, "packageId");
 
   return {
     name: extractTagText(xml, "name"),
-    packageId: extractTagText(xml, "packageId"),
+    packageId,
     author:
       authors.length > 0
         ? authors.join(", ")
@@ -195,15 +273,105 @@ export function parseAboutXml(xml: string) {
       supportedVersions[0] ??
       null,
     description: extractTagMultilineText(xml, "description"),
+    dependencyMetadata: {
+      packageIdNormalized: normalizePackageId(packageId),
+      dependencies: extractTagList(xml, "modDependencies").map((value) =>
+        value.toLowerCase(),
+      ),
+      loadAfter: extractTagList(xml, "loadAfter").map((value) =>
+        value.toLowerCase(),
+      ),
+      loadBefore: extractTagList(xml, "loadBefore").map((value) =>
+        value.toLowerCase(),
+      ),
+      forceLoadAfter: extractTagList(xml, "forceLoadAfter").map((value) =>
+        value.toLowerCase(),
+      ),
+      forceLoadBefore: extractTagList(xml, "forceLoadBefore").map((value) =>
+        value.toLowerCase(),
+      ),
+      incompatibleWith: extractTagList(xml, "incompatibleWith").map((value) =>
+        value.toLowerCase(),
+      ),
+      supportedVersions,
+    } satisfies ModDependencyMetadata,
   };
 }
 
 export function parseModsConfigXml(xml: string): ParsedModsConfig {
+  const activePackageIdsOrdered = extractTagList(xml, "activeMods").map(
+    (packageId) => packageId.toLowerCase(),
+  );
+
   return {
-    activePackageIds: new Set(
-      extractTagList(xml, "activeMods").map((packageId) => packageId.toLowerCase()),
-    ),
+    activePackageIds: new Set(activePackageIdsOrdered),
+    activePackageIdsOrdered,
   };
+}
+
+function escapeXmlText(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&apos;");
+}
+
+function buildActiveModsXml(activePackageIds: string[]) {
+  if (activePackageIds.length === 0) {
+    return "  <activeMods />\n";
+  }
+
+  return [
+    "  <activeMods>",
+    ...activePackageIds.map(
+      (packageId) => `    <li>${escapeXmlText(packageId)}</li>`,
+    ),
+    "  </activeMods>",
+  ].join("\n");
+}
+
+function replaceActiveModsBlock(xml: string, activePackageIds: string[]) {
+  const activeModsBlock = buildActiveModsXml(activePackageIds);
+
+  if (/<activeMods\b[\s\S]*?<\/activeMods>/i.test(xml)) {
+    return xml.replace(/<activeMods\b[\s\S]*?<\/activeMods>/i, activeModsBlock);
+  }
+
+  if (/<activeMods\s*\/>/i.test(xml)) {
+    return xml.replace(/<activeMods\s*\/>/i, activeModsBlock.trim());
+  }
+
+  if (/<\/ModsConfigData>/i.test(xml)) {
+    return xml.replace(
+      /<\/ModsConfigData>/i,
+      `${activeModsBlock}\n</ModsConfigData>`,
+    );
+  }
+
+  return [
+    '<?xml version="1.0" encoding="utf-8"?>',
+    "<ModsConfigData>",
+    activeModsBlock,
+    "</ModsConfigData>",
+    "",
+  ].join("\n");
+}
+
+function encodeXmlContent(xml: string, encoding: XmlEncoding) {
+  if (encoding === "utf16le") {
+    return Buffer.concat([
+      Buffer.from([0xff, 0xfe]),
+      Buffer.from(xml, "utf16le"),
+    ]);
+  }
+
+  if (encoding === "utf16be") {
+    return Buffer.concat([Buffer.from([0xfe, 0xff]), encodeUtf16Be(xml)]);
+  }
+
+  return Buffer.from(xml, "utf8");
 }
 
 function isOfficialMod(source: ModSource, packageId: string | null) {
@@ -212,7 +380,7 @@ function isOfficialMod(source: ModSource, packageId: string | null) {
     : source === "installation" && packageId === null;
 }
 
-function createReadablePathResolver() {
+export function createReadablePathResolver() {
   if (process.platform === "win32") {
     return (windowsPath: string) => windowsPath;
   }
@@ -286,6 +454,16 @@ function scanRoot(
           : false,
         isOfficial: isOfficialMod(source, parsedAbout?.packageId ?? null),
         hasAboutXml,
+        dependencyMetadata: parsedAbout?.dependencyMetadata ?? {
+          packageIdNormalized: null,
+          dependencies: [],
+          loadAfter: [],
+          loadBefore: [],
+          forceLoadAfter: [],
+          forceLoadBefore: [],
+          incompatibleWith: [],
+          supportedVersions: [],
+        },
         notes,
       } satisfies ModRecord;
     })
@@ -326,6 +504,7 @@ export function scanModLibrary(
         workshopPath,
         modsConfigPath,
       },
+      activePackageIds: [],
       mods: [],
       errors,
       requiresConfiguration: true,
@@ -333,12 +512,17 @@ export function scanModLibrary(
   }
 
   let activePackageIds = new Set<string>();
+  let activePackageIdsOrdered: string[] = [];
 
   if (modsConfigPath) {
     const readableModsConfigPath = toReadablePath(modsConfigPath);
 
     if (readableModsConfigPath && existsSync(readableModsConfigPath)) {
-      activePackageIds = parseModsConfigXml(readXmlFile(readableModsConfigPath)).activePackageIds;
+      const parsedModsConfig = parseModsConfigXml(
+        readXmlFile(readableModsConfigPath),
+      );
+      activePackageIds = parsedModsConfig.activePackageIds;
+      activePackageIdsOrdered = parsedModsConfig.activePackageIdsOrdered;
     } else {
       errors.push(
         createAppError(
@@ -386,8 +570,38 @@ export function scanModLibrary(
       workshopPath,
       modsConfigPath,
     },
+    activePackageIds: activePackageIdsOrdered,
     mods,
     errors,
     requiresConfiguration: false,
   };
+}
+
+export function writeActiveModsToConfig(
+  selection: PathSelection | null,
+  activePackageIds: string[],
+  options: WriteActiveModsOptions = {},
+) {
+  const toReadablePath = options.toReadablePath ?? createReadablePathResolver();
+  const modsConfigWindowsPath = selection?.configPath
+    ? win32.join(selection.configPath, "ModsConfig.xml")
+    : null;
+
+  if (!modsConfigWindowsPath) {
+    throw new Error("No RimWorld config path is configured.");
+  }
+
+  const readableModsConfigPath = toReadablePath(modsConfigWindowsPath);
+
+  if (!readableModsConfigPath) {
+    throw new Error("Unable to map ModsConfig.xml into the current runtime.");
+  }
+
+  if (!existsSync(readableModsConfigPath)) {
+    throw new Error("ModsConfig.xml was not found.");
+  }
+
+  const { encoding, xml } = readXmlFileWithEncoding(readableModsConfigPath);
+  const nextXml = replaceActiveModsBlock(xml, activePackageIds);
+  writeFileSync(readableModsConfigPath, encodeXmlContent(nextXml, encoding));
 }
