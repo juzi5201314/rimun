@@ -19,6 +19,8 @@ const SETTINGS_ROW_ID = "singleton";
 const APP_STATE_ROW_ID = "singleton";
 const DEFAULT_PROFILE_ID = "default";
 const DEFAULT_PROFILE_NAME = "Default";
+const CORE_PACKAGE_ID = "ludeon.rimworld";
+const OFFICIAL_EXPANSION_PACKAGE_ID_PREFIX = `${CORE_PACKAGE_ID}.`;
 
 const appSettingsTable = sqliteTable("app_settings", {
   id: text("id").primaryKey(),
@@ -92,6 +94,62 @@ function normalizeActivePackageIds(activePackageIds: string[]) {
   }
 
   return normalized;
+}
+
+function extractOfficialExpansionPackageIds(activePackageIds: string[]) {
+  return normalizeActivePackageIds(activePackageIds).filter(
+    (packageId) =>
+      packageId !== CORE_PACKAGE_ID &&
+      packageId.startsWith(OFFICIAL_EXPANSION_PACKAGE_ID_PREFIX),
+  );
+}
+
+function mergeOfficialExpansionsIntoProfile(
+  activePackageIds: string[],
+  initialActivePackageIds: string[],
+) {
+  const normalizedActivePackageIds =
+    normalizeActivePackageIds(activePackageIds);
+
+  if (
+    extractOfficialExpansionPackageIds(normalizedActivePackageIds).length > 0
+  ) {
+    return normalizedActivePackageIds;
+  }
+
+  const initialOfficialExpansionPackageIds = extractOfficialExpansionPackageIds(
+    initialActivePackageIds,
+  );
+
+  if (initialOfficialExpansionPackageIds.length === 0) {
+    return normalizedActivePackageIds;
+  }
+
+  const mergedPackageIds: string[] = [];
+  const seen = new Set<string>();
+
+  const pushPackageId = (packageId: string) => {
+    if (!packageId || seen.has(packageId)) {
+      return;
+    }
+
+    seen.add(packageId);
+    mergedPackageIds.push(packageId);
+  };
+
+  if (normalizedActivePackageIds.includes(CORE_PACKAGE_ID)) {
+    pushPackageId(CORE_PACKAGE_ID);
+  }
+
+  for (const packageId of initialOfficialExpansionPackageIds) {
+    pushPackageId(packageId);
+  }
+
+  for (const packageId of normalizedActivePackageIds) {
+    pushPackageId(packageId);
+  }
+
+  return mergedPackageIds;
 }
 
 function parseActivePackageIds(activePackageIdsJson: string) {
@@ -261,7 +319,10 @@ export class SettingsRepository {
   public getCurrentProfile(initialActivePackageIds: string[] = []) {
     this.ensureProfileState(initialActivePackageIds);
 
-    return this.requireProfile(this.requireCurrentProfileId());
+    return this.hydrateProfile(
+      this.requireProfile(this.requireCurrentProfileId()),
+      initialActivePackageIds,
+    );
   }
 
   public getProfile(
@@ -270,7 +331,10 @@ export class SettingsRepository {
   ): StoredModProfile {
     this.ensureProfileState(initialActivePackageIds);
 
-    return this.requireProfile(profileId);
+    return this.hydrateProfile(
+      this.requireProfile(profileId),
+      initialActivePackageIds,
+    );
   }
 
   public createProfile(
@@ -278,7 +342,10 @@ export class SettingsRepository {
     initialActivePackageIds: string[] = [],
   ): ProfileCatalogResult {
     this.ensureProfileState(initialActivePackageIds);
-    const sourceProfile = this.requireProfile(input.sourceProfileId);
+    const sourceProfile = this.getProfile(
+      input.sourceProfileId,
+      initialActivePackageIds,
+    );
     const now = new Date().toISOString();
 
     this.db
@@ -454,6 +521,19 @@ export class SettingsRepository {
     }
 
     return toStoredProfile(row);
+  }
+
+  private hydrateProfile(
+    profile: StoredModProfile,
+    initialActivePackageIds: string[],
+  ) {
+    return {
+      ...profile,
+      activePackageIds: mergeOfficialExpansionsIntoProfile(
+        profile.activePackageIds,
+        initialActivePackageIds,
+      ),
+    };
   }
 
   private readCurrentProfileId() {

@@ -221,7 +221,9 @@ export function createMainWindowRpc(
           );
 
           if (previousCurrentProfileId === input.profileId) {
-            const nextCurrentProfile = repository.getCurrentProfile();
+            const nextCurrentProfile = repository.getCurrentProfile(
+              initialActivePackageIds,
+            );
             writeActiveModsToConfig(
               resolvePreferredSelection(repository),
               nextCurrentProfile.activePackageIds,
@@ -249,7 +251,10 @@ export function createMainWindowRpc(
             input.profileId,
             initialActivePackageIds,
           );
-          const nextCurrentProfile = repository.getProfile(input.profileId);
+          const nextCurrentProfile = repository.getProfile(
+            input.profileId,
+            initialActivePackageIds,
+          );
 
           writeActiveModsToConfig(
             resolvePreferredSelection(repository),

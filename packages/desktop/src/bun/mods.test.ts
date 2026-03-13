@@ -1,21 +1,29 @@
 import { describe, expect, it } from "bun:test";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { PathSelection } from "@rimun/shared";
-import { parseAboutXml, parseModsConfigXml, scanModLibrary } from "./mods";
+import {
+  parseAboutXml,
+  parseModsConfigXml,
+  scanModLibrary,
+  writeActiveModsToConfig,
+} from "./mods";
 
 function createSandboxLayout() {
   const sandboxRoot = mkdtempSync(join("/tmp", "rimun-mod-scan-"));
   const installationModsRoot = join(sandboxRoot, "installation", "Mods");
+  const installationDataRoot = join(sandboxRoot, "installation", "Data");
   const workshopRoot = join(sandboxRoot, "workshop");
   const configRoot = join(sandboxRoot, "config");
 
   mkdirSync(installationModsRoot, { recursive: true });
+  mkdirSync(installationDataRoot, { recursive: true });
   mkdirSync(workshopRoot, { recursive: true });
   mkdirSync(configRoot, { recursive: true });
 
   return {
     configRoot,
+    installationDataRoot,
     installationModsRoot,
     sandboxRoot,
     workshopRoot,
@@ -37,6 +45,7 @@ function createSelection(
 
 function createReadablePathResolver(paths: {
   configRoot?: string;
+  installationDataRoot?: string;
   installationModsRoot?: string;
   workshopRoot?: string;
 }) {
@@ -46,6 +55,13 @@ function createReadablePathResolver(paths: {
       windowsPath === "C:\\Games\\RimWorld\\Mods"
     ) {
       return paths.installationModsRoot;
+    }
+
+    if (
+      paths.installationDataRoot &&
+      windowsPath === "C:\\Games\\RimWorld\\Data"
+    ) {
+      return paths.installationDataRoot;
     }
 
     if (
@@ -76,7 +92,15 @@ function writeAboutXml(
   writeFileSync(join(modsRoot, folderName, "About", "About.xml"), content);
 }
 
-function writeModsConfigXml(configRoot: string, activePackageIds: string[]) {
+function writeModsConfigXml(
+  configRoot: string,
+  activePackageIds: string[],
+  options: {
+    knownExpansionIds?: string[];
+  } = {},
+) {
+  const knownExpansionIds = options.knownExpansionIds ?? [];
+
   writeFileSync(
     join(configRoot, "ModsConfig.xml"),
     `
@@ -84,6 +108,15 @@ function writeModsConfigXml(configRoot: string, activePackageIds: string[]) {
         <activeMods>
           ${activePackageIds.map((packageId) => `<li>${packageId}</li>`).join("\n")}
         </activeMods>
+        ${
+          knownExpansionIds.length > 0
+            ? `
+        <knownExpansions>
+          ${knownExpansionIds.map((knownExpansionId) => `<li>${knownExpansionId}</li>`).join("\n")}
+        </knownExpansions>
+        `
+            : ""
+        }
       </ModsConfigData>
     `,
   );
@@ -119,27 +152,36 @@ describe("mod scanner", () => {
     expect(parsed.dependencyMetadata.supportedVersions).toEqual(["1.5"]);
   });
 
-  it("parses active package ids from ModsConfig.xml", () => {
+  it("parses active package ids from ModsConfig.xml and merges known expansions", () => {
     const parsed = parseModsConfigXml(`
       <ModsConfigData>
         <activeMods>
           <li>ludeon.rimworld</li>
           <li>unlimitedhugs.hugslib</li>
         </activeMods>
+        <knownExpansions>
+          <li>ideology</li>
+        </knownExpansions>
       </ModsConfigData>
     `);
 
     expect(parsed.activePackageIds.has("ludeon.rimworld")).toBe(true);
     expect(parsed.activePackageIds.has("unlimitedhugs.hugslib")).toBe(true);
+    expect(parsed.activePackageIds.has("ludeon.rimworld.ideology")).toBe(true);
     expect(parsed.activePackageIdsOrdered).toEqual([
       "ludeon.rimworld",
+      "ludeon.rimworld.ideology",
       "unlimitedhugs.hugslib",
     ]);
   });
 
   it("scans installation and workshop roots into mod records", async () => {
-    const { configRoot, installationModsRoot, workshopRoot } =
-      createSandboxLayout();
+    const {
+      configRoot,
+      installationDataRoot,
+      installationModsRoot,
+      workshopRoot,
+    } = createSandboxLayout();
 
     writeAboutXml(
       installationModsRoot,
@@ -180,6 +222,7 @@ describe("mod scanner", () => {
       environment: testEnvironment,
       toReadablePath: createReadablePathResolver({
         configRoot,
+        installationDataRoot,
         installationModsRoot,
         workshopRoot,
       }),
@@ -212,7 +255,8 @@ describe("mod scanner", () => {
   });
 
   it("keeps scanning mods when config path is missing but reports enabled-state fallback", async () => {
-    const { installationModsRoot } = createSandboxLayout();
+    const { installationDataRoot, installationModsRoot } =
+      createSandboxLayout();
 
     writeAboutXml(
       installationModsRoot,
@@ -233,6 +277,7 @@ describe("mod scanner", () => {
       {
         environment: testEnvironment,
         toReadablePath: createReadablePathResolver({
+          installationDataRoot,
           installationModsRoot,
         }),
       },
@@ -244,7 +289,8 @@ describe("mod scanner", () => {
   });
 
   it("uses active package id overrides for profile-backed scans", async () => {
-    const { configRoot, installationModsRoot } = createSandboxLayout();
+    const { configRoot, installationDataRoot, installationModsRoot } =
+      createSandboxLayout();
 
     writeAboutXml(
       installationModsRoot,
@@ -257,7 +303,7 @@ describe("mod scanner", () => {
       `,
     );
     writeAboutXml(
-      installationModsRoot,
+      installationDataRoot,
       "Ideology",
       `
         <ModMetaData>
@@ -280,6 +326,7 @@ describe("mod scanner", () => {
         environment: testEnvironment,
         toReadablePath: createReadablePathResolver({
           configRoot,
+          installationDataRoot,
           installationModsRoot,
         }),
       },
@@ -295,8 +342,65 @@ describe("mod scanner", () => {
     expect(result.errors).toHaveLength(0);
   });
 
+  it("scans official DLC from installation Data and resolves enabled state from knownExpansions", async () => {
+    const { configRoot, installationDataRoot, installationModsRoot } =
+      createSandboxLayout();
+
+    writeAboutXml(
+      installationModsRoot,
+      "Core",
+      `
+        <ModMetaData>
+          <name>Core</name>
+          <packageId>ludeon.rimworld</packageId>
+        </ModMetaData>
+      `,
+    );
+    writeAboutXml(
+      installationDataRoot,
+      "Ideology",
+      `
+        <ModMetaData>
+          <name>Ideology</name>
+          <packageId>ludeon.rimworld.ideology</packageId>
+        </ModMetaData>
+      `,
+    );
+    mkdirSync(join(installationDataRoot, "Shaders"), { recursive: true });
+    writeModsConfigXml(configRoot, ["ludeon.rimworld"], {
+      knownExpansionIds: ["ideology"],
+    });
+
+    const result = await scanModLibrary(
+      createSelection({
+        workshopPath: null,
+      }),
+      {
+        environment: testEnvironment,
+        toReadablePath: createReadablePathResolver({
+          configRoot,
+          installationDataRoot,
+          installationModsRoot,
+        }),
+      },
+    );
+
+    expect(result.activePackageIds).toEqual([
+      "ludeon.rimworld",
+      "ludeon.rimworld.ideology",
+    ]);
+    expect(result.mods.map((mod) => mod.name)).toEqual(["Core", "Ideology"]);
+    expect(result.mods.every((mod) => mod.enabled)).toBe(true);
+    expect(result.mods[1]?.windowsPath).toBe(
+      "C:\\Games\\RimWorld\\Data\\Ideology",
+    );
+    expect(result.mods[1]?.isOfficial).toBe(true);
+    expect(result.errors).toHaveLength(0);
+  });
+
   it("decodes UTF-16 encoded About.xml content and preserves rich description text", async () => {
-    const { configRoot, installationModsRoot } = createSandboxLayout();
+    const { configRoot, installationDataRoot, installationModsRoot } =
+      createSandboxLayout();
 
     writeAboutXml(
       installationModsRoot,
@@ -328,6 +432,7 @@ describe("mod scanner", () => {
         environment: testEnvironment,
         toReadablePath: createReadablePathResolver({
           configRoot,
+          installationDataRoot,
           installationModsRoot,
         }),
       },
@@ -340,7 +445,8 @@ describe("mod scanner", () => {
   });
 
   it("scans more mods than a single worker chunk without losing records", async () => {
-    const { configRoot, installationModsRoot } = createSandboxLayout();
+    const { configRoot, installationDataRoot, installationModsRoot } =
+      createSandboxLayout();
     const activePackageIds: string[] = [];
 
     for (let index = 0; index < 60; index += 1) {
@@ -370,6 +476,7 @@ describe("mod scanner", () => {
         environment: testEnvironment,
         toReadablePath: createReadablePathResolver({
           configRoot,
+          installationDataRoot,
           installationModsRoot,
         }),
       },
@@ -383,7 +490,8 @@ describe("mod scanner", () => {
   });
 
   it("falls back to the main thread when the worker pool fails", async () => {
-    const { configRoot, installationModsRoot } = createSandboxLayout();
+    const { configRoot, installationDataRoot, installationModsRoot } =
+      createSandboxLayout();
 
     writeAboutXml(
       installationModsRoot,
@@ -409,6 +517,7 @@ describe("mod scanner", () => {
         },
         toReadablePath: createReadablePathResolver({
           configRoot,
+          installationDataRoot,
           installationModsRoot,
         }),
       },
@@ -422,7 +531,8 @@ describe("mod scanner", () => {
   });
 
   it("reports missing About.xml without aborting the scan", async () => {
-    const { configRoot, installationModsRoot } = createSandboxLayout();
+    const { configRoot, installationDataRoot, installationModsRoot } =
+      createSandboxLayout();
 
     mkdirSync(join(installationModsRoot, "MissingAbout"), { recursive: true });
     writeModsConfigXml(configRoot, []);
@@ -435,6 +545,7 @@ describe("mod scanner", () => {
         environment: testEnvironment,
         toReadablePath: createReadablePathResolver({
           configRoot,
+          installationDataRoot,
           installationModsRoot,
         }),
       },
@@ -444,5 +555,31 @@ describe("mod scanner", () => {
     expect(result.mods[0]?.hasAboutXml).toBe(false);
     expect(result.mods[0]?.manifestPath).toBeNull();
     expect(result.mods[0]?.notes).toEqual(["About/About.xml was not found."]);
+  });
+
+  it("writes official DLC back into knownExpansions instead of activeMods", () => {
+    const { configRoot, installationDataRoot } = createSandboxLayout();
+
+    writeModsConfigXml(configRoot, ["ludeon.rimworld"], {
+      knownExpansionIds: ["ideology"],
+    });
+
+    writeActiveModsToConfig(
+      createSelection(),
+      ["ludeon.rimworld", "ludeon.rimworld.ideology", "unlimitedhugs.hugslib"],
+      {
+        toReadablePath: createReadablePathResolver({
+          configRoot,
+          installationDataRoot,
+        }),
+      },
+    );
+
+    const savedXml = readFileSync(join(configRoot, "ModsConfig.xml"), "utf8");
+
+    expect(savedXml).toContain("<li>unlimitedhugs.hugslib</li>");
+    expect(savedXml).toContain("<knownExpansions>");
+    expect(savedXml).toContain("<li>ideology</li>");
+    expect(savedXml).not.toContain("<li>ludeon.rimworld.ideology</li>");
   });
 });

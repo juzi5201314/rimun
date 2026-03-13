@@ -79,6 +79,8 @@ type WriteActiveModsOptions = {
   toReadablePath?: (windowsPath: string) => string | null;
 };
 
+const CORE_PACKAGE_ID = "ludeon.rimworld";
+const OFFICIAL_EXPANSION_PACKAGE_ID_PREFIX = `${CORE_PACKAGE_ID}.`;
 const SCAN_CHUNK_SIZE = 24;
 
 type ModScanProfile = {
@@ -131,6 +133,85 @@ function createParsedActivePackageIds(
   return {
     activePackageIds: new Set(normalizedActivePackageIds),
     activePackageIdsOrdered: normalizedActivePackageIds,
+  };
+}
+
+function normalizeOfficialExpansionPackageId(value: string | null) {
+  const normalizedValue = normalizePackageId(value);
+
+  if (!normalizedValue || normalizedValue === CORE_PACKAGE_ID) {
+    return null;
+  }
+
+  if (normalizedValue.startsWith(OFFICIAL_EXPANSION_PACKAGE_ID_PREFIX)) {
+    return normalizedValue;
+  }
+
+  return `${OFFICIAL_EXPANSION_PACKAGE_ID_PREFIX}${normalizedValue}`;
+}
+
+function toKnownExpansionId(packageId: string | null) {
+  const normalizedPackageId = normalizePackageId(packageId);
+
+  if (
+    !normalizedPackageId ||
+    normalizedPackageId === CORE_PACKAGE_ID ||
+    !normalizedPackageId.startsWith(OFFICIAL_EXPANSION_PACKAGE_ID_PREFIX)
+  ) {
+    return null;
+  }
+
+  return normalizedPackageId.slice(OFFICIAL_EXPANSION_PACKAGE_ID_PREFIX.length);
+}
+
+function mergeConfiguredActivePackageIds(
+  activePackageIds: string[],
+  officialExpansionPackageIds: string[],
+) {
+  const normalizedActivePackageIds =
+    createParsedActivePackageIds(activePackageIds).activePackageIdsOrdered;
+  const normalizedOfficialExpansionPackageIds = createParsedActivePackageIds(
+    officialExpansionPackageIds,
+  ).activePackageIdsOrdered;
+  const mergedPackageIds: string[] = [];
+  const seen = new Set<string>();
+
+  const pushPackageId = (packageId: string) => {
+    if (!packageId || seen.has(packageId)) {
+      return;
+    }
+
+    seen.add(packageId);
+    mergedPackageIds.push(packageId);
+  };
+
+  if (normalizedActivePackageIds.includes(CORE_PACKAGE_ID)) {
+    pushPackageId(CORE_PACKAGE_ID);
+  }
+
+  for (const packageId of normalizedOfficialExpansionPackageIds) {
+    pushPackageId(packageId);
+  }
+
+  for (const packageId of normalizedActivePackageIds) {
+    pushPackageId(packageId);
+  }
+
+  return mergedPackageIds;
+}
+
+function splitActivePackageIdsForConfig(activePackageIds: string[]) {
+  const normalizedActivePackageIds =
+    createParsedActivePackageIds(activePackageIds).activePackageIdsOrdered;
+  const knownExpansionIds = normalizedActivePackageIds
+    .map((packageId) => toKnownExpansionId(packageId))
+    .filter((value): value is string => Boolean(value));
+
+  return {
+    activeModsPackageIds: normalizedActivePackageIds.filter(
+      (packageId) => toKnownExpansionId(packageId) === null,
+    ),
+    knownExpansionIds,
   };
 }
 
@@ -389,7 +470,17 @@ export function parseAboutXml(xml: string) {
 }
 
 export function parseModsConfigXml(xml: string): ParsedModsConfig {
-  return createParsedActivePackageIds(extractTagList(xml, "activeMods"));
+  const activePackageIds = extractTagList(xml, "activeMods");
+  const officialExpansionPackageIds = extractTagList(xml, "knownExpansions")
+    .map((value) => normalizeOfficialExpansionPackageId(value))
+    .filter((value): value is string => Boolean(value));
+
+  return createParsedActivePackageIds(
+    mergeConfiguredActivePackageIds(
+      activePackageIds,
+      officialExpansionPackageIds,
+    ),
+  );
 }
 
 function escapeXmlText(value: string) {
@@ -415,31 +506,78 @@ function buildActiveModsXml(activePackageIds: string[]) {
   ].join("\n");
 }
 
-function replaceActiveModsBlock(xml: string, activePackageIds: string[]) {
-  const activeModsBlock = buildActiveModsXml(activePackageIds);
-
-  if (/<activeMods\b[\s\S]*?<\/activeMods>/i.test(xml)) {
-    return xml.replace(/<activeMods\b[\s\S]*?<\/activeMods>/i, activeModsBlock);
-  }
-
-  if (/<activeMods\s*\/>/i.test(xml)) {
-    return xml.replace(/<activeMods\s*\/>/i, activeModsBlock.trim());
-  }
-
-  if (/<\/ModsConfigData>/i.test(xml)) {
-    return xml.replace(
-      /<\/ModsConfigData>/i,
-      `${activeModsBlock}\n</ModsConfigData>`,
-    );
+function buildKnownExpansionsXml(knownExpansionIds: string[]) {
+  if (knownExpansionIds.length === 0) {
+    return "  <knownExpansions />\n";
   }
 
   return [
-    '<?xml version="1.0" encoding="utf-8"?>',
-    "<ModsConfigData>",
-    activeModsBlock,
-    "</ModsConfigData>",
-    "",
+    "  <knownExpansions>",
+    ...knownExpansionIds.map(
+      (knownExpansionId) => `    <li>${escapeXmlText(knownExpansionId)}</li>`,
+    ),
+    "  </knownExpansions>",
   ].join("\n");
+}
+
+function replaceXmlListBlock(
+  xml: string,
+  tagName: string,
+  blockContent: string,
+) {
+  const tagPattern = new RegExp(`<${tagName}\\b[\\s\\S]*?<\\/${tagName}>`, "i");
+  const selfClosingPattern = new RegExp(`<${tagName}\\s*\\/>`, "i");
+  const closingRootPattern = /<\/ModsConfigData>/i;
+
+  if (tagPattern.test(xml)) {
+    return xml.replace(tagPattern, blockContent);
+  }
+
+  if (selfClosingPattern.test(xml)) {
+    return xml.replace(selfClosingPattern, blockContent.trim());
+  }
+
+  if (closingRootPattern.test(xml)) {
+    return xml.replace(
+      closingRootPattern,
+      `${blockContent}\n</ModsConfigData>`,
+    );
+  }
+
+  return null;
+}
+
+function replaceActiveModsBlock(xml: string, activePackageIds: string[]) {
+  const { activeModsPackageIds, knownExpansionIds } =
+    splitActivePackageIdsForConfig(activePackageIds);
+  const activeModsBlock = buildActiveModsXml(activeModsPackageIds);
+  const knownExpansionsBlock = buildKnownExpansionsXml(knownExpansionIds);
+
+  const xmlWithActiveMods =
+    replaceXmlListBlock(xml, "activeMods", activeModsBlock) ??
+    [
+      '<?xml version="1.0" encoding="utf-8"?>',
+      "<ModsConfigData>",
+      activeModsBlock,
+      "</ModsConfigData>",
+      "",
+    ].join("\n");
+
+  return (
+    replaceXmlListBlock(
+      xmlWithActiveMods,
+      "knownExpansions",
+      knownExpansionsBlock,
+    ) ??
+    [
+      '<?xml version="1.0" encoding="utf-8"?>',
+      "<ModsConfigData>",
+      activeModsBlock,
+      knownExpansionsBlock,
+      "</ModsConfigData>",
+      "",
+    ].join("\n")
+  );
 }
 
 function encodeXmlContent(xml: string, encoding: XmlEncoding) {
@@ -589,6 +727,9 @@ async function listRootScanTasks(
   rootWindowsPath: string | null,
   toReadablePath: (windowsPath: string) => string | null,
   errors: AppError[],
+  options: {
+    requireAboutXml?: boolean;
+  } = {},
 ) {
   if (!rootWindowsPath) {
     return [];
@@ -613,6 +754,11 @@ async function listRootScanTasks(
 
     return entries
       .filter((entry) => entry.isDirectory() && !entry.name.startsWith("."))
+      .filter((entry) =>
+        options.requireAboutXml
+          ? existsSync(join(readableRoot, entry.name, "About", "About.xml"))
+          : true,
+      )
       .map((entry) => ({
         entryName: entry.name,
         modReadablePath: join(readableRoot, entry.name),
@@ -1056,6 +1202,9 @@ export async function scanModLibrary(
   const installationModsPath = selection?.installationPath
     ? win32.join(selection.installationPath, "Mods")
     : null;
+  const installationDataPath = selection?.installationPath
+    ? win32.join(selection.installationPath, "Data")
+    : null;
   const workshopPath = selection?.workshopPath ?? null;
   const modsConfigPath = selection?.configPath
     ? win32.join(selection.configPath, "ModsConfig.xml")
@@ -1101,6 +1250,15 @@ export async function scanModLibrary(
     toReadablePath,
     errors,
   );
+  const installationDataTasksPromise = listRootScanTasks(
+    "installation",
+    installationDataPath,
+    toReadablePath,
+    errors,
+    {
+      requireAboutXml: true,
+    },
+  );
   const workshopTasksPromise = listRootScanTasks(
     "workshop",
     workshopPath,
@@ -1111,12 +1269,18 @@ export async function scanModLibrary(
   const activePackageIds = activeModsConfig.activePackageIds;
   const activePackageIdsOrdered = activeModsConfig.activePackageIdsOrdered;
   const configMs = performance.now() - configStart;
-  const [installationTasks, workshopTasks] = await Promise.all([
-    installationTasksPromise,
-    workshopTasksPromise,
-  ]);
+  const [installationTasks, installationDataTasks, workshopTasks] =
+    await Promise.all([
+      installationTasksPromise,
+      installationDataTasksPromise,
+      workshopTasksPromise,
+    ]);
   const rootEnumMs = performance.now() - rootsStart;
-  const allTasks = [...installationTasks, ...workshopTasks];
+  const allTasks = [
+    ...installationTasks,
+    ...installationDataTasks,
+    ...workshopTasks,
+  ];
   const poolSize = allTasks.length > 0 ? getWorkerPoolSize(environment) : 0;
 
   const workerStart = performance.now();

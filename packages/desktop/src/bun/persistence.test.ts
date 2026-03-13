@@ -96,4 +96,23 @@ describe("settings repository", () => {
 
     cleanupRepository(repository);
   });
+
+  it("merges official DLC into older profiles that do not store them yet", () => {
+    const repository = createRepository();
+
+    repository.getProfileCatalog(["ludeon.rimworld", "example.camera"]);
+    const hydratedProfile = repository.getCurrentProfile([
+      "ludeon.rimworld",
+      "ludeon.rimworld.ideology",
+      "example.camera",
+    ]);
+
+    expect(hydratedProfile.activePackageIds).toEqual([
+      "ludeon.rimworld",
+      "ludeon.rimworld.ideology",
+      "example.camera",
+    ]);
+
+    cleanupRepository(repository);
+  });
 });

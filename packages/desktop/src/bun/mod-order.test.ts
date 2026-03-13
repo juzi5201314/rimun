@@ -9,14 +9,17 @@ import { scanModLibrary } from "./mods";
 function createSandbox() {
   const sandboxRoot = mkdtempSync(join(tmpdir(), "rimun-mod-order-"));
   const installationModsRoot = join(sandboxRoot, "installation", "Mods");
+  const installationDataRoot = join(sandboxRoot, "installation", "Data");
   const workshopRoot = join(sandboxRoot, "workshop");
   const configRoot = join(sandboxRoot, "config");
 
   mkdirSync(installationModsRoot, { recursive: true });
+  mkdirSync(installationDataRoot, { recursive: true });
   mkdirSync(workshopRoot, { recursive: true });
   mkdirSync(configRoot, { recursive: true });
 
   return {
+    installationDataRoot,
     installationModsRoot,
     workshopRoot,
     configRoot,
@@ -34,6 +37,7 @@ function createSelection(): PathSelection {
 }
 
 function createReadablePathResolver(
+  installationDataRoot: string,
   installationModsRoot: string,
   workshopRoot: string,
   configRoot: string,
@@ -41,6 +45,10 @@ function createReadablePathResolver(
   return (windowsPath: string) => {
     if (windowsPath === "C:\\Games\\RimWorld\\Mods") {
       return installationModsRoot;
+    }
+
+    if (windowsPath === "C:\\Games\\RimWorld\\Data") {
+      return installationDataRoot;
     }
 
     if (
@@ -121,6 +129,7 @@ describe("mod order analyzer", () => {
         wslDistro: "Ubuntu",
       },
       toReadablePath: createReadablePathResolver(
+        sandbox.installationDataRoot,
         sandbox.installationModsRoot,
         sandbox.workshopRoot,
         sandbox.configRoot,
@@ -195,6 +204,7 @@ describe("mod order analyzer", () => {
         wslDistro: "Ubuntu",
       },
       toReadablePath: createReadablePathResolver(
+        sandbox.installationDataRoot,
         sandbox.installationModsRoot,
         sandbox.workshopRoot,
         sandbox.configRoot,
@@ -277,6 +287,7 @@ describe("mod order analyzer", () => {
         wslDistro: "Ubuntu",
       },
       toReadablePath: createReadablePathResolver(
+        sandbox.installationDataRoot,
         sandbox.installationModsRoot,
         sandbox.workshopRoot,
         sandbox.configRoot,
@@ -296,6 +307,7 @@ describe("mod order analyzer", () => {
     const sandbox = createSandbox();
     const selection = createSelection();
     const toReadablePath = createReadablePathResolver(
+      sandbox.installationDataRoot,
       sandbox.installationModsRoot,
       sandbox.workshopRoot,
       sandbox.configRoot,
@@ -308,6 +320,16 @@ describe("mod order analyzer", () => {
         <ModMetaData>
           <name>Core</name>
           <packageId>ludeon.rimworld</packageId>
+        </ModMetaData>
+      `,
+    );
+    writeAboutXml(
+      sandbox.installationDataRoot,
+      "Ideology",
+      `
+        <ModMetaData>
+          <name>Ideology</name>
+          <packageId>ludeon.rimworld.ideology</packageId>
         </ModMetaData>
       `,
     );
@@ -355,7 +377,7 @@ describe("mod order analyzer", () => {
         profileId: "default",
         actions: ["enableMissingDependencies"],
       },
-      ["ludeon.rimworld", "example.camera"],
+      ["ludeon.rimworld", "ludeon.rimworld.ideology", "example.camera"],
       {
         environment: {
           platform: "linux",
@@ -368,6 +390,7 @@ describe("mod order analyzer", () => {
 
     expect(enableResult.activePackageIds).toEqual([
       "ludeon.rimworld",
+      "ludeon.rimworld.ideology",
       "example.camera",
       "unlimitedhugs.hugslib",
     ]);
@@ -391,6 +414,7 @@ describe("mod order analyzer", () => {
 
     expect(reorderResult.activePackageIds).toEqual([
       "ludeon.rimworld",
+      "ludeon.rimworld.ideology",
       "unlimitedhugs.hugslib",
       "example.camera",
     ]);
