@@ -1,9 +1,8 @@
 import { App } from "@/app/App";
 import { createMockRpcClient } from "@/shared/testing/createMockRpcClient";
 import type { DetectPathsInput } from "@rimun/shared";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { vi } from "vitest";
 
 describe("App", () => {
   it("renders profile-backed mod library data and auto-saves before switching profiles", async () => {
@@ -65,10 +64,6 @@ describe("App", () => {
   });
 
   it("creates a new profile from the current saved snapshot", async () => {
-    const promptSpy = vi
-      .spyOn(window, "prompt")
-      .mockImplementation(() => "Combat Run");
-
     window.__RIMUN_RPC__ = createMockRpcClient();
 
     render(<App />);
@@ -79,6 +74,24 @@ describe("App", () => {
 
     await userEvent.click(screen.getByRole("button", { name: /New Profile/i }));
 
+    const dialog = await screen.findByRole("dialog", {
+      name: /Create New Profile/i,
+    });
+    const dialogControls = within(dialog);
+
+    await userEvent.clear(
+      dialogControls.getByRole("textbox", {
+        name: /Profile Name/i,
+      }),
+    );
+    await userEvent.type(
+      dialogControls.getByRole("textbox", { name: /Profile Name/i }),
+      "Combat Run",
+    );
+    await userEvent.click(
+      dialogControls.getByRole("button", { name: /Create Profile/i }),
+    );
+
     await waitFor(() => {
       expect(screen.getByRole("combobox", { name: /Profile/i })).toHaveValue(
         "profile-3",
@@ -87,7 +100,44 @@ describe("App", () => {
     expect(
       screen.getByRole("option", { name: "Combat Run" }),
     ).toBeInTheDocument();
-    expect(promptSpy).toHaveBeenCalled();
+  });
+
+  it("blocks route navigation while the current profile has unsaved changes", async () => {
+    window.__RIMUN_RPC__ = createMockRpcClient();
+
+    render(<App />);
+
+    expect(
+      await screen.findByRole("heading", { name: /Mod Library/i }),
+    ).toBeInTheDocument();
+
+    await userEvent.click(
+      screen.getByRole("checkbox", { name: /Toggle Pawns/i }),
+    );
+
+    await userEvent.click(screen.getByRole("link", { name: /^Settings$/i }));
+
+    const dialog = await screen.findByRole("dialog", {
+      name: /Discard Unsaved Profile Changes/i,
+    });
+    const dialogControls = within(dialog);
+
+    expect(
+      dialogControls.getByText(/Leaving this page now will discard/i),
+    ).toBeInTheDocument();
+
+    await userEvent.click(
+      dialogControls.getByRole("button", { name: /Stay Here/i }),
+    );
+
+    expect(
+      screen.getByRole("heading", { name: /Mod Library/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("dialog", {
+        name: /Discard Unsaved Profile Changes/i,
+      }),
+    ).not.toBeInTheDocument();
   });
 
   it("keeps empty settings empty, uses bootstrap channels for detection, and saves", async () => {

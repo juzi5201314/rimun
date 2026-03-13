@@ -491,6 +491,48 @@ export function SettingsPage() {
 
         <form onSubmit={(event) => void handleSubmit(event)}>
           <fieldset disabled={isBusy} className="space-y-6">
+            <Card className="border-border/60 bg-card/60">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Path Format Guide</CardTitle>
+                <CardDescription>
+                  Keep path semantics explicit when working across Windows and
+                  WSL.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="grid gap-3 md:grid-cols-3">
+                <div className="rounded-lg border border-border/60 bg-background/70 p-4">
+                  <p className="text-[11px] font-black uppercase tracking-widest text-muted-foreground">
+                    Enter Windows Paths
+                  </p>
+                  <p className="mt-2 text-sm text-foreground/90">
+                    Use Windows absolute paths like{" "}
+                    <span className="font-mono text-xs">C:\Games\RimWorld</span>
+                    . Do not save{" "}
+                    <span className="font-mono text-xs">/mnt/c/...</span> here.
+                  </p>
+                </div>
+                <div className="rounded-lg border border-border/60 bg-background/70 p-4">
+                  <p className="text-[11px] font-black uppercase tracking-widest text-muted-foreground">
+                    Required First
+                  </p>
+                  <p className="mt-2 text-sm text-foreground/90">
+                    Installation path is required before the desktop backend can
+                    scan mods. Workshop and Config can stay empty until
+                    detected.
+                  </p>
+                </div>
+                <div className="rounded-lg border border-border/60 bg-background/70 p-4">
+                  <p className="text-[11px] font-black uppercase tracking-widest text-muted-foreground">
+                    Auto Detect Flow
+                  </p>
+                  <p className="mt-2 text-sm text-foreground/90">
+                    Auto Detect fills the draft form immediately. Review the
+                    detected Windows paths, then save to persist them.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+
             <Card>
               <CardHeader className="bg-muted/50 py-4">
                 <CardTitle className="flex items-center gap-2 text-lg">
@@ -522,6 +564,10 @@ export function SettingsPage() {
                       </option>
                     ))}
                   </select>
+                  <p className="text-xs text-muted-foreground">
+                    Channel controls which Windows path layout the backend
+                    validates.
+                  </p>
                 </div>
 
                 <div className="space-y-1.5">
@@ -538,7 +584,13 @@ export function SettingsPage() {
                     onChange={handleFieldChange("installationPath")}
                     placeholder="C:\\Program Files (x86)\\Steam\\steamapps\\common\\RimWorld"
                     className="font-mono"
+                    autoComplete="off"
+                    spellCheck={false}
                   />
+                  <p className="text-xs text-muted-foreground">
+                    Required. Save a Windows install directory, not the WSL
+                    mount path.
+                  </p>
                 </div>
 
                 <div className="space-y-1.5">
@@ -555,7 +607,13 @@ export function SettingsPage() {
                     onChange={handleFieldChange("workshopPath")}
                     placeholder="C:\\Program Files (x86)\\Steam\\steamapps\\workshop\\content\\294100"
                     className="font-mono"
+                    autoComplete="off"
+                    spellCheck={false}
                   />
+                  <p className="text-xs text-muted-foreground">
+                    Optional for manual installs. Keep this as a Windows path if
+                    Steam Workshop content should be scanned.
+                  </p>
                 </div>
 
                 <div className="space-y-1.5">
@@ -572,7 +630,13 @@ export function SettingsPage() {
                     onChange={handleFieldChange("configPath")}
                     placeholder="C:\\Users\\<name>\\AppData\\LocalLow\\Ludeon Studios\\RimWorld by Ludeon Studios\\Config"
                     className="font-mono"
+                    autoComplete="off"
+                    spellCheck={false}
                   />
+                  <p className="text-xs text-muted-foreground">
+                    Optional until detected. This should point to the Windows
+                    RimWorld config directory that contains ModsConfig.xml.
+                  </p>
                 </div>
               </CardContent>
               <CardFooter className="justify-between bg-muted/50 py-4">

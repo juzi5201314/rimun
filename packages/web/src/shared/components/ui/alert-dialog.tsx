@@ -9,6 +9,7 @@ type AlertDialogProps = {
   title: string;
   description?: string;
   confirmLabel: string;
+  confirmDisabled?: boolean;
   cancelLabel?: string;
   tone?: "default" | "warning" | "danger";
   busy?: boolean;
@@ -28,6 +29,7 @@ export function AlertDialog({
   title,
   description,
   confirmLabel,
+  confirmDisabled = false,
   cancelLabel = "Cancel",
   tone = "default",
   busy = false,
@@ -111,7 +113,7 @@ export function AlertDialog({
             type="button"
             variant={tone === "danger" ? "destructive" : "default"}
             onClick={onConfirm}
-            disabled={busy}
+            disabled={busy || confirmDisabled}
           >
             {confirmLabel}
           </Button>

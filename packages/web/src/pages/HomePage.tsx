@@ -29,6 +29,7 @@ import {
   Link2,
   LoaderCircle,
   Package,
+  RefreshCcw,
   Save,
   Search,
   ShieldCheck,
@@ -36,7 +37,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useBeforeUnload, useBlocker } from "react-router-dom";
 
 function formatPathValue(path: string | null) {
   return path ?? "Not available";
@@ -171,6 +172,11 @@ export function HomePage() {
   const [feedback, setFeedback] = useState<FeedbackState>(null);
   const [isDependencyDialogOpen, setIsDependencyDialogOpen] = useState(false);
   const [isSortDialogOpen, setIsSortDialogOpen] = useState(false);
+  const [isCreateProfileDialogOpen, setIsCreateProfileDialogOpen] =
+    useState(false);
+  const [isDeleteProfileDialogOpen, setIsDeleteProfileDialogOpen] =
+    useState(false);
+  const [newProfileName, setNewProfileName] = useState("");
   const [dismissedDependencyAnalysisAt, setDismissedDependencyAnalysisAt] =
     useState<string | null>(null);
   const [dismissedSortAnalysisAt, setDismissedSortAnalysisAt] = useState<
@@ -341,6 +347,7 @@ export function HomePage() {
     },
   );
   const analysis = isDirty ? null : analysisQuery.data;
+  const routeBlocker = useBlocker(isDirty);
   const term = searchQuery.trim().toLowerCase();
   const filteredMods = mods.filter((mod) => {
     if (!term) {
@@ -371,6 +378,17 @@ export function HomePage() {
     deleteProfileMutation.isPending ||
     saveProfileMutation.isPending ||
     applyRecommendationMutation.isPending;
+  const isRescanning =
+    modLibraryQuery.isFetching || (!isDirty && analysisQuery.isFetching);
+
+  useBeforeUnload((event) => {
+    if (!isDirty) {
+      return;
+    }
+
+    event.preventDefault();
+    event.returnValue = "";
+  });
 
   useEffect(() => {
     if (!analysis || applyRecommendationMutation.isPending || isDirty) {
@@ -535,11 +553,7 @@ export function HomePage() {
       return;
     }
 
-    const requestedName = window.prompt(
-      "New profile name",
-      `Copy of ${currentProfile.name}`,
-    );
-    const name = requestedName?.trim();
+    const name = newProfileName.trim();
 
     if (!name) {
       return;
@@ -566,6 +580,8 @@ export function HomePage() {
       await switchProfileMutation.mutateAsync({
         profileId: createdProfile.id,
       });
+      setIsCreateProfileDialogOpen(false);
+      setNewProfileName("");
       setFeedback({
         tone: "success",
         message: `Created and switched to ${createdProfile.name}.`,
@@ -586,16 +602,6 @@ export function HomePage() {
       return;
     }
 
-    const shouldDelete = window.confirm(
-      isDirty
-        ? `Delete ${currentProfile.name}? Unsaved changes in this profile will be discarded.`
-        : `Delete ${currentProfile.name}?`,
-    );
-
-    if (!shouldDelete) {
-      return;
-    }
-
     try {
       const catalog = await deleteProfileMutation.mutateAsync({
         profileId: currentProfileId,
@@ -605,6 +611,7 @@ export function HomePage() {
           (profile) => profile.id === catalog.currentProfileId,
         ) ?? null;
 
+      setIsDeleteProfileDialogOpen(false);
       setFeedback({
         tone: "success",
         message: nextProfile
@@ -618,6 +625,52 @@ export function HomePage() {
           error instanceof Error
             ? error.message
             : "Failed to delete the profile.",
+      });
+    }
+  }
+
+  function handleOpenCreateProfileDialog() {
+    if (!currentProfile) {
+      return;
+    }
+
+    setNewProfileName(`Copy of ${currentProfile.name}`);
+    setIsCreateProfileDialogOpen(true);
+  }
+
+  function handleOpenDeleteProfileDialog() {
+    if (!currentProfile) {
+      return;
+    }
+
+    setIsDeleteProfileDialogOpen(true);
+  }
+
+  async function handleRescanLibrary() {
+    if (!currentProfileId || isDirty) {
+      return;
+    }
+
+    try {
+      setFeedback(null);
+      await Promise.all([
+        modLibraryQuery.refetch(),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.modOrderAnalysis(currentProfileId),
+        }),
+      ]);
+
+      setFeedback({
+        tone: "success",
+        message: "Mod library rescanned from the current configured roots.",
+      });
+    } catch (error) {
+      setFeedback({
+        tone: "error",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Failed to rescan mod roots.",
       });
     }
   }
@@ -828,20 +881,41 @@ export function HomePage() {
                   </p>
                 </div>
 
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    placeholder="Filter Mods..."
-                    className="w-72 pl-10 font-bold"
-                    value={searchQuery}
-                    onChange={(event) => setSearchQuery(event.target.value)}
-                  />
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      placeholder="Filter Mods..."
+                      className="w-full pl-10 font-bold sm:w-72"
+                      value={searchQuery}
+                      onChange={(event) => setSearchQuery(event.target.value)}
+                    />
+                  </div>
+                  <Button
+                    variant="outline"
+                    className="gap-2"
+                    disabled={
+                      isBusy ||
+                      isRescanning ||
+                      isDirty ||
+                      !currentProfileId ||
+                      modLibrary.requiresConfiguration
+                    }
+                    onClick={() => void handleRescanLibrary()}
+                  >
+                    {isRescanning ? (
+                      <LoaderCircle className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <RefreshCcw className="h-4 w-4" />
+                    )}
+                    Rescan Library
+                  </Button>
                 </div>
               </div>
 
-              <div className="grid gap-4 xl:grid-cols-[1.3fr_minmax(0,1fr)_auto]">
+              <div className="grid gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(16rem,1fr)_auto]">
                 <div className="rounded-xl border border-border/60 bg-background/50 p-4">
-                  <p className="text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground">
+                  <p className="whitespace-nowrap text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground">
                     Active Profile
                   </p>
                   <div className="mt-3 flex flex-col gap-3 xl:flex-row xl:items-center">
@@ -864,7 +938,7 @@ export function HomePage() {
                       variant="outline"
                       className="gap-2"
                       disabled={isBusy || !currentProfileId}
-                      onClick={() => void handleCreateProfile()}
+                      onClick={handleOpenCreateProfileDialog}
                     >
                       <Package className="h-4 w-4" />
                       New Profile
@@ -873,7 +947,7 @@ export function HomePage() {
                       variant="outline"
                       className="gap-2"
                       disabled={isBusy || !currentProfileId}
-                      onClick={() => void handleDeleteProfile()}
+                      onClick={handleOpenDeleteProfileDialog}
                     >
                       <Trash2 className="h-4 w-4" />
                       Delete
@@ -882,7 +956,7 @@ export function HomePage() {
                 </div>
 
                 <div className="rounded-xl border border-border/60 bg-background/50 p-4">
-                  <p className="text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground">
+                  <p className="whitespace-nowrap text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground">
                     Profile Name
                   </p>
                   <Input
@@ -936,7 +1010,8 @@ export function HomePage() {
               {isDirty ? (
                 <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm font-bold text-amber-700">
                   This draft differs from the saved profile. Save the profile
-                  before re-running dependency fixes or automatic sorting.
+                  before re-running dependency fixes, rescanning, or automatic
+                  sorting.
                 </div>
               ) : null}
             </div>
@@ -1121,7 +1196,8 @@ export function HomePage() {
                     No Matching Mods
                   </p>
                   <p className="text-sm text-muted-foreground">
-                    Adjust the filter or rescan after changing paths.
+                    Adjust the filter or use Rescan Library after changing
+                    paths.
                   </p>
                 </div>
               </div>
@@ -1499,6 +1575,121 @@ export function HomePage() {
           )}
         </aside>
       </div>
+
+      <AlertDialog
+        open={routeBlocker.state === "blocked"}
+        title="Discard Unsaved Profile Changes?"
+        description="You have unsaved profile edits. Leaving this page now will discard the current draft."
+        confirmLabel="Discard Changes"
+        cancelLabel="Stay Here"
+        tone="warning"
+        onConfirm={() => routeBlocker.proceed?.()}
+        onCancel={() => routeBlocker.reset?.()}
+      >
+        <div className="space-y-3 text-sm text-muted-foreground">
+          <p>
+            Save the profile first if you want to keep the current active mod
+            list, ordering, and profile name edits.
+          </p>
+        </div>
+      </AlertDialog>
+
+      <AlertDialog
+        open={isCreateProfileDialogOpen}
+        title="Create New Profile"
+        description="Create a new profile from the current saved snapshot."
+        confirmLabel="Create Profile"
+        cancelLabel="Cancel"
+        tone="default"
+        busy={
+          createProfileMutation.isPending ||
+          switchProfileMutation.isPending ||
+          saveProfileMutation.isPending
+        }
+        confirmDisabled={!newProfileName.trim()}
+        onConfirm={() => void handleCreateProfile()}
+        onCancel={() => {
+          if (
+            createProfileMutation.isPending ||
+            switchProfileMutation.isPending ||
+            saveProfileMutation.isPending
+          ) {
+            return;
+          }
+
+          setIsCreateProfileDialogOpen(false);
+          setNewProfileName("");
+        }}
+      >
+        <div className="space-y-3">
+          <label
+            htmlFor="new-profile-name"
+            className="text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground"
+          >
+            Profile Name
+          </label>
+          <Input
+            id="new-profile-name"
+            autoFocus
+            value={newProfileName}
+            onChange={(event) => setNewProfileName(event.target.value)}
+            placeholder="Combat Run"
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && newProfileName.trim()) {
+                event.preventDefault();
+                void handleCreateProfile();
+              }
+            }}
+          />
+          {isDirty ? (
+            <p className="text-sm text-amber-700">
+              The current draft will be saved before the new profile is cloned.
+            </p>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              The new profile starts from the currently saved mod set and load
+              order.
+            </p>
+          )}
+        </div>
+      </AlertDialog>
+
+      <AlertDialog
+        open={isDeleteProfileDialogOpen}
+        title="Delete Selected Profile?"
+        description="Delete the selected profile and switch to the backend-provided fallback profile."
+        confirmLabel="Delete Profile"
+        cancelLabel="Keep Profile"
+        tone="danger"
+        busy={deleteProfileMutation.isPending}
+        onConfirm={() => void handleDeleteProfile()}
+        onCancel={() => {
+          if (deleteProfileMutation.isPending) {
+            return;
+          }
+
+          setIsDeleteProfileDialogOpen(false);
+        }}
+      >
+        <div className="space-y-3 text-sm">
+          <p>
+            <span className="font-bold text-foreground">
+              {currentProfile?.name ?? "Current profile"}
+            </span>{" "}
+            will be removed from the catalog.
+          </p>
+          {isDirty ? (
+            <p className="font-bold text-destructive">
+              Unsaved changes in this profile will be discarded.
+            </p>
+          ) : (
+            <p className="text-muted-foreground">
+              The active profile will switch to the repository fallback after
+              deletion.
+            </p>
+          )}
+        </div>
+      </AlertDialog>
 
       <AlertDialog
         open={isDependencyDialogOpen}
