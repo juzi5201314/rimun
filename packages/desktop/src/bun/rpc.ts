@@ -1,4 +1,5 @@
 import type {
+  ApplyModOrderRecommendationInput,
   DetectPathsInput,
   PathSelection,
   RimunRpcContract,
@@ -6,6 +7,10 @@ import type {
 } from "@rimun/shared";
 import { rimunRpcSchemas } from "@rimun/shared";
 import { BrowserView } from "electrobun/bun";
+import {
+  analyzeModOrderFromSelection,
+  applyModOrderRecommendation,
+} from "./mod-order";
 import { scanModLibrary } from "./mods";
 import type { SettingsRepository } from "./persistence";
 import { detectPaths, getExecutionEnvironment, validatePath } from "./platform";
@@ -71,6 +76,33 @@ export function createMainWindowRpc(
 
           return rimunRpcSchemas.bun.requests.getModLibrary.response.parse(
             await scanModLibrary(resolvePreferredSelection(repository)),
+          );
+        },
+        analyzeModOrder: async (params) => {
+          assertRequestSchema(
+            rimunRpcSchemas.bun.requests.analyzeModOrder.params,
+            params,
+          );
+
+          return rimunRpcSchemas.bun.requests.analyzeModOrder.response.parse(
+            await analyzeModOrderFromSelection(
+              resolvePreferredSelection(repository),
+            ),
+          );
+        },
+        applyModOrderRecommendation: async (
+          payload: ApplyModOrderRecommendationInput,
+        ) => {
+          const input = assertRequestSchema(
+            rimunRpcSchemas.bun.requests.applyModOrderRecommendation.params,
+            payload,
+          );
+
+          return rimunRpcSchemas.bun.requests.applyModOrderRecommendation.response.parse(
+            await applyModOrderRecommendation(
+              resolvePreferredSelection(repository),
+              input,
+            ),
           );
         },
         getSettings: (params) => {

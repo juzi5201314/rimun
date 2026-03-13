@@ -1,9 +1,11 @@
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { readdir } from "node:fs/promises";
 import { availableParallelism } from "node:os";
 import { join, win32 } from "node:path";
 import type {
   AppError,
   ExecutionEnvironment,
+  ModDependencyMetadata,
   ModLibraryResult,
   ModRecord,
   ModSource,
@@ -66,6 +68,14 @@ type ScanModLibraryOptions = {
 
 type ParsedModsConfig = {
   activePackageIds: Set<string>;
+  activePackageIdsOrdered: string[];
+};
+
+type XmlEncoding = "utf8" | "utf16le" | "utf16be";
+
+type WriteActiveModsOptions = {
+  environment?: ExecutionEnvironment;
+  toReadablePath?: (windowsPath: string) => string | null;
 };
 
 const SCAN_CHUNK_SIZE = 24;
@@ -110,6 +120,38 @@ function decodeUtf16Be(fileContent: Uint8Array) {
   }
 
   return swapped.toString("utf16le");
+}
+
+function encodeUtf16Be(value: string) {
+  const buffer = Buffer.from(value, "utf16le");
+
+  for (let index = 0; index + 1 < buffer.length; index += 2) {
+    const current = buffer[index];
+    buffer[index] = buffer[index + 1] ?? current;
+    buffer[index + 1] = current;
+  }
+
+  return buffer;
+}
+
+function detectXmlEncoding(fileContent: Uint8Array): XmlEncoding {
+  if (
+    fileContent.length >= 2 &&
+    fileContent[0] === 0xff &&
+    fileContent[1] === 0xfe
+  ) {
+    return "utf16le";
+  }
+
+  if (
+    fileContent.length >= 2 &&
+    fileContent[0] === 0xfe &&
+    fileContent[1] === 0xff
+  ) {
+    return "utf16be";
+  }
+
+  return "utf8";
 }
 
 export function decodeXmlFileContent(fileContent: Uint8Array) {
@@ -174,6 +216,15 @@ async function readXmlFile(filePath: string) {
   return decodeXmlFileContent(await Bun.file(filePath).bytes());
 }
 
+function readXmlFileWithEncoding(filePath: string) {
+  const fileContent = readFileSync(filePath);
+
+  return {
+    encoding: detectXmlEncoding(fileContent),
+    xml: decodeXmlFileContent(fileContent),
+  };
+}
+
 function decodeXmlEntities(value: string) {
   return value
     .replaceAll("&lt;", "<")
@@ -232,6 +283,10 @@ function normalizeMultilineText(value: string) {
     .trim();
 }
 
+function normalizePackageId(value: string | null) {
+  return value?.trim().toLowerCase() ?? null;
+}
+
 function extractTagText(xml: string, tagName: string) {
   const match = new RegExp(`<${tagName}>([\\s\\S]*?)</${tagName}>`, "i").exec(
     xml,
@@ -267,10 +322,11 @@ export function parseAboutXml(xml: string) {
   const authors = extractTagList(xml, "authors");
   const authorText = extractTagText(xml, "author");
   const supportedVersions = extractTagList(xml, "supportedVersions");
+  const packageId = extractTagText(xml, "packageId");
 
   return {
     name: extractTagText(xml, "name"),
-    packageId: extractTagText(xml, "packageId"),
+    packageId,
     author:
       authors.length > 0
         ? authors.join(", ")
@@ -283,17 +339,105 @@ export function parseAboutXml(xml: string) {
       supportedVersions[0] ??
       null,
     description: extractTagMultilineText(xml, "description"),
+    dependencyMetadata: {
+      packageIdNormalized: normalizePackageId(packageId),
+      dependencies: extractTagList(xml, "modDependencies").map((value) =>
+        value.toLowerCase(),
+      ),
+      loadAfter: extractTagList(xml, "loadAfter").map((value) =>
+        value.toLowerCase(),
+      ),
+      loadBefore: extractTagList(xml, "loadBefore").map((value) =>
+        value.toLowerCase(),
+      ),
+      forceLoadAfter: extractTagList(xml, "forceLoadAfter").map((value) =>
+        value.toLowerCase(),
+      ),
+      forceLoadBefore: extractTagList(xml, "forceLoadBefore").map((value) =>
+        value.toLowerCase(),
+      ),
+      incompatibleWith: extractTagList(xml, "incompatibleWith").map((value) =>
+        value.toLowerCase(),
+      ),
+      supportedVersions,
+    } satisfies ModDependencyMetadata,
   };
 }
 
 export function parseModsConfigXml(xml: string): ParsedModsConfig {
+  const activePackageIdsOrdered = extractTagList(xml, "activeMods").map(
+    (packageId) => packageId.toLowerCase(),
+  );
+
   return {
-    activePackageIds: new Set(
-      extractTagList(xml, "activeMods").map((packageId) =>
-        packageId.toLowerCase(),
-      ),
-    ),
+    activePackageIds: new Set(activePackageIdsOrdered),
+    activePackageIdsOrdered,
   };
+}
+
+function escapeXmlText(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&apos;");
+}
+
+function buildActiveModsXml(activePackageIds: string[]) {
+  if (activePackageIds.length === 0) {
+    return "  <activeMods />\n";
+  }
+
+  return [
+    "  <activeMods>",
+    ...activePackageIds.map(
+      (packageId) => `    <li>${escapeXmlText(packageId)}</li>`,
+    ),
+    "  </activeMods>",
+  ].join("\n");
+}
+
+function replaceActiveModsBlock(xml: string, activePackageIds: string[]) {
+  const activeModsBlock = buildActiveModsXml(activePackageIds);
+
+  if (/<activeMods\b[\s\S]*?<\/activeMods>/i.test(xml)) {
+    return xml.replace(/<activeMods\b[\s\S]*?<\/activeMods>/i, activeModsBlock);
+  }
+
+  if (/<activeMods\s*\/>/i.test(xml)) {
+    return xml.replace(/<activeMods\s*\/>/i, activeModsBlock.trim());
+  }
+
+  if (/<\/ModsConfigData>/i.test(xml)) {
+    return xml.replace(
+      /<\/ModsConfigData>/i,
+      `${activeModsBlock}\n</ModsConfigData>`,
+    );
+  }
+
+  return [
+    '<?xml version="1.0" encoding="utf-8"?>',
+    "<ModsConfigData>",
+    activeModsBlock,
+    "</ModsConfigData>",
+    "",
+  ].join("\n");
+}
+
+function encodeXmlContent(xml: string, encoding: XmlEncoding) {
+  if (encoding === "utf16le") {
+    return Buffer.concat([
+      Buffer.from([0xff, 0xfe]),
+      Buffer.from(xml, "utf16le"),
+    ]);
+  }
+
+  if (encoding === "utf16be") {
+    return Buffer.concat([Buffer.from([0xfe, 0xff]), encodeUtf16Be(xml)]);
+  }
+
+  return Buffer.from(xml, "utf8");
 }
 
 function isOfficialMod(source: ModSource, packageId: string | null) {
@@ -302,7 +446,7 @@ function isOfficialMod(source: ModSource, packageId: string | null) {
     : source === "installation" && packageId === null;
 }
 
-function createReadablePathResolver() {
+export function createReadablePathResolver() {
   if (process.platform === "win32") {
     return (windowsPath: string) => windowsPath;
   }
@@ -485,7 +629,10 @@ async function resolveActivePackageIds(
         true,
       ),
     );
-    return new Set<string>();
+    return {
+      activePackageIds: new Set<string>(),
+      activePackageIdsOrdered: [],
+    };
   }
 
   const readableModsConfigPath = toReadablePath(modsConfigPath);
@@ -499,12 +646,14 @@ async function resolveActivePackageIds(
         true,
       ),
     );
-    return new Set<string>();
+    return {
+      activePackageIds: new Set<string>(),
+      activePackageIdsOrdered: [],
+    };
   }
 
   try {
-    return parseModsConfigXml(await readXmlFile(readableModsConfigPath))
-      .activePackageIds;
+    return parseModsConfigXml(await readXmlFile(readableModsConfigPath));
   } catch (error) {
     errors.push(
       createAppError(
@@ -514,7 +663,10 @@ async function resolveActivePackageIds(
         true,
       ),
     );
-    return new Set<string>();
+    return {
+      activePackageIds: new Set<string>(),
+      activePackageIdsOrdered: [],
+    };
   }
 }
 
@@ -527,6 +679,7 @@ function buildWorkerSource() {
     ${decodeXmlFileContent.toString()}
     ${decodeXmlEntities.toString()}
     ${stripXmlControlCharacters.toString()}
+    ${normalizePackageId.toString()}
     ${normalizeText.toString()}
     ${normalizeMultilineText.toString()}
     ${extractTagText.toString()}
@@ -794,6 +947,16 @@ function createModRecord(
       fragment.parsedAbout?.packageId ?? null,
     ),
     hasAboutXml: fragment.hasAboutXml,
+    dependencyMetadata: fragment.parsedAbout?.dependencyMetadata ?? {
+      packageIdNormalized: null,
+      dependencies: [],
+      loadAfter: [],
+      loadBefore: [],
+      forceLoadAfter: [],
+      forceLoadBefore: [],
+      incompatibleWith: [],
+      supportedVersions: [],
+    },
     notes: fragment.notes,
   };
 }
@@ -882,6 +1045,7 @@ export async function scanModLibrary(
         workshopPath,
         modsConfigPath,
       },
+      activePackageIds: [],
       mods: [],
       errors,
       requiresConfiguration: true,
@@ -907,7 +1071,9 @@ export async function scanModLibrary(
     toReadablePath,
     errors,
   );
-  const activePackageIds = await activePackageIdsPromise;
+  const activeModsConfig = await activePackageIdsPromise;
+  const activePackageIds = activeModsConfig.activePackageIds;
+  const activePackageIdsOrdered = activeModsConfig.activePackageIdsOrdered;
   const configMs = performance.now() - configStart;
   const [installationTasks, workshopTasks] = await Promise.all([
     installationTasksPromise,
@@ -954,7 +1120,6 @@ export async function scanModLibrary(
     },
     taskCount: allTasks.length,
   });
-
   return {
     environment,
     selection,
@@ -964,8 +1129,38 @@ export async function scanModLibrary(
       workshopPath,
       modsConfigPath,
     },
+    activePackageIds: activePackageIdsOrdered,
     mods,
     errors,
     requiresConfiguration: false,
   };
+}
+
+export function writeActiveModsToConfig(
+  selection: PathSelection | null,
+  activePackageIds: string[],
+  options: WriteActiveModsOptions = {},
+) {
+  const toReadablePath = options.toReadablePath ?? createReadablePathResolver();
+  const modsConfigWindowsPath = selection?.configPath
+    ? win32.join(selection.configPath, "ModsConfig.xml")
+    : null;
+
+  if (!modsConfigWindowsPath) {
+    throw new Error("No RimWorld config path is configured.");
+  }
+
+  const readableModsConfigPath = toReadablePath(modsConfigWindowsPath);
+
+  if (!readableModsConfigPath) {
+    throw new Error("Unable to map ModsConfig.xml into the current runtime.");
+  }
+
+  if (!existsSync(readableModsConfigPath)) {
+    throw new Error("ModsConfig.xml was not found.");
+  }
+
+  const { encoding, xml } = readXmlFileWithEncoding(readableModsConfigPath);
+  const nextXml = replaceActiveModsBlock(xml, activePackageIds);
+  writeFileSync(readableModsConfigPath, encodeXmlContent(nextXml, encoding));
 }

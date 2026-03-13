@@ -1,9 +1,11 @@
 import { describe, expect, it } from "bun:test";
 
 import {
+  applyModOrderRecommendationInputSchema,
   bootstrapPayloadSchema,
   detectPathsResultSchema,
   modLibraryResultSchema,
+  modOrderAnalysisResultSchema,
   rimunRpcSchemas,
   saveSettingsInputSchema,
   validatePathResultSchema,
@@ -117,6 +119,7 @@ describe("shared schemas", () => {
         modsConfigPath:
           "C:\\Users\\alice\\AppData\\LocalLow\\Ludeon Studios\\RimWorld by Ludeon Studios\\Config\\ModsConfig.xml",
       },
+      activePackageIds: ["ludeon.rimworld"],
       mods: [
         {
           id: "installation:ludeon.rimworld",
@@ -135,6 +138,16 @@ describe("shared schemas", () => {
           enabled: true,
           isOfficial: true,
           hasAboutXml: true,
+          dependencyMetadata: {
+            packageIdNormalized: "ludeon.rimworld",
+            dependencies: [],
+            loadAfter: [],
+            loadBefore: [],
+            forceLoadAfter: [],
+            forceLoadBefore: [],
+            incompatibleWith: [],
+            supportedVersions: [],
+          },
           notes: [],
         },
       ],
@@ -144,6 +157,73 @@ describe("shared schemas", () => {
 
     expect(parsed.mods).toHaveLength(1);
     expect(parsed.mods[0]?.source).toBe("installation");
+    expect(parsed.activePackageIds).toEqual(["ludeon.rimworld"]);
+  });
+
+  it("accepts a mod order analysis payload", () => {
+    const parsed = modOrderAnalysisResultSchema.parse({
+      analyzedAt: "2026-03-13T10:00:00.000Z",
+      currentActivePackageIds: ["ludeon.rimworld", "example.camera"],
+      recommendedActivePackageIds: [
+        "ludeon.rimworld",
+        "example.camera",
+        "unlimitedhugs.hugslib",
+      ],
+      recommendedOrderPackageIds: [
+        "ludeon.rimworld",
+        "unlimitedhugs.hugslib",
+        "example.camera",
+      ],
+      missingInstalledInactiveDependencies: [
+        {
+          packageId: "unlimitedhugs.hugslib",
+          modName: "HugsLib",
+          requiredByPackageIds: ["example.camera"],
+          requiredByNames: ["Camera+"],
+        },
+      ],
+      missingUnavailableDependencies: [],
+      diagnostics: [
+        {
+          code: "missing_installed_inactive_dependency",
+          severity: "warning",
+          message: "Camera+ requires HugsLib.",
+          packageIds: ["example.camera", "unlimitedhugs.hugslib"],
+          modIds: ["workshop:example.camera", "workshop:unlimitedhugs.hugslib"],
+          isBlocking: false,
+        },
+      ],
+      explanations: [
+        {
+          packageId: "example.camera",
+          modName: "Camera+",
+          reasons: ["Should load after HugsLib: Camera+ depends on HugsLib."],
+        },
+      ],
+      edges: [
+        {
+          fromPackageId: "unlimitedhugs.hugslib",
+          toPackageId: "example.camera",
+          kind: "dependency",
+          source: "about",
+          isHard: true,
+          reason: "Camera+ depends on HugsLib.",
+        },
+      ],
+      isOptimal: false,
+      hasBlockingIssues: false,
+      sortDifferenceCount: 1,
+    });
+
+    expect(parsed.recommendedOrderPackageIds[1]).toBe("unlimitedhugs.hugslib");
+  });
+
+  it("accepts apply recommendation input", () => {
+    const parsed = applyModOrderRecommendationInputSchema.parse({
+      actions: ["enableMissingDependencies", "reorderActiveMods"],
+    });
+
+    expect(parsed.actions).toHaveLength(2);
   });
 });
 
@@ -152,6 +232,8 @@ describe("rpc schema map", () => {
     const requests = rimunRpcSchemas.bun.requests;
 
     expect(Object.keys(requests).sort()).toEqual([
+      "analyzeModOrder",
+      "applyModOrderRecommendation",
       "detectPaths",
       "getBootstrap",
       "getModLibrary",

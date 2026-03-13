@@ -113,6 +113,10 @@ describe("mod scanner", () => {
     expect(parsed.author).toBe("Ludeon Studios");
     expect(parsed.version).toBe("1.5");
     expect(parsed.description).toBeNull();
+    expect(parsed.dependencyMetadata.packageIdNormalized).toBe(
+      "ludeon.rimworld",
+    );
+    expect(parsed.dependencyMetadata.supportedVersions).toEqual(["1.5"]);
   });
 
   it("parses active package ids from ModsConfig.xml", () => {
@@ -127,6 +131,10 @@ describe("mod scanner", () => {
 
     expect(parsed.activePackageIds.has("ludeon.rimworld")).toBe(true);
     expect(parsed.activePackageIds.has("unlimitedhugs.hugslib")).toBe(true);
+    expect(parsed.activePackageIdsOrdered).toEqual([
+      "ludeon.rimworld",
+      "unlimitedhugs.hugslib",
+    ]);
   });
 
   it("scans installation and workshop roots into mod records", async () => {
@@ -183,6 +191,10 @@ describe("mod scanner", () => {
     expect(result.mods[0]?.enabled).toBe(true);
     expect(result.mods[0]?.isOfficial).toBe(true);
     expect(result.mods[0]?.description).toBe("Core game content");
+    expect(result.activePackageIds).toEqual([
+      "ludeon.rimworld",
+      "unlimitedhugs.hugslib",
+    ]);
     expect(result.mods[1]?.source).toBe("workshop");
     expect(result.mods[1]?.enabled).toBe(true);
     expect(result.errors).toHaveLength(0);
