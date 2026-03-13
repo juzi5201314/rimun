@@ -1,24 +1,38 @@
 import { HomePage } from "@/pages/HomePage";
 import { SettingsPage } from "@/pages/SettingsPage";
-import { Link, Outlet, createBrowserRouter, useLocation } from "react-router-dom";
 import { cn } from "@/shared/lib/utils";
-import { Settings, List, Terminal, Shield } from "lucide-react";
+import { List, Settings, Shield, Terminal } from "lucide-react";
+import {
+  Link,
+  Outlet,
+  createBrowserRouter,
+  useLocation,
+} from "react-router-dom";
 
-function SidebarLink({ to, icon: Icon, label }: { to: string, icon: React.ElementType, label: string }) {
+function SidebarLink({
+  to,
+  icon: Icon,
+  label,
+}: { to: string; icon: React.ElementType; label: string }) {
   const location = useLocation();
   const isActive = location.pathname === to;
-  
+
   return (
-    <Link 
-      to={to} 
+    <Link
+      to={to}
       className={cn(
         "flex items-center gap-3 px-6 py-4 border-l-4 transition-all text-sm font-medium",
-        isActive 
-          ? "bg-accent border-primary text-foreground" 
-          : "border-transparent text-muted-foreground hover:bg-muted hover:text-foreground hover:border-border"
+        isActive
+          ? "bg-accent border-primary text-foreground"
+          : "border-transparent text-muted-foreground hover:bg-muted hover:text-foreground hover:border-border",
       )}
     >
-      <Icon className={cn("w-4 h-4", isActive ? "text-primary" : "text-muted-foreground")} />
+      <Icon
+        className={cn(
+          "w-4 h-4",
+          isActive ? "text-primary" : "text-muted-foreground",
+        )}
+      />
       {label}
     </Link>
   );
@@ -36,12 +50,12 @@ function RootLayout() {
             <p className="text-xs text-muted-foreground">Active</p>
           </div>
         </div>
-        
+
         <nav className="flex-1 overflow-y-auto py-2 flex flex-col">
           <SidebarLink to="/" icon={List} label="Mod Library" />
           <SidebarLink to="/settings" icon={Settings} label="Settings" />
         </nav>
-        
+
         <div className="p-6 border-t border-border text-xs text-muted-foreground flex flex-col gap-2">
           <div className="flex items-center gap-2">
             <Terminal className="w-3 h-3" />

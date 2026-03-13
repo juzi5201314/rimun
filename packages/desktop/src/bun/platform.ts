@@ -198,7 +198,10 @@ function resolveSteamInstallRoots(environment: ExecutionEnvironment) {
   return [];
 }
 
-function resolveReadableSteamPath(environment: ExecutionEnvironment, windowsPath: string) {
+function resolveReadableSteamPath(
+  environment: ExecutionEnvironment,
+  windowsPath: string,
+) {
   if (environment.isWsl) {
     return windowsPathToWslPath(windowsPath);
   }
@@ -226,7 +229,8 @@ export function resolveSteamLibraryRoots(
   options: SteamLibraryResolverOptions = {},
 ) {
   const pathExists = options.pathExists ?? existsSync;
-  const readTextFile = options.readTextFile ?? ((path: string) => readFileSync(path, "utf8"));
+  const readTextFile =
+    options.readTextFile ?? ((path: string) => readFileSync(path, "utf8"));
   const steamInstallRoots = environment.isWsl
     ? resolveSteamInstallRoots(environment)
         .map((wslPath) => wslPathToWindowsPath(wslPath))
@@ -236,7 +240,10 @@ export function resolveSteamLibraryRoots(
     (driveLetter) => `${driveLetter}:\\SteamLibrary`,
   );
   const libraryRootsFromVdf = steamInstallRoots.flatMap((steamInstallRoot) => {
-    const readableSteamRoot = resolveReadableSteamPath(environment, steamInstallRoot);
+    const readableSteamRoot = resolveReadableSteamPath(
+      environment,
+      steamInstallRoot,
+    );
 
     if (!readableSteamRoot) {
       return [];

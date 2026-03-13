@@ -21,6 +21,7 @@ import type {
   SaveSettingsInput,
   ValidatePathResult,
 } from "@rimun/shared";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -31,7 +32,6 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
-import { useQueryClient } from "@tanstack/react-query";
 
 const FALLBACK_SUPPORTED_CHANNELS: DistributionChannel[] = ["steam", "manual"];
 
@@ -176,7 +176,9 @@ function DetectionErrors({ errors }: { errors: AppError[] }) {
             key={`${error.code}:${error.message}`}
             className="rounded-lg border border-destructive/40 bg-background/70 p-4"
           >
-            <p className="text-sm font-bold text-destructive">{error.message}</p>
+            <p className="text-sm font-bold text-destructive">
+              {error.message}
+            </p>
             {error.detail ? (
               <p className="mt-1 text-sm text-destructive/80">{error.detail}</p>
             ) : null}
@@ -202,7 +204,9 @@ export function SettingsPage() {
     configPath: "",
   });
   const [feedback, setFeedback] = useState<FeedbackState>(null);
-  const [lastValidation, setLastValidation] = useState<ValidatePathResult[]>([]);
+  const [lastValidation, setLastValidation] = useState<ValidatePathResult[]>(
+    [],
+  );
 
   useEffect(() => {
     if (settingsQuery.data) {
@@ -210,8 +214,9 @@ export function SettingsPage() {
     }
   }, [settingsQuery.data]);
 
-  const cachedBootstrap =
-    queryClient.getQueryData<BootstrapPayload>(["bootstrap"]);
+  const cachedBootstrap = queryClient.getQueryData<BootstrapPayload>([
+    "bootstrap",
+  ]);
   const supportedChannels =
     cachedBootstrap?.supportedChannels ?? FALLBACK_SUPPORTED_CHANNELS;
   const selectableChannels = Array.from(new Set(supportedChannels));
@@ -290,7 +295,9 @@ export function SettingsPage() {
         tone: savedSettings.validation.some((entry) => entry.issues.length > 0)
           ? "warning"
           : "success",
-        message: savedSettings.validation.some((entry) => entry.issues.length > 0)
+        message: savedSettings.validation.some(
+          (entry) => entry.issues.length > 0,
+        )
           ? "Settings saved, but backend validation reported path issues."
           : "Settings saved.",
       });
@@ -359,8 +366,8 @@ export function SettingsPage() {
 
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 p-6">
         {feedback ? (
-          <div
-            role="status"
+          <output
+            aria-live="polite"
             className={
               feedback.tone === "success"
                 ? "rounded-lg border border-primary/40 bg-primary/10 px-4 py-3 text-sm font-bold text-primary"
@@ -370,13 +377,15 @@ export function SettingsPage() {
             }
           >
             {feedback.message}
-          </div>
+          </output>
         ) : null}
 
         {cachedBootstrap ? (
           <Card className="border-border/60 bg-card/60">
             <CardHeader className="pb-3">
-              <CardTitle className="text-base">Backend Capability Snapshot</CardTitle>
+              <CardTitle className="text-base">
+                Backend Capability Snapshot
+              </CardTitle>
               <CardDescription>
                 Values are read from the bootstrap payload instead of being
                 hardcoded in the renderer.
@@ -389,7 +398,11 @@ export function SettingsPage() {
                 </p>
                 <div className="flex flex-wrap gap-2">
                   {selectableChannels.map((channel) => (
-                    <Badge key={channel} variant="secondary" className="uppercase">
+                    <Badge
+                      key={channel}
+                      variant="secondary"
+                      className="uppercase"
+                    >
                       {formatChannelLabel(channel)}
                     </Badge>
                   ))}
@@ -444,8 +457,8 @@ export function SettingsPage() {
                       Installation
                     </p>
                     <p className="mt-2 break-all font-mono text-xs">
-                      {detectPathsMutation.data.preferredSelection.installationPath ??
-                        "Not detected"}
+                      {detectPathsMutation.data.preferredSelection
+                        .installationPath ?? "Not detected"}
                     </p>
                   </div>
                   <div className="rounded-lg border border-border/60 bg-background/70 p-4">
@@ -453,8 +466,8 @@ export function SettingsPage() {
                       Workshop
                     </p>
                     <p className="mt-2 break-all font-mono text-xs">
-                      {detectPathsMutation.data.preferredSelection.workshopPath ??
-                        "Not detected"}
+                      {detectPathsMutation.data.preferredSelection
+                        .workshopPath ?? "Not detected"}
                     </p>
                   </div>
                   <div className="rounded-lg border border-border/60 bg-background/70 p-4">
@@ -565,7 +578,8 @@ export function SettingsPage() {
               <CardFooter className="justify-between bg-muted/50 py-4">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <CheckCircle2 className="h-4 w-4" />
-                  Save uses backend schema validation and repository persistence.
+                  Save uses backend schema validation and repository
+                  persistence.
                 </div>
                 <Button type="submit" className="w-32">
                   {saveSettingsMutation.isPending ? (
