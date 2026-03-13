@@ -25,5 +25,6 @@ async function runStep(cmd: string[]) {
 }
 
 await runStep(["bun", "run", "--cwd", "packages/shared", "test"]);
+await runStep(["bun", "run", "--cwd", "packages/domain", "test"]);
 await runStep(["bun", "run", "--cwd", "packages/desktop", "test"]);
 await runStep(["bun", "run", "--cwd", "packages/web", "test"]);

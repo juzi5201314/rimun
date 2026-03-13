@@ -1,3 +1,5 @@
+import { HostApiProvider } from "@/shared/host/HostApiProvider";
+import type { RimunHostApi } from "@rimun/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { PropsWithChildren } from "react";
 import { useState } from "react";
@@ -14,10 +16,15 @@ function createQueryClient() {
   });
 }
 
-export function AppProviders({ children }: PropsWithChildren) {
+export function AppProviders({
+  children,
+  hostApi,
+}: PropsWithChildren<{ hostApi?: RimunHostApi }>) {
   const [queryClient] = useState(createQueryClient);
 
   return (
-    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    <QueryClientProvider client={queryClient}>
+      <HostApiProvider hostApi={hostApi}>{children}</HostApiProvider>
+    </QueryClientProvider>
   );
 }

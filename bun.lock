@@ -14,12 +14,24 @@
       "name": "@rimun/desktop",
       "version": "0.1.0",
       "dependencies": {
+        "@rimun/domain": "workspace:*",
         "@rimun/shared": "workspace:*",
         "drizzle-orm": "^0.44.5",
         "electrobun": "1.15.1",
       },
       "devDependencies": {
         "@types/bun": "latest",
+      },
+    },
+    "packages/domain": {
+      "name": "@rimun/domain",
+      "version": "0.1.0",
+      "dependencies": {
+        "@rimun/shared": "workspace:*",
+      },
+      "devDependencies": {
+        "@types/bun": "latest",
+        "typescript": "^5.9.2",
       },
     },
     "packages/shared": {
@@ -39,6 +51,7 @@
       "dependencies": {
         "@radix-ui/react-checkbox": "^1.3.3",
         "@radix-ui/react-slot": "^1.2.4",
+        "@rimun/domain": "workspace:*",
         "@rimun/shared": "workspace:*",
         "@tanstack/react-query": "^5.66.8",
         "class-variance-authority": "^0.7.1",
@@ -235,6 +248,8 @@
     "@radix-ui/react-use-size": ["@radix-ui/react-use-size@1.1.1", "", { "dependencies": { "@radix-ui/react-use-layout-effect": "1.1.1" }, "peerDependencies": { "@types/react": "*", "react": "^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc" }, "optionalPeers": ["@types/react"] }, "sha512-ewrXRDTAqAXlkl6t/fkXWNAhFX9I+CkKlw6zjEwk86RSPKwZr3xpBRso655aqYafwtnbpHLj6toFzmd6xdVptQ=="],
 
     "@rimun/desktop": ["@rimun/desktop@workspace:packages/desktop"],
+
+    "@rimun/domain": ["@rimun/domain@workspace:packages/domain"],
 
     "@rimun/shared": ["@rimun/shared@workspace:packages/shared"],
 

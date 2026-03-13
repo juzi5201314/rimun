@@ -1,53 +1,4 @@
-import type {
-  AppSettings,
-  ApplyModOrderRecommendationInput,
-  BootstrapPayload,
-  CreateProfileInput,
-  DeleteProfileInput,
-  DetectPathsInput,
-  DetectPathsResult,
-  ModLibraryResult,
-  ModOrderAnalysisResult,
-  ModOrderApplyResult,
-  ProfileCatalogResult,
-  ProfileScopedInput,
-  RenameProfileInput,
-  RimunRpc,
-  SaveProfileInput,
-  SaveProfileResult,
-  SaveSettingsInput,
-  SaveSettingsResult,
-  SwitchProfileInput,
-  ValidatePathInput,
-  ValidatePathResult,
-} from "@rimun/shared";
-
-export type RimunRpcClient = {
-  getBootstrap(): Promise<BootstrapPayload>;
-  getProfileCatalog(): Promise<ProfileCatalogResult>;
-  createProfile(input: CreateProfileInput): Promise<ProfileCatalogResult>;
-  renameProfile(input: RenameProfileInput): Promise<ProfileCatalogResult>;
-  saveProfile(input: SaveProfileInput): Promise<SaveProfileResult>;
-  deleteProfile(input: DeleteProfileInput): Promise<ProfileCatalogResult>;
-  switchProfile(input: SwitchProfileInput): Promise<ProfileCatalogResult>;
-  getModLibrary(input: ProfileScopedInput): Promise<ModLibraryResult>;
-  analyzeModOrder(input: ProfileScopedInput): Promise<ModOrderAnalysisResult>;
-  applyModOrderRecommendation(
-    input: ApplyModOrderRecommendationInput,
-  ): Promise<ModOrderApplyResult>;
-  getSettings(): Promise<AppSettings>;
-  saveSettings(input: SaveSettingsInput): Promise<SaveSettingsResult>;
-  detectPaths(input: DetectPathsInput): Promise<DetectPathsResult>;
-  validatePath(input: ValidatePathInput): Promise<ValidatePathResult>;
-};
-
-declare global {
-  interface Window {
-    __RIMUN_RPC__?: RimunRpcClient;
-  }
-}
-
-let rpcClientPromise: Promise<RimunRpcClient> | undefined;
+import type { RimunHostApi, RimunRpc } from "@rimun/shared";
 
 async function waitForElectrobunSocket(
   electroview: { bunSocket?: WebSocket | null },
@@ -116,7 +67,7 @@ async function waitForElectrobunSocket(
   throw new Error("Electrobun RPC socket is not available.");
 }
 
-async function createElectrobunRpcClient(): Promise<RimunRpcClient> {
+export async function createElectrobunHostApi(): Promise<RimunHostApi> {
   const { Electroview } = await import("electrobun/view");
   const rpc = Electroview.defineRPC<RimunRpc>({
     maxRequestTime: 10_000,
@@ -157,14 +108,8 @@ async function createElectrobunRpcClient(): Promise<RimunRpcClient> {
       callWithReadySocket(() => typedRpc.request.deleteProfile(input)),
     switchProfile: async (input) =>
       callWithReadySocket(() => typedRpc.request.switchProfile(input)),
-    getModLibrary: async (input) =>
-      callWithReadySocket(() => typedRpc.request.getModLibrary(input)),
-    analyzeModOrder: async (input) =>
-      callWithReadySocket(() => typedRpc.request.analyzeModOrder(input)),
-    applyModOrderRecommendation: async (input) =>
-      callWithReadySocket(() =>
-        typedRpc.request.applyModOrderRecommendation(input),
-      ),
+    getModSourceSnapshot: async (input) =>
+      callWithReadySocket(() => typedRpc.request.getModSourceSnapshot(input)),
     getSettings: async () =>
       callWithReadySocket(() => typedRpc.request.getSettings({})),
     saveSettings: async (input) =>
@@ -173,15 +118,7 @@ async function createElectrobunRpcClient(): Promise<RimunRpcClient> {
       callWithReadySocket(() => typedRpc.request.detectPaths(input)),
     validatePath: async (input) =>
       callWithReadySocket(() => typedRpc.request.validatePath(input)),
+    applyActivePackageIds: async (input) =>
+      callWithReadySocket(() => typedRpc.request.applyActivePackageIds(input)),
   };
-}
-
-export async function getRimunRpcClient(): Promise<RimunRpcClient> {
-  if (typeof window !== "undefined" && window.__RIMUN_RPC__) {
-    return window.__RIMUN_RPC__;
-  }
-
-  rpcClientPromise ??= createElectrobunRpcClient();
-
-  return rpcClientPromise;
 }

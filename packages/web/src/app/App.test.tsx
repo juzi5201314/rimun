@@ -1,14 +1,30 @@
 import { App } from "@/app/App";
-import { createMockRpcClient } from "@/shared/testing/createMockRpcClient";
+import { createAppRouter } from "@/app/router";
+import { createTestHostApi } from "@/shared/testing/createTestHostApi";
 import type { DetectPathsInput } from "@rimun/shared";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+function renderApp(options: {
+  hostApi?: ReturnType<typeof createTestHostApi>;
+  initialEntries?: string[];
+} = {}) {
+  render(
+    <App
+      hostApi={options.hostApi}
+      router={createAppRouter({
+        kind: "memory",
+        initialEntries: options.initialEntries,
+      })}
+    />,
+  );
+}
+
 describe("App", () => {
   it("renders profile-backed mod library data and auto-saves before switching profiles", async () => {
-    window.__RIMUN_RPC__ = createMockRpcClient();
-
-    render(<App />);
+    renderApp({
+      hostApi: createTestHostApi(),
+    });
 
     expect(
       await screen.findByRole("heading", { name: /Mod Library/i }),
@@ -25,13 +41,9 @@ describe("App", () => {
 
     await userEvent.click(pawnsCheckbox);
 
+    expect(await screen.findByTitle(/Unsaved Changes/i)).toBeInTheDocument();
     expect(
-      (await screen.findAllByText(/Unsaved Changes/i)).length,
-    ).toBeGreaterThan(0);
-    expect(
-      screen.getByText(
-        /Analysis is paused while this profile has unsaved changes/i,
-      ),
+      screen.getByText(/Analysis Paused \(Unsaved Draft\)/i),
     ).toBeInTheDocument();
 
     await userEvent.selectOptions(
@@ -64,9 +76,9 @@ describe("App", () => {
   });
 
   it("creates a new profile from the current saved snapshot", async () => {
-    window.__RIMUN_RPC__ = createMockRpcClient();
-
-    render(<App />);
+    renderApp({
+      hostApi: createTestHostApi(),
+    });
 
     expect(
       await screen.findByRole("heading", { name: /Mod Library/i }),
@@ -103,9 +115,9 @@ describe("App", () => {
   });
 
   it("blocks route navigation while the current profile has unsaved changes", async () => {
-    window.__RIMUN_RPC__ = createMockRpcClient();
-
-    render(<App />);
+    renderApp({
+      hostApi: createTestHostApi(),
+    });
 
     expect(
       await screen.findByRole("heading", { name: /Mod Library/i }),
@@ -144,7 +156,7 @@ describe("App", () => {
     const detectedInputs: DetectPathsInput[] = [];
     const savedInputs: string[] = [];
 
-    window.__RIMUN_RPC__ = createMockRpcClient({
+    const hostApi = createTestHostApi({
       bootstrap: {
         environment: {
           platform: "linux",
@@ -201,9 +213,10 @@ describe("App", () => {
       },
     });
 
-    window.history.replaceState({}, "", "/settings");
-
-    render(<App />);
+    renderApp({
+      hostApi,
+      initialEntries: ["/settings"],
+    });
 
     const installInput = await screen.findByRole("textbox", {
       name: /Installation Path/i,

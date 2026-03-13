@@ -1,15 +1,14 @@
 import type {
   AppSettings,
-  ApplyModOrderRecommendationInput,
+  ApplyActivePackageIdsInput,
+  ApplyActivePackageIdsResult,
   BootstrapPayload,
   CreateProfileInput,
   DeleteProfileInput,
   DetectPathsInput,
   DetectPathsResult,
   EmptyParams,
-  ModLibraryResult,
-  ModOrderAnalysisResult,
-  ModOrderApplyResult,
+  ModSourceSnapshot,
   ProfileCatalogResult,
   ProfileScopedInput,
   RenameProfileInput,
@@ -23,16 +22,15 @@ import type {
 } from "./schemas";
 import {
   appSettingsSchema,
-  applyModOrderRecommendationInputSchema,
+  applyActivePackageIdsInputSchema,
+  applyActivePackageIdsResultSchema,
   bootstrapPayloadSchema,
   createProfileInputSchema,
   deleteProfileInputSchema,
   detectPathsInputSchema,
   detectPathsResultSchema,
   emptyParamsSchema,
-  modLibraryResultSchema,
-  modOrderAnalysisResultSchema,
-  modOrderApplyResultSchema,
+  modSourceSnapshotSchema,
   profileCatalogResultSchema,
   profileScopedInputSchema,
   renameProfileInputSchema,
@@ -62,7 +60,7 @@ export type RpcSchema<
   messages: TMessages;
 };
 
-export type RimunBunRequests = {
+export type RimunHostRequests = {
   getBootstrap: RpcRequestDefinition<EmptyParams, BootstrapPayload>;
   getProfileCatalog: RpcRequestDefinition<EmptyParams, ProfileCatalogResult>;
   createProfile: RpcRequestDefinition<CreateProfileInput, ProfileCatalogResult>;
@@ -70,38 +68,47 @@ export type RimunBunRequests = {
   saveProfile: RpcRequestDefinition<SaveProfileInput, SaveProfileResult>;
   deleteProfile: RpcRequestDefinition<DeleteProfileInput, ProfileCatalogResult>;
   switchProfile: RpcRequestDefinition<SwitchProfileInput, ProfileCatalogResult>;
-  getModLibrary: RpcRequestDefinition<ProfileScopedInput, ModLibraryResult>;
-  analyzeModOrder: RpcRequestDefinition<
+  getModSourceSnapshot: RpcRequestDefinition<
     ProfileScopedInput,
-    ModOrderAnalysisResult
-  >;
-  applyModOrderRecommendation: RpcRequestDefinition<
-    ApplyModOrderRecommendationInput,
-    ModOrderApplyResult
+    ModSourceSnapshot
   >;
   getSettings: RpcRequestDefinition<EmptyParams, AppSettings>;
   saveSettings: RpcRequestDefinition<SaveSettingsInput, SaveSettingsResult>;
   detectPaths: RpcRequestDefinition<DetectPathsInput, DetectPathsResult>;
   validatePath: RpcRequestDefinition<ValidatePathInput, ValidatePathResult>;
+  applyActivePackageIds: RpcRequestDefinition<
+    ApplyActivePackageIdsInput,
+    ApplyActivePackageIdsResult
+  >;
 };
 
-export type RimunBunMessages = Record<never, never>;
+export type RimunHostMessages = Record<never, never>;
 
-export type RimunWebviewRequests = Record<never, never>;
-
-export type RimunWebviewMessages = {
-  settingsUpdated: RpcMessageDefinition<{ settings: AppSettings }>;
-  pathDetectionCompleted: RpcMessageDefinition<{ result: DetectPathsResult }>;
+export type RimunHostContract = {
+  bun: RpcSchema<RimunHostRequests, RimunHostMessages>;
+  webview: RpcSchema<Record<never, never>, Record<never, never>>;
 };
 
-export type RimunRpcContract = {
-  bun: RpcSchema<RimunBunRequests, RimunBunMessages>;
-  webview: RpcSchema<RimunWebviewRequests, RimunWebviewMessages>;
+export type RimunRpc = RimunHostContract;
+
+export type RimunHostApi = {
+  getBootstrap(): Promise<BootstrapPayload>;
+  getProfileCatalog(): Promise<ProfileCatalogResult>;
+  createProfile(input: CreateProfileInput): Promise<ProfileCatalogResult>;
+  renameProfile(input: RenameProfileInput): Promise<ProfileCatalogResult>;
+  saveProfile(input: SaveProfileInput): Promise<SaveProfileResult>;
+  deleteProfile(input: DeleteProfileInput): Promise<ProfileCatalogResult>;
+  switchProfile(input: SwitchProfileInput): Promise<ProfileCatalogResult>;
+  getModSourceSnapshot(input: ProfileScopedInput): Promise<ModSourceSnapshot>;
+  getSettings(): Promise<AppSettings>;
+  saveSettings(input: SaveSettingsInput): Promise<SaveSettingsResult>;
+  detectPaths(input: DetectPathsInput): Promise<DetectPathsResult>;
+  validatePath(input: ValidatePathInput): Promise<ValidatePathResult>;
+  applyActivePackageIds(
+    input: ApplyActivePackageIdsInput,
+  ): Promise<ApplyActivePackageIdsResult>;
 };
 
-export type RimunRpc = RimunRpcContract;
-
-// 统一导出 schema map，方便 desktop/web 在 bridge 边界做运行时校验。
 export const rimunRpcSchemas = {
   bun: {
     requests: {
@@ -133,17 +140,9 @@ export const rimunRpcSchemas = {
         params: switchProfileInputSchema,
         response: profileCatalogResultSchema,
       },
-      getModLibrary: {
+      getModSourceSnapshot: {
         params: profileScopedInputSchema,
-        response: modLibraryResultSchema,
-      },
-      analyzeModOrder: {
-        params: profileScopedInputSchema,
-        response: modOrderAnalysisResultSchema,
-      },
-      applyModOrderRecommendation: {
-        params: applyModOrderRecommendationInputSchema,
-        response: modOrderApplyResultSchema,
+        response: modSourceSnapshotSchema,
       },
       getSettings: {
         params: emptyParamsSchema,
@@ -161,22 +160,15 @@ export const rimunRpcSchemas = {
         params: validatePathInputSchema,
         response: validatePathResultSchema,
       },
+      applyActivePackageIds: {
+        params: applyActivePackageIdsInputSchema,
+        response: applyActivePackageIdsResultSchema,
+      },
     },
     messages: {},
   },
   webview: {
     requests: {},
-    messages: {
-      settingsUpdated: {
-        payload: emptyParamsSchema.extend({
-          settings: appSettingsSchema,
-        }),
-      },
-      pathDetectionCompleted: {
-        payload: emptyParamsSchema.extend({
-          result: detectPathsResultSchema,
-        }),
-      },
-    },
+    messages: {},
   },
 } as const;

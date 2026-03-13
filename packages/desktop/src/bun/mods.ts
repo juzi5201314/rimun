@@ -2,16 +2,23 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { readdir } from "node:fs/promises";
 import { availableParallelism } from "node:os";
 import { join, win32 } from "node:path";
+import {
+  buildModLibraryFromSnapshot,
+  parseModsConfigXml,
+  replaceActiveModsBlock,
+} from "@rimun/domain";
 import type {
   AppError,
   ExecutionEnvironment,
-  ModDependencyMetadata,
   ModLibraryResult,
-  ModRecord,
   ModSource,
+  ModSourceSnapshot,
+  ModSourceSnapshotEntry,
   PathSelection,
 } from "@rimun/shared";
 import { getExecutionEnvironment, windowsPathToWslPath } from "./platform";
+
+export { parseAboutXml, parseModsConfigXml } from "@rimun/domain";
 
 type ScanTask = {
   entryName: string;
@@ -20,17 +27,8 @@ type ScanTask = {
   source: ModSource;
 };
 
-type ParsedAbout = ReturnType<typeof parseAboutXml>;
-
-type ScannedModFragment = {
-  aboutWindowsPath: string;
+type ScannedModFragment = ModSourceSnapshotEntry & {
   entryName: string;
-  hasAboutXml: boolean;
-  modReadablePath: string;
-  modWindowsPath: string;
-  notes: string[];
-  parsedAbout: ParsedAbout | null;
-  source: ModSource;
 };
 
 type ScanChunkRequest = {
@@ -79,8 +77,6 @@ type WriteActiveModsOptions = {
   toReadablePath?: (windowsPath: string) => string | null;
 };
 
-const CORE_PACKAGE_ID = "ludeon.rimworld";
-const OFFICIAL_EXPANSION_PACKAGE_ID_PREFIX = `${CORE_PACKAGE_ID}.`;
 const SCAN_CHUNK_SIZE = 24;
 
 type ModScanProfile = {
@@ -133,85 +129,6 @@ function createParsedActivePackageIds(
   return {
     activePackageIds: new Set(normalizedActivePackageIds),
     activePackageIdsOrdered: normalizedActivePackageIds,
-  };
-}
-
-function normalizeOfficialExpansionPackageId(value: string | null) {
-  const normalizedValue = normalizePackageId(value);
-
-  if (!normalizedValue || normalizedValue === CORE_PACKAGE_ID) {
-    return null;
-  }
-
-  if (normalizedValue.startsWith(OFFICIAL_EXPANSION_PACKAGE_ID_PREFIX)) {
-    return normalizedValue;
-  }
-
-  return `${OFFICIAL_EXPANSION_PACKAGE_ID_PREFIX}${normalizedValue}`;
-}
-
-function toKnownExpansionId(packageId: string | null) {
-  const normalizedPackageId = normalizePackageId(packageId);
-
-  if (
-    !normalizedPackageId ||
-    normalizedPackageId === CORE_PACKAGE_ID ||
-    !normalizedPackageId.startsWith(OFFICIAL_EXPANSION_PACKAGE_ID_PREFIX)
-  ) {
-    return null;
-  }
-
-  return normalizedPackageId.slice(OFFICIAL_EXPANSION_PACKAGE_ID_PREFIX.length);
-}
-
-function mergeConfiguredActivePackageIds(
-  activePackageIds: string[],
-  officialExpansionPackageIds: string[],
-) {
-  const normalizedActivePackageIds =
-    createParsedActivePackageIds(activePackageIds).activePackageIdsOrdered;
-  const normalizedOfficialExpansionPackageIds = createParsedActivePackageIds(
-    officialExpansionPackageIds,
-  ).activePackageIdsOrdered;
-  const mergedPackageIds: string[] = [];
-  const seen = new Set<string>();
-
-  const pushPackageId = (packageId: string) => {
-    if (!packageId || seen.has(packageId)) {
-      return;
-    }
-
-    seen.add(packageId);
-    mergedPackageIds.push(packageId);
-  };
-
-  if (normalizedActivePackageIds.includes(CORE_PACKAGE_ID)) {
-    pushPackageId(CORE_PACKAGE_ID);
-  }
-
-  for (const packageId of normalizedOfficialExpansionPackageIds) {
-    pushPackageId(packageId);
-  }
-
-  for (const packageId of normalizedActivePackageIds) {
-    pushPackageId(packageId);
-  }
-
-  return mergedPackageIds;
-}
-
-function splitActivePackageIdsForConfig(activePackageIds: string[]) {
-  const normalizedActivePackageIds =
-    createParsedActivePackageIds(activePackageIds).activePackageIdsOrdered;
-  const knownExpansionIds = normalizedActivePackageIds
-    .map((packageId) => toKnownExpansionId(packageId))
-    .filter((value): value is string => Boolean(value));
-
-  return {
-    activeModsPackageIds: normalizedActivePackageIds.filter(
-      (packageId) => toKnownExpansionId(packageId) === null,
-    ),
-    knownExpansionIds,
   };
 }
 
@@ -330,256 +247,6 @@ function readXmlFileWithEncoding(filePath: string) {
   };
 }
 
-function decodeXmlEntities(value: string) {
-  return value
-    .replaceAll("&lt;", "<")
-    .replaceAll("&gt;", ">")
-    .replaceAll("&quot;", '"')
-    .replaceAll("&apos;", "'")
-    .replaceAll("&amp;", "&");
-}
-
-function stripXmlControlCharacters(value: string, replacement: "" | " ") {
-  let normalized = "";
-
-  for (const character of value) {
-    const codePoint = character.codePointAt(0) ?? 0;
-    const isNullCharacter = codePoint === 0;
-    const isBlockedControlCharacter =
-      (codePoint >= 0x01 && codePoint <= 0x08) ||
-      codePoint === 0x0b ||
-      codePoint === 0x0c ||
-      (codePoint >= 0x0e && codePoint <= 0x1f);
-
-    if (isNullCharacter || isBlockedControlCharacter) {
-      normalized += replacement;
-      continue;
-    }
-
-    normalized += character;
-  }
-
-  return normalized;
-}
-
-function normalizeText(value: string) {
-  return stripXmlControlCharacters(
-    decodeXmlEntities(value.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")),
-    " ",
-  )
-    .replace(/<[^>]+>/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function normalizeMultilineText(value: string) {
-  return stripXmlControlCharacters(
-    decodeXmlEntities(value.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")),
-    "",
-  )
-    .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<\/p>/gi, "\n\n")
-    .replace(/<[^>]+>/g, "")
-    .replace(/\r\n/g, "\n")
-    .split("\n")
-    .map((line) => line.trimEnd())
-    .join("\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-}
-
-function normalizePackageId(value: string | null) {
-  return value?.trim().toLowerCase() ?? null;
-}
-
-function extractTagText(xml: string, tagName: string) {
-  const match = new RegExp(`<${tagName}>([\\s\\S]*?)</${tagName}>`, "i").exec(
-    xml,
-  );
-
-  return match ? normalizeText(match[1]) || null : null;
-}
-
-function extractTagMultilineText(xml: string, tagName: string) {
-  const match = new RegExp(`<${tagName}>([\\s\\S]*?)</${tagName}>`, "i").exec(
-    xml,
-  );
-
-  return match ? normalizeMultilineText(match[1]) || null : null;
-}
-
-function extractTagList(xml: string, tagName: string) {
-  const match = new RegExp(`<${tagName}>([\\s\\S]*?)</${tagName}>`, "i").exec(
-    xml,
-  );
-
-  if (!match) {
-    return [];
-  }
-
-  return [...match[1].matchAll(/<li>([\s\S]*?)<\/li>/gi)]
-    .map((entry) => normalizeText(entry[1]))
-    .filter(Boolean);
-}
-
-// 只解析当前 UI 需要的 About.xml 基础字段，避免在 bridge 层引入重量级 XML 依赖。
-export function parseAboutXml(xml: string) {
-  const authors = extractTagList(xml, "authors");
-  const authorText = extractTagText(xml, "author");
-  const supportedVersions = extractTagList(xml, "supportedVersions");
-  const packageId = extractTagText(xml, "packageId");
-
-  return {
-    name: extractTagText(xml, "name"),
-    packageId,
-    author:
-      authors.length > 0
-        ? authors.join(", ")
-        : authorText
-          ? normalizeText(authorText)
-          : null,
-    version:
-      extractTagText(xml, "modVersion") ??
-      extractTagText(xml, "targetVersion") ??
-      supportedVersions[0] ??
-      null,
-    description: extractTagMultilineText(xml, "description"),
-    dependencyMetadata: {
-      packageIdNormalized: normalizePackageId(packageId),
-      dependencies: extractTagList(xml, "modDependencies").map((value) =>
-        value.toLowerCase(),
-      ),
-      loadAfter: extractTagList(xml, "loadAfter").map((value) =>
-        value.toLowerCase(),
-      ),
-      loadBefore: extractTagList(xml, "loadBefore").map((value) =>
-        value.toLowerCase(),
-      ),
-      forceLoadAfter: extractTagList(xml, "forceLoadAfter").map((value) =>
-        value.toLowerCase(),
-      ),
-      forceLoadBefore: extractTagList(xml, "forceLoadBefore").map((value) =>
-        value.toLowerCase(),
-      ),
-      incompatibleWith: extractTagList(xml, "incompatibleWith").map((value) =>
-        value.toLowerCase(),
-      ),
-      supportedVersions,
-    } satisfies ModDependencyMetadata,
-  };
-}
-
-export function parseModsConfigXml(xml: string): ParsedModsConfig {
-  const activePackageIds = extractTagList(xml, "activeMods");
-  const officialExpansionPackageIds = extractTagList(xml, "knownExpansions")
-    .map((value) => normalizeOfficialExpansionPackageId(value))
-    .filter((value): value is string => Boolean(value));
-
-  return createParsedActivePackageIds(
-    mergeConfiguredActivePackageIds(
-      activePackageIds,
-      officialExpansionPackageIds,
-    ),
-  );
-}
-
-function escapeXmlText(value: string) {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&apos;");
-}
-
-function buildActiveModsXml(activePackageIds: string[]) {
-  if (activePackageIds.length === 0) {
-    return "  <activeMods />\n";
-  }
-
-  return [
-    "  <activeMods>",
-    ...activePackageIds.map(
-      (packageId) => `    <li>${escapeXmlText(packageId)}</li>`,
-    ),
-    "  </activeMods>",
-  ].join("\n");
-}
-
-function buildKnownExpansionsXml(knownExpansionIds: string[]) {
-  if (knownExpansionIds.length === 0) {
-    return "  <knownExpansions />\n";
-  }
-
-  return [
-    "  <knownExpansions>",
-    ...knownExpansionIds.map(
-      (knownExpansionId) => `    <li>${escapeXmlText(knownExpansionId)}</li>`,
-    ),
-    "  </knownExpansions>",
-  ].join("\n");
-}
-
-function replaceXmlListBlock(
-  xml: string,
-  tagName: string,
-  blockContent: string,
-) {
-  const tagPattern = new RegExp(`<${tagName}\\b[\\s\\S]*?<\\/${tagName}>`, "i");
-  const selfClosingPattern = new RegExp(`<${tagName}\\s*\\/>`, "i");
-  const closingRootPattern = /<\/ModsConfigData>/i;
-
-  if (tagPattern.test(xml)) {
-    return xml.replace(tagPattern, blockContent);
-  }
-
-  if (selfClosingPattern.test(xml)) {
-    return xml.replace(selfClosingPattern, blockContent.trim());
-  }
-
-  if (closingRootPattern.test(xml)) {
-    return xml.replace(
-      closingRootPattern,
-      `${blockContent}\n</ModsConfigData>`,
-    );
-  }
-
-  return null;
-}
-
-function replaceActiveModsBlock(xml: string, activePackageIds: string[]) {
-  const { activeModsPackageIds, knownExpansionIds } =
-    splitActivePackageIdsForConfig(activePackageIds);
-  const activeModsBlock = buildActiveModsXml(activeModsPackageIds);
-  const knownExpansionsBlock = buildKnownExpansionsXml(knownExpansionIds);
-
-  const xmlWithActiveMods =
-    replaceXmlListBlock(xml, "activeMods", activeModsBlock) ??
-    [
-      '<?xml version="1.0" encoding="utf-8"?>',
-      "<ModsConfigData>",
-      activeModsBlock,
-      "</ModsConfigData>",
-      "",
-    ].join("\n");
-
-  return (
-    replaceXmlListBlock(
-      xmlWithActiveMods,
-      "knownExpansions",
-      knownExpansionsBlock,
-    ) ??
-    [
-      '<?xml version="1.0" encoding="utf-8"?>',
-      "<ModsConfigData>",
-      activeModsBlock,
-      knownExpansionsBlock,
-      "</ModsConfigData>",
-      "",
-    ].join("\n")
-  );
-}
-
 function encodeXmlContent(xml: string, encoding: XmlEncoding) {
   if (encoding === "utf16le") {
     return Buffer.concat([
@@ -593,12 +260,6 @@ function encodeXmlContent(xml: string, encoding: XmlEncoding) {
   }
 
   return Buffer.from(xml, "utf8");
-}
-
-function isOfficialMod(source: ModSource, packageId: string | null) {
-  return source === "installation" && packageId?.startsWith("ludeon.rimworld")
-    ? true
-    : source === "installation" && packageId === null;
 }
 
 export function createReadablePathResolver() {
@@ -679,40 +340,40 @@ async function scanModTask(task: ScanTask) {
   );
 
   try {
-    const parsedAbout = parseAboutXml(await readXmlFile(aboutReadablePath));
+    const aboutXmlText = await readXmlFile(aboutReadablePath);
 
     return {
-      aboutWindowsPath,
       entryName: task.entryName,
       hasAboutXml: true,
+      manifestPath: aboutWindowsPath,
+      aboutXmlText,
       modReadablePath: task.modReadablePath,
       modWindowsPath: task.modWindowsPath,
       notes: [],
-      parsedAbout,
       source: task.source,
     } satisfies ScannedModFragment;
   } catch (error) {
     if (isMissingFileError(error)) {
       return {
-        aboutWindowsPath,
         entryName: task.entryName,
         hasAboutXml: false,
+        manifestPath: null,
+        aboutXmlText: null,
         modReadablePath: task.modReadablePath,
         modWindowsPath: task.modWindowsPath,
         notes: ["About/About.xml was not found."],
-        parsedAbout: null,
         source: task.source,
       } satisfies ScannedModFragment;
     }
 
     return {
-      aboutWindowsPath,
       entryName: task.entryName,
       hasAboutXml: true,
+      manifestPath: aboutWindowsPath,
+      aboutXmlText: null,
       modReadablePath: task.modReadablePath,
       modWindowsPath: task.modWindowsPath,
       notes: [`About/About.xml could not be read: ${toErrorMessage(error)}`],
-      parsedAbout: null,
       source: task.source,
     } satisfies ScannedModFragment;
   }
@@ -858,15 +519,6 @@ function buildWorkerSource() {
     ${decodeUtf16Le.toString()}
     ${decodeUtf16Be.toString()}
     ${decodeXmlFileContent.toString()}
-    ${decodeXmlEntities.toString()}
-    ${stripXmlControlCharacters.toString()}
-    ${normalizePackageId.toString()}
-    ${normalizeText.toString()}
-    ${normalizeMultilineText.toString()}
-    ${extractTagText.toString()}
-    ${extractTagMultilineText.toString()}
-    ${extractTagList.toString()}
-    ${parseAboutXml.toString()}
     ${toErrorMessage.toString()}
 
     function isNodeErrorWithCode(error) {
@@ -887,21 +539,17 @@ function buildWorkerSource() {
       const readStart = performance.now();
 
       try {
-        const xml = await readXmlFile(aboutReadablePath);
+        const aboutXmlText = await readXmlFile(aboutReadablePath);
         const readMs = performance.now() - readStart;
-        const parseStart = performance.now();
-        const parsedAbout = parseAboutXml(xml);
-        const parseMs = performance.now() - parseStart;
 
         return {
-          aboutWindowsPath,
           entryName: task.entryName,
           hasAboutXml: true,
+          manifestPath: aboutWindowsPath,
+          aboutXmlText,
           modReadablePath: task.modReadablePath,
           modWindowsPath: task.modWindowsPath,
-          parseMs,
           notes: [],
-          parsedAbout,
           readMs,
           source: task.source,
         };
@@ -910,28 +558,26 @@ function buildWorkerSource() {
 
         if (isMissingFileError(error)) {
           return {
-            aboutWindowsPath,
             entryName: task.entryName,
             hasAboutXml: false,
+            manifestPath: null,
+            aboutXmlText: null,
             modReadablePath: task.modReadablePath,
             modWindowsPath: task.modWindowsPath,
-            parseMs: 0,
             notes: ["About/About.xml was not found."],
-            parsedAbout: null,
             readMs,
             source: task.source,
           };
         }
 
         return {
-          aboutWindowsPath,
           entryName: task.entryName,
           hasAboutXml: true,
+          manifestPath: aboutWindowsPath,
+          aboutXmlText: null,
           modReadablePath: task.modReadablePath,
           modWindowsPath: task.modWindowsPath,
-          parseMs: 0,
           notes: [\`About/About.xml could not be read: \${toErrorMessage(error)}\`],
-          parsedAbout: null,
           readMs,
           source: task.source,
         };
@@ -944,14 +590,11 @@ function buildWorkerSource() {
       try {
         const fragments = [];
         let readMs = 0;
-        let parseMs = 0;
 
         for (const task of request.tasks) {
           const fragment = await scanTask(task);
           readMs += fragment.readMs;
-          parseMs += fragment.parseMs;
           delete fragment.readMs;
-          delete fragment.parseMs;
           fragments.push(fragment);
         }
 
@@ -960,7 +603,7 @@ function buildWorkerSource() {
           error: null,
           fragments,
           metrics: {
-            parseMs,
+            parseMs: 0,
             readMs,
           },
         });
@@ -1103,45 +746,6 @@ async function runWorkerChunksWithPool(chunks: ScanTask[][], poolSize: number) {
   });
 }
 
-function createModRecord(
-  fragment: ScannedModFragment,
-  activePackageIds: Set<string>,
-): ModRecord {
-  return {
-    id: `${fragment.source}:${fragment.parsedAbout?.packageId ?? fragment.entryName}`,
-    name: fragment.parsedAbout?.name ?? fragment.entryName,
-    packageId: fragment.parsedAbout?.packageId ?? null,
-    author: fragment.parsedAbout?.author ?? null,
-    version: fragment.parsedAbout?.version ?? null,
-    description: fragment.parsedAbout?.description ?? null,
-    source: fragment.source,
-    windowsPath: fragment.modWindowsPath,
-    wslPath: fragment.modReadablePath.startsWith("/")
-      ? fragment.modReadablePath
-      : null,
-    manifestPath: fragment.hasAboutXml ? fragment.aboutWindowsPath : null,
-    enabled: fragment.parsedAbout?.packageId
-      ? activePackageIds.has(fragment.parsedAbout.packageId.toLowerCase())
-      : false,
-    isOfficial: isOfficialMod(
-      fragment.source,
-      fragment.parsedAbout?.packageId ?? null,
-    ),
-    hasAboutXml: fragment.hasAboutXml,
-    dependencyMetadata: fragment.parsedAbout?.dependencyMetadata ?? {
-      packageIdNormalized: null,
-      dependencies: [],
-      loadAfter: [],
-      loadBefore: [],
-      forceLoadAfter: [],
-      forceLoadBefore: [],
-      incompatibleWith: [],
-      supportedVersions: [],
-    },
-    notes: fragment.notes,
-  };
-}
-
 async function scanModFragments(
   tasks: ScanTask[],
   environment: ExecutionEnvironment,
@@ -1190,10 +794,10 @@ async function scanModFragments(
   }
 }
 
-export async function scanModLibrary(
+export async function readModSourceSnapshot(
   selection: PathSelection | null,
   options: ScanModLibraryOptions = {},
-): Promise<ModLibraryResult> {
+): Promise<ModSourceSnapshot> {
   const totalStart = performance.now();
   const environment = options.environment ?? getExecutionEnvironment();
   const toReadablePath = options.toReadablePath ?? createReadablePathResolver();
@@ -1230,7 +834,7 @@ export async function scanModLibrary(
         modsConfigPath,
       },
       activePackageIds: [],
-      mods: [],
+      entries: [],
       errors,
       requiresConfiguration: true,
     };
@@ -1266,7 +870,6 @@ export async function scanModLibrary(
     errors,
   );
   const activeModsConfig = await activePackageIdsPromise;
-  const activePackageIds = activeModsConfig.activePackageIds;
   const activePackageIdsOrdered = activeModsConfig.activePackageIdsOrdered;
   const configMs = performance.now() - configStart;
   const [installationTasks, installationDataTasks, workshopTasks] =
@@ -1292,16 +895,19 @@ export async function scanModLibrary(
   );
   const workerMs = performance.now() - workerStart;
   const buildStart = performance.now();
-  const mods = fragments
-    .map((fragment) => createModRecord(fragment, activePackageIds))
-    .sort((left, right) => left.name.localeCompare(right.name));
+  const entries = [...fragments].sort((left, right) =>
+    left.entryName.localeCompare(right.entryName),
+  );
   const buildResultMs = performance.now() - buildStart;
   const totalMs = performance.now() - totalStart;
-  const notesCount = mods.reduce((count, mod) => count + mod.notes.length, 0);
+  const notesCount = entries.reduce(
+    (count, entry) => count + entry.notes.length,
+    0,
+  );
 
   logModScanProfile({
     errors,
-    modsCount: mods.length,
+    modsCount: entries.length,
     notesCount,
     poolSize,
     profile: {
@@ -1330,10 +936,19 @@ export async function scanModLibrary(
       modsConfigPath,
     },
     activePackageIds: activePackageIdsOrdered,
-    mods,
+    entries,
     errors,
     requiresConfiguration: false,
   };
+}
+
+export async function scanModLibrary(
+  selection: PathSelection | null,
+  options: ScanModLibraryOptions = {},
+): Promise<ModLibraryResult> {
+  return buildModLibraryFromSnapshot(
+    await readModSourceSnapshot(selection, options),
+  );
 }
 
 export function writeActiveModsToConfig(

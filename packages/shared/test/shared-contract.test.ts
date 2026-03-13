@@ -5,8 +5,8 @@ import {
   bootstrapPayloadSchema,
   createProfileInputSchema,
   detectPathsResultSchema,
-  modLibraryResultSchema,
   modOrderAnalysisResultSchema,
+  modSourceSnapshotSchema,
   profileCatalogResultSchema,
   profileScopedInputSchema,
   rimunRpcSchemas,
@@ -100,8 +100,8 @@ describe("shared schemas", () => {
     expect(parsed.errors).toHaveLength(1);
   });
 
-  it("accepts a mod library payload with installation and workshop mods", () => {
-    const parsed = modLibraryResultSchema.parse({
+  it("accepts a mod source snapshot payload", () => {
+    const parsed = modSourceSnapshotSchema.parse({
       environment: {
         platform: "linux",
         isWsl: true,
@@ -125,34 +125,19 @@ describe("shared schemas", () => {
           "C:\\Users\\alice\\AppData\\LocalLow\\Ludeon Studios\\RimWorld by Ludeon Studios\\Config\\ModsConfig.xml",
       },
       activePackageIds: ["ludeon.rimworld"],
-      mods: [
+      entries: [
         {
-          id: "installation:ludeon.rimworld",
-          name: "Core",
-          packageId: "ludeon.rimworld",
-          author: "Ludeon Studios",
-          version: "1.5.4062",
-          description: "Core game content",
+          entryName: "Core",
           source: "installation",
-          windowsPath:
+          modWindowsPath:
             "C:\\Program Files (x86)\\Steam\\steamapps\\common\\RimWorld\\Mods\\Core",
-          wslPath:
+          modReadablePath:
             "/mnt/c/Program Files (x86)/Steam/steamapps/common/RimWorld/Mods/Core",
           manifestPath:
             "C:\\Program Files (x86)\\Steam\\steamapps\\common\\RimWorld\\Mods\\Core\\About\\About.xml",
-          enabled: true,
-          isOfficial: true,
           hasAboutXml: true,
-          dependencyMetadata: {
-            packageIdNormalized: "ludeon.rimworld",
-            dependencies: [],
-            loadAfter: [],
-            loadBefore: [],
-            forceLoadAfter: [],
-            forceLoadBefore: [],
-            incompatibleWith: [],
-            supportedVersions: [],
-          },
+          aboutXmlText:
+            "<ModMetaData><name>Core</name><packageId>ludeon.rimworld</packageId></ModMetaData>",
           notes: [],
         },
       ],
@@ -160,8 +145,8 @@ describe("shared schemas", () => {
       requiresConfiguration: false,
     });
 
-    expect(parsed.mods).toHaveLength(1);
-    expect(parsed.mods[0]?.source).toBe("installation");
+    expect(parsed.entries).toHaveLength(1);
+    expect(parsed.entries[0]?.source).toBe("installation");
     expect(parsed.activePackageIds).toEqual(["ludeon.rimworld"]);
   });
 
@@ -274,64 +259,14 @@ describe("shared schemas", () => {
       applyToGame: true,
     });
     const result = saveProfileResultSchema.parse({
-      profile: {
-        id: "default",
-        name: "Default",
-        createdAt: "2026-03-13T10:00:00.000Z",
-        updatedAt: "2026-03-13T10:30:00.000Z",
-      },
-      modLibrary: {
-        environment: {
-          platform: "linux",
-          isWsl: true,
-          wslDistro: "Ubuntu",
-        },
-        selection: {
-          channel: "steam",
-          installationPath:
-            "C:\\Program Files (x86)\\Steam\\steamapps\\common\\RimWorld",
-          workshopPath:
-            "C:\\Program Files (x86)\\Steam\\steamapps\\workshop\\content\\294100",
-          configPath: null,
-        },
-        scannedAt: "2026-03-13T10:30:00.000Z",
-        scannedRoots: {
-          installationModsPath:
-            "C:\\Program Files (x86)\\Steam\\steamapps\\common\\RimWorld\\Mods",
-          workshopPath:
-            "C:\\Program Files (x86)\\Steam\\steamapps\\workshop\\content\\294100",
-          modsConfigPath:
-            "C:\\Users\\alice\\AppData\\LocalLow\\Ludeon Studios\\RimWorld by Ludeon Studios\\Config\\ModsConfig.xml",
-        },
-        activePackageIds: ["ludeon.rimworld", "unlimitedhugs.hugslib"],
-        mods: [],
-        errors: [],
-        requiresConfiguration: false,
-      },
-      analysis: {
-        analyzedAt: "2026-03-13T10:30:00.000Z",
-        currentActivePackageIds: ["ludeon.rimworld", "unlimitedhugs.hugslib"],
-        recommendedActivePackageIds: [
-          "ludeon.rimworld",
-          "unlimitedhugs.hugslib",
-        ],
-        recommendedOrderPackageIds: [
-          "ludeon.rimworld",
-          "unlimitedhugs.hugslib",
-        ],
-        missingInstalledInactiveDependencies: [],
-        missingUnavailableDependencies: [],
-        diagnostics: [],
-        explanations: [],
-        edges: [],
-        isOptimal: true,
-        hasBlockingIssues: false,
-        sortDifferenceCount: 0,
-      },
+      id: "default",
+      name: "Default",
+      createdAt: "2026-03-13T10:00:00.000Z",
+      updatedAt: "2026-03-13T10:30:00.000Z",
     });
 
     expect(input.activePackageIds).toHaveLength(2);
-    expect(result.profile.updatedAt).toBe("2026-03-13T10:30:00.000Z");
+    expect(result.updatedAt).toBe("2026-03-13T10:30:00.000Z");
   });
 });
 
@@ -340,13 +275,12 @@ describe("rpc schema map", () => {
     const requests = rimunRpcSchemas.bun.requests;
 
     expect(Object.keys(requests).sort()).toEqual([
-      "analyzeModOrder",
-      "applyModOrderRecommendation",
+      "applyActivePackageIds",
       "createProfile",
       "deleteProfile",
       "detectPaths",
       "getBootstrap",
-      "getModLibrary",
+      "getModSourceSnapshot",
       "getProfileCatalog",
       "getSettings",
       "renameProfile",

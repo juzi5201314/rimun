@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "electrobun dev",
+    "dev:host": "bun run src/bun/dev-host.ts",
     "dev:watch": "electrobun dev --watch",
     "run": "electrobun run",
     "build": "electrobun build --env=stable",
@@ -13,6 +14,7 @@
     "check": "tsc --noEmit"
   },
   "dependencies": {
+    "@rimun/domain": "workspace:*",
     "@rimun/shared": "workspace:*",
     "drizzle-orm": "^0.44.5",
     "electrobun": "1.15.1"

@@ -11,6 +11,7 @@
     "check": "tsc --noEmit"
   },
   "dependencies": {
+    "@rimun/domain": "workspace:*",
     "@radix-ui/react-checkbox": "^1.3.3",
     "@radix-ui/react-slot": "^1.2.4",
     "@rimun/shared": "workspace:*",

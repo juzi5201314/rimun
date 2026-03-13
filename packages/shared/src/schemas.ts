@@ -73,6 +73,10 @@ export const windowsAbsolutePathSchema = z
     "Expected an absolute Windows path such as C:\\Games\\RimWorld",
   );
 
+export const readableAbsolutePathSchema = z
+  .string()
+  .min(1, "Readable path is required");
+
 export const wslAbsolutePathSchema = z
   .string()
   .min(1, "WSL path is required")
@@ -146,6 +150,34 @@ export const modRecordSchema = z.object({
   notes: z.array(z.string().min(1)).default([]),
 });
 
+export const modSourceSnapshotEntrySchema = z.object({
+  entryName: z.string().trim().min(1),
+  source: modSourceSchema,
+  modWindowsPath: windowsAbsolutePathSchema,
+  modReadablePath: readableAbsolutePathSchema,
+  manifestPath: windowsAbsolutePathSchema.nullable(),
+  hasAboutXml: z.boolean(),
+  aboutXmlText: z.string().min(1).nullable(),
+  notes: z.array(z.string().min(1)).default([]),
+});
+
+export const scannedRootsSchema = z.object({
+  installationModsPath: windowsAbsolutePathSchema.nullable(),
+  workshopPath: windowsAbsolutePathSchema.nullable(),
+  modsConfigPath: windowsAbsolutePathSchema.nullable(),
+});
+
+export const modSourceSnapshotSchema = z.object({
+  environment: executionEnvironmentSchema,
+  selection: pathSelectionSchema.nullable(),
+  scannedAt: isoDateTimeSchema,
+  scannedRoots: scannedRootsSchema,
+  activePackageIds: z.array(z.string().trim().min(1)).default([]),
+  entries: z.array(modSourceSnapshotEntrySchema),
+  errors: z.array(appErrorSchema),
+  requiresConfiguration: z.boolean(),
+});
+
 export const modOrderEdgeSchema = z.object({
   fromPackageId: z.string().trim().min(1),
   toPackageId: z.string().trim().min(1),
@@ -204,11 +236,7 @@ export const modLibraryResultSchema = z.object({
   environment: executionEnvironmentSchema,
   selection: pathSelectionSchema.nullable(),
   scannedAt: isoDateTimeSchema,
-  scannedRoots: z.object({
-    installationModsPath: windowsAbsolutePathSchema.nullable(),
-    workshopPath: windowsAbsolutePathSchema.nullable(),
-    modsConfigPath: windowsAbsolutePathSchema.nullable(),
-  }),
+  scannedRoots: scannedRootsSchema,
   activePackageIds: z.array(z.string().trim().min(1)).default([]),
   mods: z.array(modRecordSchema),
   errors: z.array(appErrorSchema),
@@ -315,11 +343,15 @@ export const saveProfileInputSchema = z.object({
   applyToGame: z.boolean().default(true),
 });
 
-export const saveProfileResultSchema = z.object({
-  profile: modProfileSummarySchema,
-  modLibrary: modLibraryResultSchema,
-  analysis: modOrderAnalysisResultSchema,
+export const saveProfileResultSchema = modProfileSummarySchema;
+
+export const applyActivePackageIdsInputSchema = z.object({
+  profileId: profileIdSchema,
+  activePackageIds: z.array(z.string().trim().min(1)).default([]),
+  applyToGame: z.boolean().default(true),
 });
+
+export const applyActivePackageIdsResultSchema = modProfileSummarySchema;
 
 export type EmptyParams = z.infer<typeof emptyParamsSchema>;
 export type ProfileId = z.infer<typeof profileIdSchema>;
@@ -347,6 +379,10 @@ export type PathSelection = z.infer<typeof pathSelectionSchema>;
 export type AppSettings = z.infer<typeof appSettingsSchema>;
 export type ModDependencyMetadata = z.infer<typeof modDependencyMetadataSchema>;
 export type ModRecord = z.infer<typeof modRecordSchema>;
+export type ModSourceSnapshotEntry = z.infer<
+  typeof modSourceSnapshotEntrySchema
+>;
+export type ModSourceSnapshot = z.infer<typeof modSourceSnapshotSchema>;
 export type ModOrderEdge = z.infer<typeof modOrderEdgeSchema>;
 export type ModOrderDiagnostic = z.infer<typeof modOrderDiagnosticSchema>;
 export type ModOrderDependencyIssue = z.infer<
@@ -373,6 +409,12 @@ export type DeleteProfileInput = z.infer<typeof deleteProfileInputSchema>;
 export type SwitchProfileInput = z.infer<typeof switchProfileInputSchema>;
 export type SaveProfileInput = z.infer<typeof saveProfileInputSchema>;
 export type SaveProfileResult = z.infer<typeof saveProfileResultSchema>;
+export type ApplyActivePackageIdsInput = z.infer<
+  typeof applyActivePackageIdsInputSchema
+>;
+export type ApplyActivePackageIdsResult = z.infer<
+  typeof applyActivePackageIdsResultSchema
+>;
 export type ApplyModOrderRecommendationInput = z.infer<
   typeof applyModOrderRecommendationInputSchema
 >;
