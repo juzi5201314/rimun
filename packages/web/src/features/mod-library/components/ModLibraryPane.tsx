@@ -1,19 +1,36 @@
-import type { HomePageController } from "@/features/mod-library/hooks/useHomePageController";
+import {
+  type ColumnDropIndicator,
+  ModLibraryColumn,
+} from "@/features/mod-library/components/ModLibraryColumn";
+import { ModListRowCard } from "@/features/mod-library/components/ModListRow";
+import type {
+  HomePageController,
+  HomePageModListItem,
+} from "@/features/mod-library/hooks/useHomePageController";
+import type {
+  DropPlacement,
+  ModColumnId,
+} from "@/features/mod-library/lib/mod-list-order";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
-import { Checkbox } from "@/shared/components/ui/checkbox";
 import { Input } from "@/shared/components/ui/input";
 import { cn } from "@/shared/lib/utils";
 import {
+  DndContext,
+  type DragOverEvent,
+  DragOverlay,
+  type DragStartEvent,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import {
   AlertTriangle,
-  ArrowDown,
-  ArrowUp,
-  ArrowUpDown,
   ChevronDown,
   ChevronRight,
+  GripVertical,
   Link2,
   LoaderCircle,
-  Package,
   Plus,
   RefreshCcw,
   Save,
@@ -21,6 +38,7 @@ import {
   Sparkles,
   Trash2,
 } from "lucide-react";
+import { useMemo, useState } from "react";
 
 function ToolbarChip({
   label,
@@ -41,13 +59,117 @@ function ToolbarChip({
   );
 }
 
+function areDropIndicatorsEqual(
+  left: ColumnDropIndicator,
+  right: ColumnDropIndicator,
+) {
+  if (left === right) {
+    return true;
+  }
+
+  if (!left || !right) {
+    return false;
+  }
+
+  return (
+    left.packageId === right.packageId &&
+    left.placement === right.placement &&
+    left.targetColumn === right.targetColumn
+  );
+}
+
+function resolveDropIndicator(event: DragOverEvent): ColumnDropIndicator {
+  const over = event.over;
+  const overData = over?.data.current;
+
+  if (!overData) {
+    return null;
+  }
+
+  if (overData["type"] === "mod-column") {
+    return {
+      packageId: null,
+      placement: "end",
+      targetColumn: overData["columnId"] as ModColumnId,
+    };
+  }
+
+  if (overData["type"] !== "mod-row-drop" || !over) {
+    return null;
+  }
+
+  const translatedRect = event.active.rect.current.translated;
+  const activeMidY = translatedRect
+    ? translatedRect.top + translatedRect.height / 2
+    : over.rect.top;
+  const overMidY = over.rect.top + over.rect.height / 2;
+  const placement: DropPlacement = activeMidY >= overMidY ? "after" : "before";
+
+  return {
+    packageId: overData["packageId"] as string | null,
+    placement,
+    targetColumn: overData["columnId"] as ModColumnId,
+  };
+}
+
 export function ModLibraryPane({
   controller,
 }: {
   controller: HomePageController;
 }) {
+  const [activeDragPackageId, setActiveDragPackageId] = useState<string | null>(
+    null,
+  );
+  const [dropIndicator, setDropIndicator] = useState<ColumnDropIndicator>(null);
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 6,
+      },
+    }),
+  );
+  const draggableItemsByPackageId = useMemo(() => {
+    const nextMap = new Map<string, HomePageModListItem>();
+
+    for (const mod of [...controller.activeMods, ...controller.inactiveMods]) {
+      if (mod.packageIdNormalized && mod.isDraggable) {
+        nextMap.set(mod.packageIdNormalized, mod);
+      }
+    }
+
+    return nextMap;
+  }, [controller.activeMods, controller.inactiveMods]);
+  const activeDragItem = activeDragPackageId
+    ? (draggableItemsByPackageId.get(activeDragPackageId) ?? null)
+    : null;
+  const visibleCount =
+    controller.visibleActiveMods.length + controller.visibleInactiveMods.length;
+
   if (!controller.modLibrary) {
     return null;
+  }
+
+  function handleDragStart(event: DragStartEvent) {
+    const packageId = event.active.data.current?.["packageId"];
+
+    if (typeof packageId === "string") {
+      setActiveDragPackageId(packageId);
+    } else {
+      setActiveDragPackageId(null);
+    }
+  }
+
+  function handleDragOver(event: DragOverEvent) {
+    const nextIndicator = resolveDropIndicator(event);
+
+    setDropIndicator((current) =>
+      areDropIndicatorsEqual(current, nextIndicator) ? current : nextIndicator,
+    );
+  }
+
+  function resetDragState() {
+    setActiveDragPackageId(null);
+    setDropIndicator(null);
   }
 
   return (
@@ -62,9 +184,10 @@ export function ModLibraryPane({
               value={String(controller.draftActivePackageIds.length)}
             />
             <ToolbarChip
-              label="Visible"
-              value={String(controller.filteredMods.length)}
+              label="Inactive"
+              value={String(controller.inactiveMods.length)}
             />
+            <ToolbarChip label="Visible" value={String(visibleCount)} />
             <ToolbarChip
               label="Total"
               value={String(controller.modLibrary.mods.length)}
@@ -99,7 +222,7 @@ export function ModLibraryPane({
                     {controller.currentProfile?.name ?? "No profile selected"}
                   </span>
                   <span className="text-muted-foreground">
-                    Manage profile selection, naming, and save actions.
+                    Active column order is the exact RimWorld load order.
                   </span>
                 </div>
               </div>
@@ -213,11 +336,6 @@ export function ModLibraryPane({
                         Filters
                       </p>
                       <p className="text-xs text-muted-foreground sm:text-sm">
-                        Activation:{" "}
-                        <span className="font-medium capitalize text-foreground">
-                          {controller.activationFilter}
-                        </span>
-                        <span className="mx-2 text-border">/</span>
                         Source:{" "}
                         <span className="font-medium capitalize text-foreground">
                           {controller.sourceFilter === "all"
@@ -237,57 +355,7 @@ export function ModLibraryPane({
                   </button>
 
                   {controller.isFilterPanelOpen ? (
-                    <div className="mt-3 grid gap-3 border-t border-border/50 pt-3 lg:grid-cols-2">
-                      <div className="space-y-2">
-                        <p className="text-xs font-medium text-muted-foreground">
-                          Activation
-                        </p>
-                        <div className="flex flex-wrap gap-2">
-                          <Button
-                            variant={
-                              controller.activationFilter === "all"
-                                ? "secondary"
-                                : "outline"
-                            }
-                            size="sm"
-                            className="h-9 px-4"
-                            onClick={() =>
-                              controller.setActivationFilter("all")
-                            }
-                          >
-                            All
-                          </Button>
-                          <Button
-                            variant={
-                              controller.activationFilter === "active"
-                                ? "secondary"
-                                : "outline"
-                            }
-                            size="sm"
-                            className="h-9 px-4"
-                            onClick={() =>
-                              controller.setActivationFilter("active")
-                            }
-                          >
-                            Active
-                          </Button>
-                          <Button
-                            variant={
-                              controller.activationFilter === "inactive"
-                                ? "secondary"
-                                : "outline"
-                            }
-                            size="sm"
-                            className="h-9 px-4"
-                            onClick={() =>
-                              controller.setActivationFilter("inactive")
-                            }
-                          >
-                            Inactive
-                          </Button>
-                        </div>
-                      </div>
-
+                    <div className="mt-3 border-t border-border/50 pt-3">
                       <div className="space-y-2">
                         <p className="text-xs font-medium text-muted-foreground">
                           Source
@@ -402,15 +470,6 @@ export function ModLibraryPane({
                       Blocking Issues
                     </Badge>
                   ) : null}
-
-                  {controller.analysis.sortDifferenceCount > 0 ? (
-                    <div className="flex shrink-0 items-center gap-1.5 rounded-full border border-primary/20 bg-primary/5 px-3 py-1.5 text-xs font-medium text-primary/80">
-                      <ArrowUpDown className="h-3.5 w-3.5" />
-                      <span>
-                        {controller.analysis.sortDifferenceCount} Diffs
-                      </span>
-                    </div>
-                  ) : null}
                 </>
               ) : null}
             </div>
@@ -488,167 +547,93 @@ export function ModLibraryPane({
         </div>
       </div>
 
-      <div className="sticky top-0 z-10 flex shrink-0 items-center gap-4 border-b border-border/40 bg-background/95 px-6 py-3 text-xs font-medium text-muted-foreground backdrop-blur supports-[backdrop-filter]:bg-background/85">
-        <div className="w-11 text-center">Active</div>
-        <div className="w-12 text-center">Order</div>
-        <div className="flex-1">Mod</div>
-      </div>
-
-      <div className="no-scrollbar flex-1 select-none overflow-y-auto">
-        {controller.filteredMods.length ? (
-          controller.filteredMods.map((mod, index) => {
-            const isSelected = controller.selectedMod?.id === mod.id;
-            const packageId = mod.dependencyMetadata.packageIdNormalized;
-            const activeIndex = packageId
-              ? controller.draftActivePackageIds.indexOf(packageId)
-              : -1;
-
-            return (
-              <div
-                key={mod.id}
-                className={cn(
-                  "group flex w-full items-start gap-3 border-b border-border/10 px-6 py-3 text-left transition-all",
-                  isSelected
-                    ? "bg-primary/10 ring-1 ring-inset ring-primary/20"
-                    : index % 2 === 0
-                      ? "bg-transparent"
-                      : "bg-muted/5",
-                  "hover:bg-primary/5",
-                )}
-              >
-                <div className="flex w-11 shrink-0 justify-center pt-1">
-                  <Checkbox
-                    aria-label={`Toggle ${mod.name}`}
-                    checked={mod.enabled}
-                    disabled={!packageId || controller.isBusy}
-                    className="h-4 w-4"
-                    onChange={() => {
-                      if (packageId) {
-                        controller.toggleMod(packageId);
-                      }
-                    }}
-                    onClick={(event) => event.stopPropagation()}
-                  />
-                </div>
-
-                <div className="flex w-12 shrink-0 flex-col items-center justify-center">
-                  {mod.enabled ? (
-                    <>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-5 w-5 p-0 text-muted-foreground/50 transition-opacity hover:bg-primary/20 hover:text-primary md:opacity-0 md:group-hover:opacity-100"
-                        disabled={controller.isBusy || activeIndex === 0}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          if (packageId) {
-                            controller.moveActivePackageId(packageId, "up");
-                          }
-                        }}
-                      >
-                        <ArrowUp className="h-3 w-3" />
-                      </Button>
-                      <span className="py-1 text-xs font-semibold leading-none text-primary/80">
-                        {activeIndex + 1}
-                      </span>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-5 w-5 p-0 text-muted-foreground/50 transition-opacity hover:bg-primary/20 hover:text-primary md:opacity-0 md:group-hover:opacity-100"
-                        disabled={
-                          controller.isBusy ||
-                          activeIndex ===
-                            controller.draftActivePackageIds.length - 1
-                        }
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          if (packageId) {
-                            controller.moveActivePackageId(packageId, "down");
-                          }
-                        }}
-                      >
-                        <ArrowDown className="h-3 w-3" />
-                      </Button>
-                    </>
-                  ) : (
-                    <div className="h-5 w-5 rounded-full border border-border/40 bg-muted/10 opacity-30" />
-                  )}
-                </div>
-
-                <button
-                  type="button"
-                  className="min-w-0 flex-1 space-y-1.5 text-left"
-                  onClick={() => controller.setSelectedModId(mod.id)}
-                >
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span
-                      className={cn(
-                        "truncate text-sm font-semibold tracking-tight",
-                        !mod.enabled
-                          ? "font-medium text-muted-foreground"
-                          : "text-foreground",
-                      )}
-                    >
-                      {mod.name}
-                    </span>
-                    <div className="flex shrink-0 items-center gap-1">
-                      {mod.isOfficial ? (
-                        <div className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary ring-1 ring-inset ring-primary/20">
-                          Official
-                        </div>
-                      ) : null}
-                      {!mod.hasAboutXml ? (
-                        <div className="rounded-full bg-destructive/10 px-2 py-0.5 text-[10px] font-semibold text-destructive ring-1 ring-inset ring-destructive/20">
-                          Invalid
-                        </div>
-                      ) : null}
-                    </div>
-                  </div>
-                  <span className="truncate font-mono text-[11px] text-muted-foreground/80">
-                    {mod.packageId ?? mod.windowsPath}
-                  </span>
-                  <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                    <Badge
-                      variant="outline"
-                      className={cn(
-                        "h-6 rounded-full px-2 font-medium",
-                        mod.source === "installation"
-                          ? "border-emerald-500/30 bg-emerald-500/5 text-emerald-700"
-                          : "border-blue-500/30 bg-blue-500/5 text-blue-700",
-                      )}
-                    >
-                      {mod.source === "installation" ? "Local" : "Workshop"}
-                    </Badge>
-                    <span className="font-mono text-[11px]">
-                      {mod.version
-                        ? `Version ${mod.version}`
-                        : "Version unknown"}
-                    </span>
-                  </div>
-                </button>
-              </div>
-            );
-          })
-        ) : (
-          <div className="flex h-full items-center justify-center p-12 text-center">
-            <div className="max-w-xs space-y-4 opacity-40">
-              <div className="relative mx-auto h-16 w-16">
-                <Package className="h-full w-full text-muted-foreground" />
-                <Search className="absolute -bottom-1 -right-1 h-6 w-6 text-muted-foreground" />
-              </div>
-              <div className="space-y-1">
-                <p className="text-sm font-semibold text-foreground">
-                  No matches
-                </p>
-                <p className="text-sm leading-relaxed text-muted-foreground">
-                  Adjust your filters or search query to find the mods
-                  you&apos;re looking for.
-                </p>
-              </div>
-            </div>
+      <div className="shrink-0 border-b border-border/40 bg-background/90 px-6 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+        <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+          <div className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-background/80 px-3 py-1.5">
+            <GripVertical className="h-3.5 w-3.5" />
+            Drag between columns to enable or disable mods
           </div>
-        )}
+          <div className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-background/80 px-3 py-1.5">
+            Active column order is the exact saved load order
+          </div>
+          <div className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-background/80 px-3 py-1.5">
+            Inactive order is session-only
+          </div>
+        </div>
       </div>
+
+      <DndContext
+        sensors={sensors}
+        onDragCancel={resetDragState}
+        onDragEnd={(event) => {
+          const packageId = event.active.data.current?.["packageId"];
+          const sourceColumn = event.active.data.current?.["columnId"];
+
+          if (
+            typeof packageId === "string" &&
+            (sourceColumn === "active" || sourceColumn === "inactive") &&
+            dropIndicator
+          ) {
+            controller.handleDropMod({
+              packageId,
+              placement: dropIndicator.placement,
+              sourceColumn,
+              targetColumn: dropIndicator.targetColumn,
+              targetPackageId: dropIndicator.packageId,
+            });
+          }
+
+          resetDragState();
+        }}
+        onDragOver={handleDragOver}
+        onDragStart={handleDragStart}
+      >
+        <div className="min-h-0 flex-1 bg-background/5 p-4">
+          <div className="grid h-full min-h-0 grid-cols-2 gap-4">
+            <ModLibraryColumn
+              activeDragPackageId={activeDragPackageId}
+              columnId="inactive"
+              description="Installed but not active. Drag within this column to stage a temporary order for this session."
+              dropIndicator={dropIndicator}
+              items={controller.visibleInactiveMods}
+              selectedModId={controller.selectedMod?.id ?? null}
+              title="Inactive Mods"
+              totalCount={controller.inactiveMods.length}
+              onSelectMod={controller.setSelectedModId}
+            />
+            <ModLibraryColumn
+              activeDragPackageId={activeDragPackageId}
+              columnId="active"
+              description="Exact RimWorld load order. Top to bottom is the sequence that will be saved."
+              dropIndicator={dropIndicator}
+              items={controller.visibleActiveMods}
+              selectedModId={controller.selectedMod?.id ?? null}
+              title="Active Mods"
+              totalCount={controller.activeMods.length}
+              onSelectMod={controller.setSelectedModId}
+            />
+          </div>
+        </div>
+
+        <DragOverlay>
+          {activeDragItem ? (
+            <div className="w-[30rem] max-w-[calc(50vw-4rem)] opacity-95">
+              <ModListRowCard
+                dragHandle={
+                  <div className="flex h-8 w-8 items-center justify-center rounded-xl border border-primary/30 bg-primary/10 text-primary">
+                    <GripVertical className="h-4 w-4" />
+                  </div>
+                }
+                isDragging={false}
+                isSelected={false}
+                item={activeDragItem}
+                showDropAfter={false}
+                showDropBefore={false}
+              />
+            </div>
+          ) : null}
+        </DragOverlay>
+      </DndContext>
 
       <footer className="flex shrink-0 flex-wrap justify-between gap-3 border-t border-border/60 bg-card/20 px-6 py-3">
         <div className="flex items-center gap-4 text-xs text-muted-foreground">
@@ -663,7 +648,7 @@ export function ModLibraryPane({
           </span>
         </div>
         <div className="rounded-full bg-muted/20 px-3 py-1 text-xs font-medium text-muted-foreground">
-          {controller.filteredMods.length} Visible
+          {visibleCount} Visible
         </div>
       </footer>
     </section>

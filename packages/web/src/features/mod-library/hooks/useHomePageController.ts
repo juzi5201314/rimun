@@ -1,3 +1,11 @@
+import {
+  type DraftModOrder,
+  type DropPlacement,
+  type ModColumnId,
+  applyDropToDraftModOrder,
+  buildDefaultInactivePackageIds,
+  reconcileInactivePackageIds,
+} from "@/features/mod-library/lib/mod-list-order";
 import { useModSourceSnapshotQuery } from "@/features/mod-source/hooks/useModSourceSnapshotQuery";
 import { useDelayedBusy } from "@/shared/hooks/useDelayedBusy";
 import { useHostApi } from "@/shared/host/HostApiProvider";
@@ -9,7 +17,7 @@ import {
 } from "@rimun/domain";
 import type { ModRecord, ProfileCatalogResult } from "@rimun/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 
 function areStringArraysEqual(left: string[], right: string[]) {
   if (left.length !== right.length) {
@@ -19,28 +27,21 @@ function areStringArraysEqual(left: string[], right: string[]) {
   return left.every((item, index) => item === right[index]);
 }
 
-function moveItem(items: string[], currentIndex: number, nextIndex: number) {
-  if (
-    currentIndex < 0 ||
-    currentIndex >= items.length ||
-    nextIndex < 0 ||
-    nextIndex >= items.length ||
-    currentIndex === nextIndex
-  ) {
-    return items;
-  }
-
-  const nextItems = [...items];
-  const [movedItem] = nextItems.splice(currentIndex, 1);
-
-  if (!movedItem) {
-    return items;
-  }
-
-  nextItems.splice(nextIndex, 0, movedItem);
-
-  return nextItems;
+function sortModsByName(left: ModRecord, right: ModRecord) {
+  return left.name.localeCompare(right.name);
 }
+
+type PreparedModRecord = ModRecord & {
+  dragDisabledReason: string | null;
+  isDraggable: boolean;
+  packageIdNormalized: string | null;
+  searchText: string;
+};
+
+export type HomePageModListItem = PreparedModRecord & {
+  columnId: ModColumnId;
+  orderLabel: number | null;
+};
 
 type FeedbackTone = "success" | "warning" | "error";
 
@@ -48,6 +49,26 @@ export type HomePageFeedbackState = {
   tone: FeedbackTone;
   message: string;
 } | null;
+
+function isVisibleMod(
+  mod: PreparedModRecord,
+  sourceFilter: "all" | "local" | "workshop",
+  term: string,
+) {
+  if (sourceFilter === "local" && mod.source !== "installation") {
+    return false;
+  }
+
+  if (sourceFilter === "workshop" && mod.source !== "workshop") {
+    return false;
+  }
+
+  if (!term) {
+    return true;
+  }
+
+  return mod.searchText.includes(term);
+}
 
 export function useHomePageController() {
   const queryClient = useQueryClient();
@@ -66,11 +87,13 @@ export function useHomePageController() {
     ) ?? null;
   const modSourceSnapshotQuery = useModSourceSnapshotQuery(currentProfileId);
   const [searchQuery, setSearchQuery] = useState("");
+  const deferredSearchQuery = useDeferredValue(searchQuery);
   const [selectedModId, setSelectedModId] = useState<string | null>(null);
   const [draftProfileName, setDraftProfileName] = useState("");
-  const [draftActivePackageIds, setDraftActivePackageIds] = useState<string[]>(
-    [],
-  );
+  const [draftModOrder, setDraftModOrder] = useState<DraftModOrder>({
+    activePackageIds: [],
+    inactivePackageIds: [],
+  });
   const [feedback, setFeedback] = useState<HomePageFeedbackState>(null);
   const [isDependencyDialogOpen, setIsDependencyDialogOpen] = useState(false);
   const [isSortDialogOpen, setIsSortDialogOpen] = useState(false);
@@ -84,14 +107,12 @@ export function useHomePageController() {
   const [dismissedSortAnalysisAt, setDismissedSortAnalysisAt] = useState<
     string | null
   >(null);
-  const [activationFilter, setActivationFilter] = useState<
-    "all" | "active" | "inactive"
-  >("all");
   const [sourceFilter, setSourceFilter] = useState<
     "all" | "local" | "workshop"
   >("all");
   const [isProfilePanelOpen, setIsProfilePanelOpen] = useState(false);
   const [isFilterPanelOpen, setIsFilterPanelOpen] = useState(false);
+  const lastHydratedProfileIdRef = useRef<string | null>(null);
 
   const createProfileMutation = useMutation({
     mutationFn: async (input: { name: string; sourceProfileId: string }) => {
@@ -205,6 +226,32 @@ export function useHomePageController() {
         : undefined,
     [modSourceSnapshot],
   );
+  const packageIdCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+
+    for (const mod of modLibrary?.mods ?? []) {
+      const packageId = mod.dependencyMetadata.packageIdNormalized;
+
+      if (!packageId) {
+        continue;
+      }
+
+      counts.set(packageId, (counts.get(packageId) ?? 0) + 1);
+    }
+
+    return counts;
+  }, [modLibrary]);
+  const duplicatePackageIds = useMemo(
+    () =>
+      new Set(
+        [...packageIdCounts.entries()]
+          .filter(([, count]) => count > 1)
+          .map(([packageId]) => packageId),
+      ),
+    [packageIdCounts],
+  );
+  const draftActivePackageIds = draftModOrder.activePackageIds;
+  const draftInactivePackageIds = draftModOrder.inactivePackageIds;
   const savedProfileName = currentProfile?.name ?? "";
   const savedActivePackageIds = modLibrary?.activePackageIds ?? [];
   const isDirty =
@@ -238,9 +285,27 @@ export function useHomePageController() {
       return;
     }
 
+    const nextActivePackageIds = modLibrary.activePackageIds;
+    const nextDefaultInactivePackageIds = buildDefaultInactivePackageIds({
+      activePackageIds: nextActivePackageIds,
+      duplicatePackageIds,
+      mods: modLibrary.mods,
+    });
+
     setDraftProfileName(currentProfile.name);
-    setDraftActivePackageIds(modLibrary.activePackageIds);
-  }, [currentProfile, modLibrary]);
+    setDraftModOrder((currentOrder) => ({
+      activePackageIds: nextActivePackageIds,
+      inactivePackageIds:
+        lastHydratedProfileIdRef.current === currentProfile.id
+          ? reconcileInactivePackageIds(currentOrder.inactivePackageIds, {
+              activePackageIds: nextActivePackageIds,
+              duplicatePackageIds,
+              mods: modLibrary.mods,
+            })
+          : nextDefaultInactivePackageIds,
+    }));
+    lastHydratedProfileIdRef.current = currentProfile.id;
+  }, [currentProfile, duplicatePackageIds, modLibrary]);
 
   const loadingOverlayVisible = useDelayedBusy(
     applyActivePackageIdsMutation.isPending ||
@@ -250,77 +315,182 @@ export function useHomePageController() {
       saveProfileMutation.isPending,
     400,
   );
-  const draftActiveSet = new Set(draftActivePackageIds);
-  const mods: ModRecord[] = (modLibrary?.mods ?? []).map((mod) => ({
-    ...mod,
-    enabled: mod.dependencyMetadata.packageIdNormalized
-      ? draftActiveSet.has(mod.dependencyMetadata.packageIdNormalized)
-      : false,
-  }));
-  const analysis = isDirty ? null : computedAnalysis;
-  const term = searchQuery.trim().toLowerCase();
+  const preparedMods = useMemo<PreparedModRecord[]>(() => {
+    const draftActivePackageIdSet = new Set(draftActivePackageIds);
 
-  const sortedMods = [...mods].sort((a, b) => {
-    const aPackageId = a.dependencyMetadata.packageIdNormalized;
-    const bPackageId = b.dependencyMetadata.packageIdNormalized;
+    return (modLibrary?.mods ?? []).map((mod) => {
+      const packageIdNormalized = mod.dependencyMetadata.packageIdNormalized;
+      const isUniquePackageId = packageIdNormalized
+        ? (packageIdCounts.get(packageIdNormalized) ?? 0) === 1
+        : false;
+      const enabled = packageIdNormalized
+        ? draftActivePackageIdSet.has(packageIdNormalized)
+        : false;
 
-    if (a.enabled && b.enabled) {
-      if (!aPackageId || !bPackageId) {
-        return 0;
+      return {
+        ...mod,
+        dragDisabledReason: !packageIdNormalized
+          ? "Missing packageId"
+          : !isUniquePackageId
+            ? "Duplicate packageId"
+            : null,
+        enabled,
+        isDraggable: Boolean(packageIdNormalized && isUniquePackageId),
+        packageIdNormalized,
+        searchText: [mod.name, mod.packageId ?? "", mod.author ?? ""]
+          .join("\n")
+          .toLowerCase(),
+      };
+    });
+  }, [draftActivePackageIds, modLibrary, packageIdCounts]);
+  const activeIndexByPackageId = useMemo(() => {
+    const nextMap = new Map<string, number>();
+
+    for (const [index, packageId] of draftActivePackageIds.entries()) {
+      nextMap.set(packageId, index);
+    }
+
+    return nextMap;
+  }, [draftActivePackageIds]);
+  const uniqueModByPackageId = useMemo(() => {
+    const modsByPackageId = new Map<string, PreparedModRecord>();
+
+    for (const mod of preparedMods) {
+      if (mod.packageIdNormalized && mod.isDraggable) {
+        modsByPackageId.set(mod.packageIdNormalized, mod);
+      }
+    }
+
+    return modsByPackageId;
+  }, [preparedMods]);
+  const activeMods = useMemo<HomePageModListItem[]>(() => {
+    const orderedActiveMods = draftActivePackageIds.flatMap((packageId) => {
+      const mod = uniqueModByPackageId.get(packageId);
+
+      if (!mod || !mod.enabled) {
+        return [];
       }
 
-      return (
-        draftActivePackageIds.indexOf(aPackageId) -
-        draftActivePackageIds.indexOf(bPackageId)
-      );
-    }
+      return [
+        {
+          ...mod,
+          columnId: "active" as ModColumnId,
+          orderLabel: (activeIndexByPackageId.get(packageId) ?? 0) + 1,
+        },
+      ];
+    });
+    const lockedActiveMods = preparedMods
+      .filter((mod) => mod.enabled && !mod.isDraggable)
+      .slice()
+      .sort((left, right) => {
+        const leftOrder = left.packageIdNormalized
+          ? (activeIndexByPackageId.get(left.packageIdNormalized) ??
+            Number.MAX_SAFE_INTEGER)
+          : Number.MAX_SAFE_INTEGER;
+        const rightOrder = right.packageIdNormalized
+          ? (activeIndexByPackageId.get(right.packageIdNormalized) ??
+            Number.MAX_SAFE_INTEGER)
+          : Number.MAX_SAFE_INTEGER;
 
-    if (a.enabled) {
-      return -1;
-    }
+        if (leftOrder !== rightOrder) {
+          return leftOrder - rightOrder;
+        }
 
-    if (b.enabled) {
-      return 1;
-    }
+        return sortModsByName(left, right);
+      })
+      .map((mod) => ({
+        ...mod,
+        columnId: "active" as ModColumnId,
+        orderLabel: mod.packageIdNormalized
+          ? (activeIndexByPackageId.get(mod.packageIdNormalized) ?? -1) + 1
+          : null,
+      }));
 
-    return a.name.localeCompare(b.name);
-  });
-  const filteredMods = sortedMods.filter((mod) => {
-    if (activationFilter === "active" && !mod.enabled) {
-      return false;
-    }
+    return [...orderedActiveMods, ...lockedActiveMods];
+  }, [
+    activeIndexByPackageId,
+    draftActivePackageIds,
+    preparedMods,
+    uniqueModByPackageId,
+  ]);
+  const inactiveMods = useMemo<HomePageModListItem[]>(() => {
+    const orderedInactiveMods = draftInactivePackageIds.flatMap((packageId) => {
+      const mod = uniqueModByPackageId.get(packageId);
 
-    if (activationFilter === "inactive" && mod.enabled) {
-      return false;
-    }
+      if (!mod || mod.enabled) {
+        return [];
+      }
 
-    if (sourceFilter === "local" && mod.source !== "installation") {
-      return false;
-    }
-
-    if (sourceFilter === "workshop" && mod.source !== "workshop") {
-      return false;
-    }
-
-    if (!term) {
-      return true;
-    }
-
-    return [mod.name, mod.packageId ?? "", mod.author ?? ""].some((field) =>
-      field.toLowerCase().includes(term),
+      return [
+        {
+          ...mod,
+          columnId: "inactive" as ModColumnId,
+          orderLabel: null,
+        },
+      ];
+    });
+    const orderedInactivePackageIdSet = new Set(
+      orderedInactiveMods.flatMap((mod) =>
+        mod.packageIdNormalized ? [mod.packageIdNormalized] : [],
+      ),
     );
-  });
+    const trailingSortableInactiveMods = preparedMods
+      .filter(
+        (mod) =>
+          !mod.enabled &&
+          mod.isDraggable &&
+          mod.packageIdNormalized !== null &&
+          !orderedInactivePackageIdSet.has(mod.packageIdNormalized),
+      )
+      .slice()
+      .sort(sortModsByName)
+      .map((mod) => ({
+        ...mod,
+        columnId: "inactive" as ModColumnId,
+        orderLabel: null,
+      }));
+    const lockedInactiveMods = preparedMods
+      .filter((mod) => !mod.enabled && !mod.isDraggable)
+      .slice()
+      .sort(sortModsByName)
+      .map((mod) => ({
+        ...mod,
+        columnId: "inactive" as ModColumnId,
+        orderLabel: null,
+      }));
+
+    return [
+      ...orderedInactiveMods,
+      ...trailingSortableInactiveMods,
+      ...lockedInactiveMods,
+    ];
+  }, [draftInactivePackageIds, preparedMods, uniqueModByPackageId]);
+  const term = deferredSearchQuery.trim().toLowerCase();
+  const visibleActiveMods = useMemo(
+    () => activeMods.filter((mod) => isVisibleMod(mod, sourceFilter, term)),
+    [activeMods, sourceFilter, term],
+  );
+  const visibleInactiveMods = useMemo(
+    () => inactiveMods.filter((mod) => isVisibleMod(mod, sourceFilter, term)),
+    [inactiveMods, sourceFilter, term],
+  );
+  const filteredMods = useMemo(
+    () => [...visibleInactiveMods, ...visibleActiveMods],
+    [visibleActiveMods, visibleInactiveMods],
+  );
   const selectedMod =
-    filteredMods.find((mod) => mod.id === selectedModId) ??
-    mods.find((mod) => mod.id === selectedModId) ??
-    filteredMods[0] ??
-    mods[0] ??
+    preparedMods.find((mod) => mod.id === selectedModId) ??
+    visibleActiveMods.find((mod) => mod.id === selectedModId) ??
+    visibleInactiveMods.find((mod) => mod.id === selectedModId) ??
+    visibleActiveMods[0] ??
+    visibleInactiveMods[0] ??
+    activeMods[0] ??
+    inactiveMods[0] ??
     null;
-  const selectedPackageId =
-    selectedMod?.dependencyMetadata.packageIdNormalized ?? null;
+  const selectedPackageId = selectedMod?.packageIdNormalized ?? null;
   const selectedExplanation =
-    selectedPackageId && analysis
-      ? (analysis.explanations.find(
+    selectedPackageId && computedAnalysis
+      ? (computedAnalysis.explanations.find(
           (explanation) => explanation.packageId === selectedPackageId,
         ) ?? null)
       : null;
@@ -331,6 +501,7 @@ export function useHomePageController() {
     saveProfileMutation.isPending ||
     applyActivePackageIdsMutation.isPending;
   const isRescanning = modSourceSnapshotQuery.isFetching;
+  const analysis = isDirty ? null : computedAnalysis;
 
   useEffect(() => {
     if (!analysis || applyActivePackageIdsMutation.isPending || isDirty) {
@@ -359,57 +530,40 @@ export function useHomePageController() {
     isDirty,
   ]);
 
-  function updateDraftActivePackageIds(
-    updater: (activePackageIds: string[]) => string[],
+  function updateDraftModOrder(
+    updater: (currentOrder: DraftModOrder) => DraftModOrder,
   ) {
     setFeedback(null);
-    setDraftActivePackageIds((currentActivePackageIds) =>
-      updater(currentActivePackageIds),
-    );
-  }
+    setDraftModOrder((currentOrder) => {
+      const nextOrder = updater(currentOrder);
 
-  function toggleMod(packageId: string) {
-    updateDraftActivePackageIds((currentActivePackageIds) =>
-      currentActivePackageIds.includes(packageId)
-        ? currentActivePackageIds.filter((currentId) => currentId !== packageId)
-        : [...currentActivePackageIds, packageId],
-    );
-  }
-
-  function moveActivePackageId(
-    packageId: string,
-    direction: "up" | "down" | "top" | "bottom",
-  ) {
-    updateDraftActivePackageIds((currentActivePackageIds) => {
-      const currentIndex = currentActivePackageIds.indexOf(packageId);
-
-      if (currentIndex < 0) {
-        return currentActivePackageIds;
+      if (
+        areStringArraysEqual(
+          currentOrder.activePackageIds,
+          nextOrder.activePackageIds,
+        ) &&
+        areStringArraysEqual(
+          currentOrder.inactivePackageIds,
+          nextOrder.inactivePackageIds,
+        )
+      ) {
+        return currentOrder;
       }
 
-      switch (direction) {
-        case "up":
-          return moveItem(
-            currentActivePackageIds,
-            currentIndex,
-            currentIndex - 1,
-          );
-        case "down":
-          return moveItem(
-            currentActivePackageIds,
-            currentIndex,
-            currentIndex + 1,
-          );
-        case "top":
-          return moveItem(currentActivePackageIds, currentIndex, 0);
-        case "bottom":
-          return moveItem(
-            currentActivePackageIds,
-            currentIndex,
-            currentActivePackageIds.length - 1,
-          );
-      }
+      return nextOrder;
     });
+  }
+
+  function handleDropMod(input: {
+    packageId: string;
+    placement: DropPlacement;
+    sourceColumn: ModColumnId;
+    targetColumn: ModColumnId;
+    targetPackageId: string | null;
+  }) {
+    updateDraftModOrder((currentOrder) =>
+      applyDropToDraftModOrder(currentOrder, input),
+    );
   }
 
   async function persistDraft(options: {
@@ -679,9 +833,9 @@ export function useHomePageController() {
   }
 
   return {
+    activeMods,
     analysis,
     applyActivePackageIdsMutation,
-    activationFilter,
     createProfileMutation,
     currentProfile,
     currentProfileId,
@@ -693,12 +847,14 @@ export function useHomePageController() {
     handleAutoSort,
     handleCreateProfile,
     handleDeleteProfile,
+    handleDropMod,
     handleEnableMissingDependencies,
     handleOpenCreateProfileDialog,
     handleOpenDeleteProfileDialog,
     handleProfileSwitch,
     handleRescanLibrary,
     handleSaveProfile,
+    inactiveMods,
     isBusy,
     isCreateProfileDialogOpen,
     isDeleteProfileDialogOpen,
@@ -718,7 +874,6 @@ export function useHomePageController() {
     selectedExplanation,
     selectedMod,
     selectedModId,
-    setActivationFilter,
     setDraftProfileName,
     setFeedback,
     setIsFilterPanelOpen,
@@ -733,10 +888,10 @@ export function useHomePageController() {
     setSourceFilter,
     sourceFilter,
     switchProfileMutation,
-    toggleMod,
-    moveActivePackageId,
     setDismissedDependencyAnalysisAt,
     setDismissedSortAnalysisAt,
+    visibleActiveMods,
+    visibleInactiveMods,
   };
 }
 

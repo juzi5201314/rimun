@@ -1,0 +1,160 @@
+import { ModListRow } from "@/features/mod-library/components/ModListRow";
+import type { HomePageModListItem } from "@/features/mod-library/hooks/useHomePageController";
+import type {
+  DropPlacement,
+  ModColumnId,
+} from "@/features/mod-library/lib/mod-list-order";
+import { cn } from "@/shared/lib/utils";
+import { useDroppable } from "@dnd-kit/core";
+import { useVirtualizer } from "@tanstack/react-virtual";
+import { Inbox, Search } from "lucide-react";
+import { memo, useCallback, useRef } from "react";
+
+export type ColumnDropIndicator = {
+  packageId: string | null;
+  placement: DropPlacement;
+  targetColumn: ModColumnId;
+} | null;
+
+export const ModLibraryColumn = memo(function ModLibraryColumn({
+  activeDragPackageId,
+  columnId,
+  description,
+  dropIndicator,
+  items,
+  selectedModId,
+  title,
+  totalCount,
+  onSelectMod,
+}: {
+  activeDragPackageId: string | null;
+  columnId: ModColumnId;
+  description: string;
+  dropIndicator: ColumnDropIndicator;
+  items: HomePageModListItem[];
+  selectedModId: string | null;
+  title: string;
+  totalCount: number;
+  onSelectMod: (modId: string) => void;
+}) {
+  const scrollElementRef = useRef<HTMLDivElement | null>(null);
+  const { setNodeRef: setDroppableNodeRef } = useDroppable({
+    data: {
+      columnId,
+      type: "mod-column",
+    },
+    id: `column:${columnId}`,
+  });
+  const setScrollNodeRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      scrollElementRef.current = node;
+      setDroppableNodeRef(node);
+    },
+    [setDroppableNodeRef],
+  );
+  const rowVirtualizer = useVirtualizer({
+    count: items.length,
+    estimateSize: () => 74,
+    getScrollElement: () => scrollElementRef.current,
+    initialRect: {
+      height: 720,
+      width: 0,
+    },
+    overscan: 8,
+  });
+  const virtualRows = rowVirtualizer.getVirtualItems();
+  const showColumnEndDrop =
+    dropIndicator?.targetColumn === columnId &&
+    dropIndicator.packageId === null;
+
+  return (
+    <section className="flex min-h-0 min-w-0 flex-1 flex-col rounded-[1.75rem] border border-border/60 bg-background/70 shadow-sm">
+      <header className="shrink-0 border-b border-border/50 px-5 py-4">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-[11px] font-black uppercase tracking-[0.28em] text-muted-foreground">
+              {title}
+            </p>
+            <p className="mt-1 text-sm text-muted-foreground">{description}</p>
+          </div>
+          <div className="rounded-full border border-border/60 bg-background/85 px-3 py-1 text-[11px] font-semibold text-foreground">
+            {items.length}
+            <span className="mx-1 text-muted-foreground">/</span>
+            {totalCount}
+          </div>
+        </div>
+      </header>
+
+      <div
+        ref={setScrollNodeRef}
+        className="no-scrollbar min-h-0 flex-1 overflow-y-auto px-3 py-3"
+      >
+        {items.length ? (
+          <div
+            className="relative"
+            style={{ height: `${rowVirtualizer.getTotalSize()}px` }}
+          >
+            {virtualRows.map((virtualRow) => {
+              const item = items[virtualRow.index];
+
+              return (
+                <div
+                  key={item.id}
+                  className="absolute inset-x-0 px-1"
+                  style={{
+                    top: 0,
+                    transform: `translateY(${virtualRow.start}px)`,
+                  }}
+                >
+                  <ModListRow
+                    activeDragPackageId={activeDragPackageId}
+                    dropIndicator={dropIndicator}
+                    isSelected={selectedModId === item.id}
+                    item={item}
+                    onSelect={onSelectMod}
+                  />
+                </div>
+              );
+            })}
+
+            {showColumnEndDrop ? (
+              <div
+                className={cn(
+                  "absolute inset-x-4 h-[3px] rounded-full bg-primary",
+                  items.length ? "" : "top-8",
+                )}
+                style={{
+                  top: items.length
+                    ? `${rowVirtualizer.getTotalSize()}px`
+                    : "32px",
+                }}
+              />
+            ) : null}
+          </div>
+        ) : (
+          <div className="flex h-full min-h-48 items-center justify-center">
+            <div className="max-w-[18rem] space-y-3 rounded-2xl border border-dashed border-border/60 bg-background/60 px-6 py-8 text-center">
+              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-muted/40 text-muted-foreground">
+                {totalCount ? (
+                  <Search className="h-5 w-5" />
+                ) : (
+                  <Inbox className="h-5 w-5" />
+                )}
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-foreground">
+                  {totalCount ? "No visible mods" : "Column is empty"}
+                </p>
+                <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+                  {totalCount
+                    ? "Adjust the current search or source filter, or drop a mod into this column."
+                    : "Drop a mod here to create a new order in this column."}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </section>
+  );
+});

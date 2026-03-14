@@ -35,7 +35,26 @@ async function expandActiveProfilePanel() {
 }
 
 describe("App", () => {
-  it("renders profile-backed mod library data and auto-saves before switching profiles", async () => {
+  it("renders dual mod columns with drag handles instead of checkboxes", async () => {
+    renderApp({
+      hostApi: createTestHostApi(),
+    });
+
+    expect(
+      await screen.findByRole("heading", { name: /Mod Library/i }),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText(/^Inactive Mods$/i)).toHaveLength(1);
+    expect(screen.getAllByText(/^Active Mods$/i)).toHaveLength(1);
+    expect(
+      screen.getByText(/Drag between columns to enable or disable mods/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Active column order is the exact saved load order/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+  });
+
+  it("auto-saves before switching profiles when the current draft is dirty", async () => {
     renderApp({
       hostApi: createTestHostApi(),
     });
@@ -44,18 +63,17 @@ describe("App", () => {
       await screen.findByRole("heading", { name: /Mod Library/i }),
     ).toBeInTheDocument();
 
-    const pawnsCheckbox = screen.getByRole("checkbox", {
-      name: /Toggle Pawns/i,
-    });
-
     await expandActiveProfilePanel();
 
     expect(screen.getByRole("combobox", { name: /Profile/i })).toHaveValue(
       "default",
     );
-    expect(pawnsCheckbox).not.toBeChecked();
+    const profileNameInput = screen.getByRole("textbox", {
+      name: /Profile Name/i,
+    });
 
-    await userEvent.click(pawnsCheckbox);
+    await userEvent.clear(profileNameInput);
+    await userEvent.type(profileNameInput, "Default Loadout");
 
     expect(await screen.findByTitle(/Unsaved Changes/i)).toBeInTheDocument();
     expect(
@@ -72,9 +90,6 @@ describe("App", () => {
         screen.getByRole("textbox", { name: /Profile Name/i }),
       ).toHaveValue("Builder");
     });
-    expect(
-      screen.getByRole("checkbox", { name: /Toggle Pawns/i }),
-    ).toBeChecked();
 
     await userEvent.selectOptions(
       screen.getByRole("combobox", { name: /Profile/i }),
@@ -84,10 +99,7 @@ describe("App", () => {
     await waitFor(() => {
       expect(
         screen.getByRole("textbox", { name: /Profile Name/i }),
-      ).toHaveValue("Default");
-      expect(
-        screen.getByRole("checkbox", { name: /Toggle Pawns/i }),
-      ).toBeChecked();
+      ).toHaveValue("Default Loadout");
     });
   });
 
@@ -209,8 +221,11 @@ describe("App", () => {
       await screen.findByRole("heading", { name: /Mod Library/i }),
     ).toBeInTheDocument();
 
-    await userEvent.click(
-      screen.getByRole("checkbox", { name: /Toggle Pawns/i }),
+    await expandActiveProfilePanel();
+
+    await userEvent.type(
+      screen.getByRole("textbox", { name: /Profile Name/i }),
+      " Draft",
     );
 
     await userEvent.click(screen.getByRole("link", { name: /^Settings$/i }));
