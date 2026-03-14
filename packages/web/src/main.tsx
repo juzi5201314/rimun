@@ -27,6 +27,20 @@ function resolveDevelopmentHostApi() {
   return createTestHostApi();
 }
 
+async function installDevelopmentHelpers() {
+  if (!(import.meta.env.DEV || import.meta.env.MODE === "test")) {
+    return;
+  }
+
+  const { installRimunPerfCapture } = await import(
+    "@/shared/perf/rimunPerfCapture"
+  );
+
+  installRimunPerfCapture(window);
+}
+
+void installDevelopmentHelpers();
+
 createRoot(container).render(
   <StrictMode>
     <App hostApi={resolveDevelopmentHostApi()} />
