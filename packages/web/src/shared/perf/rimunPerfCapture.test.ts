@@ -5,7 +5,7 @@ import {
 } from "@/shared/perf/rimunPerfCapture";
 import { describe, expect, it } from "vitest";
 
-function createMockTarget() {
+function createMockTarget(options?: { observeThrows?: boolean }) {
   let nowMs = 0;
   let nextRafHandle = 1;
   const rafCallbacks = new Map<number, FrameRequestCallback>();
@@ -27,7 +27,11 @@ function createMockTarget() {
       observers.delete(this);
     }
 
-    observe() {}
+    observe() {
+      if (options?.observeThrows) {
+        throw new Error("longtask observe unsupported");
+      }
+    }
 
     takeRecords(): PerformanceEntryList {
       return [] as unknown as PerformanceEntryList;
@@ -150,6 +154,42 @@ describe("rimunPerfCapture", () => {
       summary.raf.histogram.find((bucket) => bucket.maxInclusiveMs === 33),
     ).toEqual({ count: 1, maxInclusiveMs: 33 });
     expect(capture.getLastCapture()).toEqual(summary);
+  });
+
+  it("reports longtask support as false when observer registration fails", () => {
+    const mockTarget = createMockTarget({ observeThrows: true });
+    const capture = createRimunPerfCapture(mockTarget.target);
+
+    capture.start("drag-window");
+
+    mockTarget.advanceFrame(0);
+    mockTarget.advanceFrame(16);
+    mockTarget.emitLongTask({
+      duration: 80,
+      name: "should-not-collect",
+      startTime: 8,
+    });
+    mockTarget.setNow(32);
+
+    expect(capture.stop()).toMatchObject({
+      durationMs: 32,
+      label: "drag-window",
+      longtask: {
+        count: 0,
+        entries: [],
+        maxDurationMs: 0,
+        supported: false,
+        totalDurationMs: 0,
+      },
+      raf: {
+        count: 1,
+        maxMs: 16,
+        p50Ms: 16,
+        p95Ms: 16,
+        supported: true,
+      },
+      startedAtMs: 0,
+    });
   });
 
   it("installs a singleton helper and gates it to dev/test modes", () => {

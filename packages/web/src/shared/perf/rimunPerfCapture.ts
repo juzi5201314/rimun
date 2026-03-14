@@ -21,6 +21,7 @@ type ActivePerfCapture = {
   label: string | null;
   longtaskEntries: PerfCaptureLongTaskEntry[];
   longtaskObserver: PerformanceObserver | null;
+  longtaskSupported: boolean;
   rafDeltasMs: number[];
   rafHandle: number | null;
   rafPreviousTimestamp: number | null;
@@ -106,7 +107,7 @@ export function createRimunPerfCapture(
   let activeCapture: ActivePerfCapture | null = null;
   let lastCapture: RimunPerfCaptureSummary | null = null;
 
-  const supportsLongTaskObserver =
+  const hasLongTaskObserverConstructor =
     typeof target.PerformanceObserver === "function";
   const supportsRaf =
     typeof target.requestAnimationFrame === "function" &&
@@ -173,20 +174,23 @@ export function createRimunPerfCapture(
         throw new Error("A Rimun performance capture is already in progress.");
       }
 
-      const longtaskObserver =
-        supportsLongTaskObserver && target.PerformanceObserver
+      let longtaskObserver =
+        hasLongTaskObserverConstructor && target.PerformanceObserver
           ? new target.PerformanceObserver((entryList) => {
               collectLongTaskEntries(
                 entryList.getEntries() as PerfCaptureEntry[],
               );
             })
           : null;
+      let longtaskSupported = false;
 
       if (longtaskObserver) {
         try {
           longtaskObserver.observe({ entryTypes: ["longtask"] });
+          longtaskSupported = true;
         } catch {
           longtaskObserver.disconnect();
+          longtaskObserver = null;
         }
       }
 
@@ -194,6 +198,7 @@ export function createRimunPerfCapture(
         label: label ?? null,
         longtaskEntries: [],
         longtaskObserver,
+        longtaskSupported,
         rafDeltasMs: [],
         rafHandle: null,
         rafPreviousTimestamp: null,
@@ -234,7 +239,7 @@ export function createRimunPerfCapture(
         longtaskEntries: capture.longtaskEntries,
         rafDeltasMs: capture.rafDeltasMs,
         startedAtMs: capture.startedAtMs,
-        supportsLongTaskObserver,
+        supportsLongTaskObserver: capture.longtaskSupported,
         supportsRaf,
       });
 
