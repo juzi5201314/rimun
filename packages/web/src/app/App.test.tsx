@@ -20,6 +20,18 @@ function renderApp(options: {
   );
 }
 
+async function expandActiveProfilePanel() {
+  const toggleButton = screen.getByRole("button", {
+    name: /Toggle Active Profile Panel/i,
+  });
+
+  if (toggleButton.getAttribute("aria-expanded") !== "true") {
+    await userEvent.click(toggleButton);
+  }
+
+  return toggleButton;
+}
+
 describe("App", () => {
   it("renders profile-backed mod library data and auto-saves before switching profiles", async () => {
     renderApp({
@@ -33,6 +45,8 @@ describe("App", () => {
     const pawnsCheckbox = screen.getByRole("checkbox", {
       name: /Toggle Pawns/i,
     });
+
+    await expandActiveProfilePanel();
 
     expect(screen.getByRole("combobox", { name: /Profile/i })).toHaveValue(
       "default",
@@ -84,6 +98,8 @@ describe("App", () => {
       await screen.findByRole("heading", { name: /Mod Library/i }),
     ).toBeInTheDocument();
 
+    await expandActiveProfilePanel();
+
     await userEvent.click(screen.getByRole("button", { name: /New Profile/i }));
 
     const dialog = await screen.findByRole("dialog", {
@@ -112,6 +128,74 @@ describe("App", () => {
     expect(
       screen.getByRole("option", { name: "Combat Run" }),
     ).toBeInTheDocument();
+  });
+
+  it("collapses and expands the active profile panel", async () => {
+    renderApp({
+      hostApi: createTestHostApi(),
+    });
+
+    expect(
+      await screen.findByRole("heading", { name: /Mod Library/i }),
+    ).toBeInTheDocument();
+
+    const toggleButton = screen.getByRole("button", {
+      name: /Toggle Active Profile Panel/i,
+    });
+
+    expect(toggleButton).toHaveAttribute("aria-expanded", "false");
+    expect(
+      screen.queryByRole("combobox", { name: /Profile Selection/i }),
+    ).not.toBeInTheDocument();
+
+    await userEvent.click(toggleButton);
+
+    expect(toggleButton).toHaveAttribute("aria-expanded", "true");
+    expect(
+      screen.getByRole("combobox", { name: /Profile Selection/i }),
+    ).toBeInTheDocument();
+
+    await userEvent.click(toggleButton);
+
+    expect(toggleButton).toHaveAttribute("aria-expanded", "false");
+    expect(
+      screen.queryByRole("combobox", { name: /Profile Selection/i }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("Default")).toBeInTheDocument();
+  });
+
+  it("collapses and expands the filters panel", async () => {
+    renderApp({
+      hostApi: createTestHostApi(),
+    });
+
+    expect(
+      await screen.findByRole("heading", { name: /Mod Library/i }),
+    ).toBeInTheDocument();
+
+    await expandActiveProfilePanel();
+
+    const filterToggleButton = screen.getByRole("button", {
+      name: /Toggle Filters Panel/i,
+    });
+
+    expect(
+      screen.queryByRole("button", { name: /^All Sources$/i }),
+    ).not.toBeInTheDocument();
+
+    await userEvent.click(filterToggleButton);
+
+    expect(filterToggleButton).toHaveAttribute("aria-expanded", "true");
+    expect(
+      screen.getByRole("button", { name: /^All Sources$/i }),
+    ).toBeInTheDocument();
+
+    await userEvent.click(filterToggleButton);
+
+    expect(filterToggleButton).toHaveAttribute("aria-expanded", "false");
+    expect(
+      screen.queryByRole("button", { name: /^All Sources$/i }),
+    ).not.toBeInTheDocument();
   });
 
   it("blocks route navigation while the current profile has unsaved changes", async () => {

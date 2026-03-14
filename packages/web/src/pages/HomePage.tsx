@@ -248,6 +248,7 @@ export function HomePage() {
   const [sourceFilter, setSourceFilter] = useState<
     "all" | "local" | "workshop"
   >("all");
+  const [isProfilePanelOpen, setIsProfilePanelOpen] = useState(false);
   const [isFilterPanelOpen, setIsFilterPanelOpen] = useState(false);
   const [openSections, setOpenSections] = useState<
     Record<DetailSectionId, boolean>
@@ -993,261 +994,269 @@ export function HomePage() {
           className="flex min-w-0 flex-col border-r border-border/60 bg-background/20"
           style={{ width: `${100 - asideWidth}%` }}
         >
-          <header className="shrink-0 border-b border-border/60 bg-card/40 px-6 py-5">
-            <div className="flex flex-col gap-4">
-              <div className="flex flex-wrap items-start justify-between gap-4">
-                <div className="space-y-3">
-                  <div className="space-y-1">
-                    <h2 className="text-3xl font-black tracking-tight text-foreground">
-                      Mod Library
-                    </h2>
-                    <p className="max-w-2xl text-sm text-muted-foreground">
-                      Curate active packages, inspect dependencies, and keep the
-                      load order stable before syncing back to RimWorld.
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <ToolbarChip
-                      label="Active"
-                      value={String(draftActivePackageIds.length)}
-                    />
-                    <ToolbarChip
-                      label="Visible"
-                      value={String(filteredMods.length)}
-                    />
-                    <ToolbarChip
-                      label="Total"
-                      value={String(modLibrary.mods.length)}
-                    />
-                  </div>
-                </div>
+          <h2 className="sr-only">Mod Library</h2>
 
-                <div className="flex flex-wrap items-center justify-end gap-2">
-                  <div className="relative min-w-[240px] flex-1 sm:flex-none">
-                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/70" />
-                    <Input
-                      placeholder="Search by name, author, or package id"
-                      className="h-10 w-full border-border/60 bg-background pl-9 text-sm"
-                      value={searchQuery}
-                      onChange={(event) => setSearchQuery(event.target.value)}
-                    />
-                  </div>
-                  <Button
+          <header className="shrink-0 border-b border-border/60 bg-card/40 px-6 py-4">
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <ToolbarChip
+                  label="Active"
+                  value={String(draftActivePackageIds.length)}
+                />
+                <ToolbarChip
+                  label="Visible"
+                  value={String(filteredMods.length)}
+                />
+                <ToolbarChip
+                  label="Total"
+                  value={String(modLibrary.mods.length)}
+                />
+                {isDirty ? (
+                  <Badge
                     variant="outline"
-                    size="sm"
-                    className="h-10 gap-2 px-4 text-sm"
-                    disabled={
-                      isBusy || isRescanning || isDirty || !currentProfileId
-                    }
-                    onClick={() => void handleRescanLibrary()}
+                    className="border-amber-500/40 bg-amber-500/10 text-amber-700"
+                    title="Unsaved Changes"
                   >
-                    {isRescanning ? (
-                      <LoaderCircle className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <RefreshCcw className="h-4 w-4" />
-                    )}
-                    Rescan
-                  </Button>
-                </div>
+                    Unsaved changes
+                  </Badge>
+                ) : null}
               </div>
 
-              <div className="rounded-2xl border border-border/60 bg-background/80 p-4 shadow-sm">
-                <div className="flex flex-wrap items-end gap-3">
-                  <label className="min-w-[160px] flex-1 space-y-2">
-                    <span className="text-xs font-medium text-muted-foreground">
+              <div className="rounded-xl border border-border/60 bg-background/85 px-4 py-3 shadow-sm">
+                <button
+                  type="button"
+                  aria-expanded={isProfilePanelOpen}
+                  aria-label="Toggle Active Profile Panel"
+                  className="flex w-full items-center justify-between gap-4 text-left"
+                  onClick={() => setIsProfilePanelOpen((current) => !current)}
+                >
+                  <div className="space-y-1">
+                    <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
                       Active Profile
-                    </span>
-                    <select
-                      aria-label="Profile Selection"
-                      className="h-10 w-full rounded-xl border border-border/60 bg-background px-3 text-sm font-medium text-foreground outline-none"
-                      disabled={isBusy || !currentProfileId}
-                      value={currentProfileId ?? ""}
-                      onChange={(event) =>
-                        void handleProfileSwitch(event.target.value)
-                      }
-                    >
-                      {profileCatalogQuery.data?.profiles.map((profile) => (
-                        <option key={profile.id} value={profile.id}>
-                          {profile.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-
-                  <label className="min-w-[220px] flex-[1.4] space-y-2">
-                    <span className="text-xs font-medium text-muted-foreground">
-                      Profile Name
-                    </span>
-                    <Input
-                      aria-label="Profile Name"
-                      className="h-10 border-border/60 bg-background text-sm font-medium"
-                      disabled={isBusy || !currentProfile}
-                      value={draftProfileName}
-                      onChange={(event) => {
-                        setFeedback(null);
-                        setDraftProfileName(event.target.value);
-                      }}
-                    />
-                  </label>
-
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-10 gap-2 px-4"
-                      title="New Profile"
-                      onClick={handleOpenCreateProfileDialog}
-                    >
-                      <Plus className="h-4 w-4" />
-                      New Profile
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-10 gap-2 px-4"
-                      title="Delete Profile"
-                      onClick={handleOpenDeleteProfileDialog}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                      Delete
-                    </Button>
-                    <Button
-                      size="sm"
-                      className="h-10 gap-2 px-4"
-                      disabled={isBusy || !currentProfile || !isDirty}
-                      onClick={() => void handleSaveProfile()}
-                    >
-                      <Save className="h-4 w-4" />
-                      Save
-                    </Button>
-                  </div>
-                </div>
-
-                <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border/50 pt-4">
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-9 gap-2 px-3"
-                      onClick={() =>
-                        setIsFilterPanelOpen((current) => !current)
-                      }
-                    >
-                      {isFilterPanelOpen ? (
-                        <ChevronDown className="h-4 w-4" />
-                      ) : (
-                        <ChevronRight className="h-4 w-4" />
-                      )}
-                      Filters
-                    </Button>
-                    <p className="text-sm text-muted-foreground">
-                      Activation:{" "}
-                      <span className="font-medium capitalize text-foreground">
-                        {activationFilter}
-                      </span>
-                      <span className="mx-2 text-border">/</span>
-                      Source:{" "}
-                      <span className="font-medium capitalize text-foreground">
-                        {sourceFilter === "all" ? "all sources" : sourceFilter}
-                      </span>
                     </p>
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+                      <span className="font-semibold text-foreground">
+                        {currentProfile?.name ?? "No profile selected"}
+                      </span>
+                      <span className="text-muted-foreground">
+                        Manage profile selection, naming, and save actions.
+                      </span>
+                    </div>
                   </div>
 
-                  {isDirty ? (
-                    <Badge
-                      variant="outline"
-                      className="border-amber-500/40 bg-amber-500/10 text-amber-700"
-                      title="Unsaved Changes"
-                    >
-                      Unsaved changes
-                    </Badge>
-                  ) : null}
-                </div>
+                  <span className="shrink-0 rounded-full border border-border/60 bg-background/90 p-1 text-muted-foreground">
+                    {isProfilePanelOpen ? (
+                      <ChevronDown className="h-4 w-4" />
+                    ) : (
+                      <ChevronRight className="h-4 w-4" />
+                    )}
+                  </span>
+                </button>
 
-                {isFilterPanelOpen ? (
-                  <div className="mt-4 grid gap-4 border-t border-border/50 pt-4 lg:grid-cols-2">
-                    <div className="space-y-2">
-                      <p className="text-xs font-medium text-muted-foreground">
-                        Activation
-                      </p>
-                      <div className="flex flex-wrap gap-2">
-                        <Button
-                          variant={
-                            activationFilter === "all" ? "secondary" : "outline"
+                {isProfilePanelOpen ? (
+                  <>
+                    <div className="mt-3 flex flex-wrap items-end gap-3 border-t border-border/50 pt-3">
+                      <label className="min-w-[150px] flex-1 space-y-1.5">
+                        <span className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+                          Profile Selection
+                        </span>
+                        <select
+                          aria-label="Profile Selection"
+                          className="h-9 w-full rounded-lg border border-border/60 bg-background px-3 text-sm font-medium text-foreground outline-none"
+                          disabled={isBusy || !currentProfileId}
+                          value={currentProfileId ?? ""}
+                          onChange={(event) =>
+                            void handleProfileSwitch(event.target.value)
                           }
-                          size="sm"
-                          className="h-9 px-4"
-                          onClick={() => setActivationFilter("all")}
                         >
-                          All
+                          {profileCatalogQuery.data?.profiles.map((profile) => (
+                            <option key={profile.id} value={profile.id}>
+                              {profile.name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+
+                      <label className="min-w-[200px] flex-[1.4] space-y-1.5">
+                        <span className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+                          Profile Name
+                        </span>
+                        <Input
+                          aria-label="Profile Name"
+                          className="h-9 border-border/60 bg-background text-sm font-medium"
+                          disabled={isBusy || !currentProfile}
+                          value={draftProfileName}
+                          onChange={(event) => {
+                            setFeedback(null);
+                            setDraftProfileName(event.target.value);
+                          }}
+                        />
+                      </label>
+
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-9 gap-2 px-3"
+                          title="New Profile"
+                          onClick={handleOpenCreateProfileDialog}
+                        >
+                          <Plus className="h-4 w-4" />
+                          New Profile
                         </Button>
                         <Button
-                          variant={
-                            activationFilter === "active"
-                              ? "secondary"
-                              : "outline"
-                          }
+                          variant="outline"
                           size="sm"
-                          className="h-9 px-4"
-                          onClick={() => setActivationFilter("active")}
+                          className="h-9 gap-2 px-3"
+                          title="Delete Profile"
+                          onClick={handleOpenDeleteProfileDialog}
                         >
-                          Active
+                          <Trash2 className="h-4 w-4" />
+                          Delete
                         </Button>
                         <Button
-                          variant={
-                            activationFilter === "inactive"
-                              ? "secondary"
-                              : "outline"
-                          }
                           size="sm"
-                          className="h-9 px-4"
-                          onClick={() => setActivationFilter("inactive")}
+                          className="h-9 gap-2 px-3"
+                          disabled={isBusy || !currentProfile || !isDirty}
+                          onClick={() => void handleSaveProfile()}
                         >
-                          Inactive
+                          <Save className="h-4 w-4" />
+                          Save
                         </Button>
                       </div>
                     </div>
 
-                    <div className="space-y-2">
-                      <p className="text-xs font-medium text-muted-foreground">
-                        Source
-                      </p>
-                      <div className="flex flex-wrap gap-2">
-                        <Button
-                          variant={
-                            sourceFilter === "all" ? "secondary" : "outline"
-                          }
-                          size="sm"
-                          className="h-9 px-4"
-                          onClick={() => setSourceFilter("all")}
-                        >
-                          All Sources
-                        </Button>
-                        <Button
-                          variant={
-                            sourceFilter === "local" ? "secondary" : "outline"
-                          }
-                          size="sm"
-                          className="h-9 px-4"
-                          onClick={() => setSourceFilter("local")}
-                        >
-                          Local
-                        </Button>
-                        <Button
-                          variant={
-                            sourceFilter === "workshop"
-                              ? "secondary"
-                              : "outline"
-                          }
-                          size="sm"
-                          className="h-9 px-4"
-                          onClick={() => setSourceFilter("workshop")}
-                        >
-                          Workshop
-                        </Button>
-                      </div>
+                    <div className="mt-3 rounded-lg border border-border/50 bg-background/70 px-3 py-3">
+                      <button
+                        type="button"
+                        aria-expanded={isFilterPanelOpen}
+                        aria-label="Toggle Filters Panel"
+                        className="flex w-full items-center justify-between gap-4 text-left"
+                        onClick={() =>
+                          setIsFilterPanelOpen((current) => !current)
+                        }
+                      >
+                        <div className="space-y-1">
+                          <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
+                            Filters
+                          </p>
+                          <p className="text-xs text-muted-foreground sm:text-sm">
+                            Activation:{" "}
+                            <span className="font-medium capitalize text-foreground">
+                              {activationFilter}
+                            </span>
+                            <span className="mx-2 text-border">/</span>
+                            Source:{" "}
+                            <span className="font-medium capitalize text-foreground">
+                              {sourceFilter === "all"
+                                ? "all sources"
+                                : sourceFilter}
+                            </span>
+                          </p>
+                        </div>
+
+                        <span className="shrink-0 rounded-full border border-border/60 bg-background/90 p-1 text-muted-foreground">
+                          {isFilterPanelOpen ? (
+                            <ChevronDown className="h-4 w-4" />
+                          ) : (
+                            <ChevronRight className="h-4 w-4" />
+                          )}
+                        </span>
+                      </button>
+
+                      {isFilterPanelOpen ? (
+                        <div className="mt-3 grid gap-3 border-t border-border/50 pt-3 lg:grid-cols-2">
+                          <div className="space-y-2">
+                            <p className="text-xs font-medium text-muted-foreground">
+                              Activation
+                            </p>
+                            <div className="flex flex-wrap gap-2">
+                              <Button
+                                variant={
+                                  activationFilter === "all"
+                                    ? "secondary"
+                                    : "outline"
+                                }
+                                size="sm"
+                                className="h-9 px-4"
+                                onClick={() => setActivationFilter("all")}
+                              >
+                                All
+                              </Button>
+                              <Button
+                                variant={
+                                  activationFilter === "active"
+                                    ? "secondary"
+                                    : "outline"
+                                }
+                                size="sm"
+                                className="h-9 px-4"
+                                onClick={() => setActivationFilter("active")}
+                              >
+                                Active
+                              </Button>
+                              <Button
+                                variant={
+                                  activationFilter === "inactive"
+                                    ? "secondary"
+                                    : "outline"
+                                }
+                                size="sm"
+                                className="h-9 px-4"
+                                onClick={() => setActivationFilter("inactive")}
+                              >
+                                Inactive
+                              </Button>
+                            </div>
+                          </div>
+
+                          <div className="space-y-2">
+                            <p className="text-xs font-medium text-muted-foreground">
+                              Source
+                            </p>
+                            <div className="flex flex-wrap gap-2">
+                              <Button
+                                variant={
+                                  sourceFilter === "all"
+                                    ? "secondary"
+                                    : "outline"
+                                }
+                                size="sm"
+                                className="h-9 px-4"
+                                onClick={() => setSourceFilter("all")}
+                              >
+                                All Sources
+                              </Button>
+                              <Button
+                                variant={
+                                  sourceFilter === "local"
+                                    ? "secondary"
+                                    : "outline"
+                                }
+                                size="sm"
+                                className="h-9 px-4"
+                                onClick={() => setSourceFilter("local")}
+                              >
+                                Local
+                              </Button>
+                              <Button
+                                variant={
+                                  sourceFilter === "workshop"
+                                    ? "secondary"
+                                    : "outline"
+                                }
+                                size="sm"
+                                className="h-9 px-4"
+                                onClick={() => setSourceFilter("workshop")}
+                              >
+                                Workshop
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      ) : null}
                     </div>
-                  </div>
+                  </>
                 ) : null}
               </div>
 
@@ -1360,8 +1369,36 @@ export function HomePage() {
             </div>
           ) : null}
 
+          <div className="shrink-0 border-b border-border/60 bg-background/95 px-6 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/85">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="relative min-w-[260px] flex-1">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/70" />
+                <Input
+                  placeholder="Search by name, author, or package id"
+                  className="h-10 w-full border-border/60 bg-background pl-9 text-sm"
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                />
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-10 gap-2 px-4 text-sm"
+                disabled={isBusy || isRescanning || isDirty || !currentProfileId}
+                onClick={() => void handleRescanLibrary()}
+              >
+                {isRescanning ? (
+                  <LoaderCircle className="h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCcw className="h-4 w-4" />
+                )}
+                Rescan
+              </Button>
+            </div>
+          </div>
+
           {/* Mod Table Header */}
-          <div className="shrink-0 sticky top-0 z-10 flex items-center gap-4 border-b border-border/40 bg-background px-6 py-3 text-xs font-medium text-muted-foreground">
+          <div className="shrink-0 sticky top-0 z-10 flex items-center gap-4 border-b border-border/40 bg-background/95 px-6 py-3 text-xs font-medium text-muted-foreground backdrop-blur supports-[backdrop-filter]:bg-background/85">
             <div className="w-11 text-center">Active</div>
             <div className="w-12 text-center">Order</div>
             <div className="flex-1">Mod</div>
