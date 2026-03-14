@@ -1,0 +1,54 @@
+{
+  "surface": "terminal perf guardrails",
+  "testingTool": "Execute",
+  "assertionResults": [
+    {
+      "id": "VAL-PERF-001",
+      "status": "pass",
+      "reason": "Targeted Vitest run for ModLibraryColumn perf guardrails passed with the VAL-PERF-001 test name present and zero test failures."
+    },
+    {
+      "id": "VAL-PERF-002",
+      "status": "pass",
+      "reason": "Targeted Vitest run emitted operation counters for same-column and cross-column moves within the documented caps and finished with 1 passing test and 0 failures."
+    },
+    {
+      "id": "VAL-PERF-003",
+      "status": "pass",
+      "reason": "Targeted Bun test emitted work-unit counters for 2000 items under the documented cap and finished with 1 passing test and 0 failures."
+    }
+  ],
+  "commandsRun": [
+    {
+      "command": "bun run --cwd packages/web test -- --reporter=verbose --disableConsoleIntercept src/features/mod-library/components/ModLibraryColumn.perf.test.tsx",
+      "exitCode": 0,
+      "observation": "Vitest reported the VAL-PERF-001 test passed in 932ms with 1 passed file, 1 passed test, and 0 failures.",
+      "evidenceFile": "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/perf-baseline-guardrails/perf-guardrails-cli/val-perf-001.txt"
+    },
+    {
+      "command": "bun run --cwd packages/web test -- --reporter=verbose --disableConsoleIntercept src/features/mod-library/lib/mod-list-order.perf.test.ts",
+      "exitCode": 0,
+      "observation": "Vitest printed VAL-PERF-002 same-column-reorder totalUnits=1999 cap=2000 and cross-column-move totalUnits=3000 cap=3000, then finished with 1 passed file, 1 passed test, and 0 failures.",
+      "evidenceFile": "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/perf-baseline-guardrails/perf-guardrails-cli/val-perf-002.txt"
+    },
+    {
+      "command": "bun run --cwd packages/domain test test/mod-order.perf.test.ts",
+      "exitCode": 0,
+      "observation": "bun test printed VAL-PERF-003 items=2000 totalUnits=16000 cap=20000 and ended with 1 pass, 0 fail.",
+      "evidenceFile": "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/perf-baseline-guardrails/perf-guardrails-cli/val-perf-003.txt"
+    }
+  ],
+  "blockers": [],
+  "frictions": [
+    {
+      "type": "subagent-launch",
+      "description": "Task-based flow validator launch failed twice because the custom droid model was configured as custom:GPT-5.4, which this environment rejects as an invalid model name. The validator fell back to running the targeted commands directly in the parent worker session."
+    }
+  ],
+  "toolsUsed": ["Execute", "ApplyPatch"],
+  "evidenceFiles": [
+    "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/perf-baseline-guardrails/perf-guardrails-cli/val-perf-001.txt",
+    "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/perf-baseline-guardrails/perf-guardrails-cli/val-perf-002.txt",
+    "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/perf-baseline-guardrails/perf-guardrails-cli/val-perf-003.txt"
+  ]
+}
