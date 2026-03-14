@@ -27,6 +27,8 @@ import {
   ArrowDown,
   ArrowUp,
   ArrowUpDown,
+  ChevronDown,
+  ChevronRight,
   FolderSearch,
   HardDrive,
   Link2,
@@ -141,6 +143,69 @@ type FeedbackState = {
   message: string;
 } | null;
 
+type DetailSectionId = "description" | "orderHints" | "analysis" | "paths";
+
+function ToolbarChip({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="rounded-full border border-border/60 bg-background/80 px-3 py-1">
+      <span className="text-[11px] font-medium text-muted-foreground">
+        {label}
+      </span>
+      <span className="ml-1.5 text-[11px] font-semibold text-foreground">
+        {value}
+      </span>
+    </div>
+  );
+}
+
+function DetailSection({
+  title,
+  description,
+  open,
+  onToggle,
+  children,
+}: {
+  title: string;
+  description: string;
+  open: boolean;
+  onToggle: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="rounded-2xl border border-border/60 bg-background/80 shadow-sm">
+      <button
+        type="button"
+        className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left"
+        onClick={onToggle}
+      >
+        <div className="space-y-1">
+          <p className="text-sm font-semibold text-foreground">{title}</p>
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            {description}
+          </p>
+        </div>
+        <span className="shrink-0 rounded-full border border-border/60 bg-background/90 p-1 text-muted-foreground">
+          {open ? (
+            <ChevronDown className="h-4 w-4" />
+          ) : (
+            <ChevronRight className="h-4 w-4" />
+          )}
+        </span>
+      </button>
+
+      {open ? (
+        <div className="border-t border-border/50 px-5 py-5">{children}</div>
+      ) : null}
+    </section>
+  );
+}
+
 export function HomePage() {
   const queryClient = useQueryClient();
   const getHostApi = useHostApi();
@@ -176,19 +241,31 @@ export function HomePage() {
   const [dismissedSortAnalysisAt, setDismissedSortAnalysisAt] = useState<
     string | null
   >(null);
-  const [asideWidth, setAsideWidth] = useState(44); // percentage
-  const [activationFilter, setActivationFilter] = useState<"all" | "active" | "inactive">("all");
-  const [sourceFilter, setSourceFilter] = useState<"all" | "local" | "workshop">("all");
+  const [asideWidth, setAsideWidth] = useState(38);
+  const [activationFilter, setActivationFilter] = useState<
+    "all" | "active" | "inactive"
+  >("all");
+  const [sourceFilter, setSourceFilter] = useState<
+    "all" | "local" | "workshop"
+  >("all");
+  const [isFilterPanelOpen, setIsFilterPanelOpen] = useState(false);
+  const [openSections, setOpenSections] = useState<
+    Record<DetailSectionId, boolean>
+  >({
+    description: true,
+    orderHints: false,
+    analysis: true,
+    paths: false,
+  });
 
   const handleMouseDown = (e: React.MouseEvent) => {
     const startX = e.clientX;
     const startWidth = asideWidth;
-    
+
     const handleMouseMove = (moveEvent: MouseEvent) => {
       const deltaX = moveEvent.clientX - startX;
       const deltaPercent = (deltaX / window.innerWidth) * 100;
-      // Limit width between 20% and 70%
-      const newWidth = Math.min(Math.max(startWidth - deltaPercent, 20), 70);
+      const newWidth = Math.min(Math.max(startWidth - deltaPercent, 28), 52);
       setAsideWidth(newWidth);
     };
 
@@ -340,6 +417,15 @@ export function HomePage() {
     setDismissedDependencyAnalysisAt(null);
     setDismissedSortAnalysisAt(null);
   }, [currentProfileId]);
+
+  useEffect(() => {
+    setOpenSections({
+      description: true,
+      orderHints: false,
+      analysis: true,
+      paths: false,
+    });
+  }, [selectedModId]);
 
   useEffect(() => {
     if (!currentProfile || !modLibrary) {
@@ -903,34 +989,45 @@ export function HomePage() {
         ) : null}
 
         {/* Main Mod Management Area */}
-        <section 
+        <section
           className="flex min-w-0 flex-col border-r border-border/60 bg-background/20"
           style={{ width: `${100 - asideWidth}%` }}
         >
-          {/* Unified Header */}
-          <header className="shrink-0 border-b border-border/60 bg-card/30 px-6 py-5">
-            <div className="flex flex-col gap-5">
-              {/* Row 1: Title and Core Actions */}
-              <div className="flex items-center justify-between gap-4">
-                <div className="flex items-center gap-4">
-                  <h2 className="text-2xl font-black uppercase tracking-tight rw-text text-foreground/90">
-                    Mod Library
-                  </h2>
-                  <div className="h-4 w-[1px] bg-border/60" />
-                  <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground/80">
-                    <span className="text-primary font-black">{draftActivePackageIds.length}</span>
-                    <span>Active</span>
-                    <span className="opacity-40">/</span>
-                    <span>{modLibrary.mods.length} Total</span>
+          <header className="shrink-0 border-b border-border/60 bg-card/40 px-6 py-5">
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div className="space-y-3">
+                  <div className="space-y-1">
+                    <h2 className="text-3xl font-black tracking-tight text-foreground">
+                      Mod Library
+                    </h2>
+                    <p className="max-w-2xl text-sm text-muted-foreground">
+                      Curate active packages, inspect dependencies, and keep the
+                      load order stable before syncing back to RimWorld.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <ToolbarChip
+                      label="Active"
+                      value={String(draftActivePackageIds.length)}
+                    />
+                    <ToolbarChip
+                      label="Visible"
+                      value={String(filteredMods.length)}
+                    />
+                    <ToolbarChip
+                      label="Total"
+                      value={String(modLibrary.mods.length)}
+                    />
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <div className="relative group">
-                    <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/60 transition-colors group-focus-within:text-primary" />
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                  <div className="relative min-w-[240px] flex-1 sm:flex-none">
+                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/70" />
                     <Input
-                      placeholder="Search mods, authors, ids..."
-                      className="h-8 w-48 pl-8 text-[11px] font-medium bg-background/40 border-border/40 focus:w-64 transition-all"
+                      placeholder="Search by name, author, or package id"
+                      className="h-10 w-full border-border/60 bg-background pl-9 text-sm"
                       value={searchQuery}
                       onChange={(event) => setSearchQuery(event.target.value)}
                     />
@@ -938,190 +1035,287 @@ export function HomePage() {
                   <Button
                     variant="outline"
                     size="sm"
-                    className="h-8 gap-2 text-[10px] font-bold uppercase tracking-wider px-3 border-border/60 hover:bg-background/60"
-                    disabled={isBusy || isRescanning || isDirty || !currentProfileId}
+                    className="h-10 gap-2 px-4 text-sm"
+                    disabled={
+                      isBusy || isRescanning || isDirty || !currentProfileId
+                    }
                     onClick={() => void handleRescanLibrary()}
                   >
-                    {isRescanning ? <LoaderCircle className="h-3 w-3 animate-spin" /> : <RefreshCcw className="h-3 w-3" />}
+                    {isRescanning ? (
+                      <LoaderCircle className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <RefreshCcw className="h-4 w-4" />
+                    )}
                     Rescan
                   </Button>
                 </div>
               </div>
 
-              {/* Row 2: Profile & Filter Toolbar */}
-              <div className="flex items-center justify-between gap-4 py-0.5">
-                <div className="flex items-center gap-2 bg-background/40 rounded-lg p-1 border border-border/40 ring-1 ring-black/5 shadow-inner">
-                  <div className="flex items-center px-2 py-1 gap-2 border-r border-border/40 mr-1">
-                    <Package className="h-3 w-3 text-muted-foreground/60" />
-                    <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/80">Profile</span>
-                  </div>
-                  
-                  <select
-                    aria-label="Profile Selection"
-                    className="h-7 rounded-md border-none bg-transparent px-2 text-[11px] font-bold text-foreground focus:ring-0 cursor-pointer min-w-[100px]"
-                    disabled={isBusy || !currentProfileId}
-                    value={currentProfileId ?? ""}
-                    onChange={(event) => void handleProfileSwitch(event.target.value)}
-                  >
-                    {profileCatalogQuery.data?.profiles.map((p) => (
-                      <option key={p.id} value={p.id}>{p.name}</option>
-                    ))}
-                  </select>
+              <div className="rounded-2xl border border-border/60 bg-background/80 p-4 shadow-sm">
+                <div className="flex flex-wrap items-end gap-3">
+                  <label className="min-w-[160px] flex-1 space-y-2">
+                    <span className="text-xs font-medium text-muted-foreground">
+                      Active Profile
+                    </span>
+                    <select
+                      aria-label="Profile Selection"
+                      className="h-10 w-full rounded-xl border border-border/60 bg-background px-3 text-sm font-medium text-foreground outline-none"
+                      disabled={isBusy || !currentProfileId}
+                      value={currentProfileId ?? ""}
+                      onChange={(event) =>
+                        void handleProfileSwitch(event.target.value)
+                      }
+                    >
+                      {profileCatalogQuery.data?.profiles.map((profile) => (
+                        <option key={profile.id} value={profile.id}>
+                          {profile.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
 
-                  <Input
-                    aria-label="Profile Name"
-                    className="h-7 w-32 border-none bg-background/40 px-2 text-[11px] font-bold text-primary focus-visible:ring-1 focus-visible:ring-primary/20"
-                    disabled={isBusy || !currentProfile}
-                    value={draftProfileName}
-                    onChange={(event) => {
-                      setFeedback(null);
-                      setDraftProfileName(event.target.value);
-                    }}
-                  />
+                  <label className="min-w-[220px] flex-[1.4] space-y-2">
+                    <span className="text-xs font-medium text-muted-foreground">
+                      Profile Name
+                    </span>
+                    <Input
+                      aria-label="Profile Name"
+                      className="h-10 border-border/60 bg-background text-sm font-medium"
+                      disabled={isBusy || !currentProfile}
+                      value={draftProfileName}
+                      onChange={(event) => {
+                        setFeedback(null);
+                        setDraftProfileName(event.target.value);
+                      }}
+                    />
+                  </label>
 
-                  <div className="flex items-center gap-0.5 px-1 border-l border-border/40 ml-1">
+                  <div className="flex items-center gap-2">
                     <Button
-                      variant="ghost"
+                      variant="outline"
                       size="sm"
-                      className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
+                      className="h-10 gap-2 px-4"
                       title="New Profile"
                       onClick={handleOpenCreateProfileDialog}
                     >
-                      <Plus className="h-3.5 w-3.5" />
+                      <Plus className="h-4 w-4" />
+                      New Profile
                     </Button>
                     <Button
-                      variant="ghost"
+                      variant="outline"
                       size="sm"
-                      className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                      className="h-10 gap-2 px-4"
                       title="Delete Profile"
                       onClick={handleOpenDeleteProfileDialog}
                     >
-                      <Trash2 className="h-3.5 w-3.5" />
+                      <Trash2 className="h-4 w-4" />
+                      Delete
                     </Button>
-                  </div>
-
-                  <div className="flex items-center gap-2 pl-2 border-l border-border/40 ml-1 pr-1">
                     <Button
                       size="sm"
-                      variant={isDirty ? "default" : "ghost"}
-                      className={cn(
-                        "h-7 gap-2 text-[10px] font-black uppercase px-3",
-                        !isDirty && "text-muted-foreground opacity-50"
-                      )}
+                      className="h-10 gap-2 px-4"
                       disabled={isBusy || !currentProfile || !isDirty}
                       onClick={() => void handleSaveProfile()}
                     >
-                      <Save className="h-3 w-3" />
+                      <Save className="h-4 w-4" />
                       Save
                     </Button>
-                    {isDirty && (
-                      <div className="flex h-2 w-2 rounded-full bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.5)] animate-pulse" title="Unsaved Changes" />
-                    )}
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center gap-1 bg-background/40 p-1 rounded-lg border border-border/40">
+                <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border/50 pt-4">
+                  <div className="flex items-center gap-2">
                     <Button
-                      variant={activationFilter === "all" ? "secondary" : "ghost"}
+                      variant="outline"
                       size="sm"
-                      className="h-6 text-[9px] px-2 font-black uppercase tracking-tighter"
-                      onClick={() => setActivationFilter("all")}
+                      className="h-9 gap-2 px-3"
+                      onClick={() =>
+                        setIsFilterPanelOpen((current) => !current)
+                      }
                     >
-                      All
+                      {isFilterPanelOpen ? (
+                        <ChevronDown className="h-4 w-4" />
+                      ) : (
+                        <ChevronRight className="h-4 w-4" />
+                      )}
+                      Filters
                     </Button>
-                    <Button
-                      variant={activationFilter === "active" ? "secondary" : "ghost"}
-                      size="sm"
-                      className="h-6 text-[9px] px-2 font-black uppercase tracking-tighter"
-                      onClick={() => setActivationFilter("active")}
-                    >
-                      Active
-                    </Button>
-                    <Button
-                      variant={activationFilter === "inactive" ? "secondary" : "ghost"}
-                      size="sm"
-                      className="h-6 text-[9px] px-2 font-black uppercase tracking-tighter"
-                      onClick={() => setActivationFilter("inactive")}
-                    >
-                      Inactive
-                    </Button>
+                    <p className="text-sm text-muted-foreground">
+                      Activation:{" "}
+                      <span className="font-medium capitalize text-foreground">
+                        {activationFilter}
+                      </span>
+                      <span className="mx-2 text-border">/</span>
+                      Source:{" "}
+                      <span className="font-medium capitalize text-foreground">
+                        {sourceFilter === "all" ? "all sources" : sourceFilter}
+                      </span>
+                    </p>
                   </div>
 
-                  <div className="flex items-center gap-1 bg-background/40 p-1 rounded-lg border border-border/40">
-                    <Button
-                      variant={sourceFilter === "all" ? "secondary" : "ghost"}
-                      size="sm"
-                      className="h-6 text-[9px] px-2 font-black uppercase tracking-tighter"
-                      onClick={() => setSourceFilter("all")}
+                  {isDirty ? (
+                    <Badge
+                      variant="outline"
+                      className="border-amber-500/40 bg-amber-500/10 text-amber-700"
+                      title="Unsaved Changes"
                     >
-                      All Sources
-                    </Button>
-                    <Button
-                      variant={sourceFilter === "local" ? "secondary" : "ghost"}
-                      size="sm"
-                      className="h-6 text-[9px] px-2 font-black uppercase tracking-tighter"
-                      onClick={() => setSourceFilter("local")}
-                    >
-                      Local
-                    </Button>
-                    <Button
-                      variant={sourceFilter === "workshop" ? "secondary" : "ghost"}
-                      size="sm"
-                      className="h-6 text-[9px] px-2 font-black uppercase tracking-tighter"
-                      onClick={() => setSourceFilter("workshop")}
-                    >
-                      Workshop
-                    </Button>
-                  </div>
+                      Unsaved changes
+                    </Badge>
+                  ) : null}
                 </div>
+
+                {isFilterPanelOpen ? (
+                  <div className="mt-4 grid gap-4 border-t border-border/50 pt-4 lg:grid-cols-2">
+                    <div className="space-y-2">
+                      <p className="text-xs font-medium text-muted-foreground">
+                        Activation
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          variant={
+                            activationFilter === "all" ? "secondary" : "outline"
+                          }
+                          size="sm"
+                          className="h-9 px-4"
+                          onClick={() => setActivationFilter("all")}
+                        >
+                          All
+                        </Button>
+                        <Button
+                          variant={
+                            activationFilter === "active"
+                              ? "secondary"
+                              : "outline"
+                          }
+                          size="sm"
+                          className="h-9 px-4"
+                          onClick={() => setActivationFilter("active")}
+                        >
+                          Active
+                        </Button>
+                        <Button
+                          variant={
+                            activationFilter === "inactive"
+                              ? "secondary"
+                              : "outline"
+                          }
+                          size="sm"
+                          className="h-9 px-4"
+                          onClick={() => setActivationFilter("inactive")}
+                        >
+                          Inactive
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <p className="text-xs font-medium text-muted-foreground">
+                        Source
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          variant={
+                            sourceFilter === "all" ? "secondary" : "outline"
+                          }
+                          size="sm"
+                          className="h-9 px-4"
+                          onClick={() => setSourceFilter("all")}
+                        >
+                          All Sources
+                        </Button>
+                        <Button
+                          variant={
+                            sourceFilter === "local" ? "secondary" : "outline"
+                          }
+                          size="sm"
+                          className="h-9 px-4"
+                          onClick={() => setSourceFilter("local")}
+                        >
+                          Local
+                        </Button>
+                        <Button
+                          variant={
+                            sourceFilter === "workshop"
+                              ? "secondary"
+                              : "outline"
+                          }
+                          size="sm"
+                          className="h-9 px-4"
+                          onClick={() => setSourceFilter("workshop")}
+                        >
+                          Workshop
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
               </div>
 
-              {feedback && (
-                <div 
+              {feedback ? (
+                <div
                   className={cn(
-                    "flex items-center gap-3 rounded-lg border px-4 py-2 text-[10px] font-black uppercase tracking-wider animate-in fade-in slide-in-from-top-2 duration-300",
-                    feedback.tone === "success" ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-600" :
-                    feedback.tone === "warning" ? "border-amber-500/30 bg-amber-500/10 text-amber-700" :
-                    "border-destructive/30 bg-destructive/10 text-destructive"
+                    "flex items-center gap-3 rounded-2xl border px-4 py-3 text-sm",
+                    feedback.tone === "success"
+                      ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700"
+                      : feedback.tone === "warning"
+                        ? "border-amber-500/30 bg-amber-500/10 text-amber-700"
+                        : "border-destructive/30 bg-destructive/10 text-destructive",
                   )}
                 >
-                  <div className={cn("h-1.5 w-1.5 rounded-full", 
-                    feedback.tone === "success" ? "bg-emerald-500" : 
-                    feedback.tone === "warning" ? "bg-amber-500" : "bg-destructive"
-                  )} />
-                  {feedback.message}
+                  <div
+                    className={cn(
+                      "h-2 w-2 rounded-full",
+                      feedback.tone === "success"
+                        ? "bg-emerald-500"
+                        : feedback.tone === "warning"
+                          ? "bg-amber-500"
+                          : "bg-destructive",
+                    )}
+                  />
+                  <span className="font-medium">{feedback.message}</span>
                 </div>
-              )}
+              ) : null}
             </div>
           </header>
 
           {/* Analysis Bar */}
           {analysis || isDirty ? (
-            <div className="shrink-0 border-b border-border/60 bg-background/40 px-6 py-2">
-              <div className="flex items-center justify-between gap-4">
+            <div className="shrink-0 border-b border-border/60 bg-background/50 px-6 py-3">
+              <div className="flex flex-wrap items-center justify-between gap-4">
                 <div className="flex items-center gap-2 overflow-hidden">
                   {isDirty ? (
-                    <Badge variant="outline" className="h-6 gap-2 border-amber-500/20 bg-amber-500/5 text-amber-700 text-[9px] font-black uppercase shrink-0">
-                      <AlertTriangle className="h-3 w-3" />
+                    <Badge
+                      variant="outline"
+                      className="h-7 gap-2 border-amber-500/30 bg-amber-500/10 text-amber-700"
+                    >
+                      <AlertTriangle className="h-3.5 w-3.5" />
                       Analysis Paused (Unsaved Draft)
                     </Badge>
                   ) : analysis ? (
                     <>
-                      <Badge variant={analysis.isOptimal ? "outline" : "secondary"} className={cn(
-                        "h-6 px-3 text-[9px] font-black uppercase shrink-0",
-                        analysis.isOptimal ? "border-emerald-500/30 bg-emerald-500/5 text-emerald-600" : "bg-primary/10 text-primary"
-                      )}>
-                        {analysis.isOptimal ? "Order Optimal" : "Optimization Recommended"}
+                      <Badge
+                        variant={analysis.isOptimal ? "outline" : "secondary"}
+                        className={cn(
+                          "h-7 px-3",
+                          analysis.isOptimal
+                            ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700"
+                            : "bg-primary/10 text-primary",
+                        )}
+                      >
+                        {analysis.isOptimal
+                          ? "Order Optimal"
+                          : "Optimization Recommended"}
                       </Badge>
-                      
+
                       {analysis.hasBlockingIssues && (
-                        <Badge variant="destructive" className="h-6 px-2 text-[9px] font-black uppercase shrink-0">Blocking Issues</Badge>
+                        <Badge variant="destructive" className="h-7 px-3">
+                          Blocking Issues
+                        </Badge>
                       )}
-                      
+
                       {analysis.sortDifferenceCount > 0 && (
-                        <div className="flex items-center gap-1.5 text-[10px] font-bold text-primary/70 bg-primary/5 px-2 py-1 rounded border border-primary/10 shrink-0">
-                          <ArrowUpDown className="h-3 w-3" />
+                        <div className="flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/5 px-3 py-1.5 text-xs font-medium text-primary/80 shrink-0">
+                          <ArrowUpDown className="h-3.5 w-3.5" />
                           <span>{analysis.sortDifferenceCount} Diffs</span>
                         </div>
                       )}
@@ -1130,40 +1324,47 @@ export function HomePage() {
                 </div>
 
                 <div className="flex items-center gap-2 shrink-0">
-                  {analysis && !isDirty && !analysis.hasBlockingIssues && analysis.sortDifferenceCount > 0 && (
-                    <Button 
-                      size="sm" 
-                      className="h-6 px-3 text-[9px] font-black uppercase gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90"
-                      onClick={() => void handleAutoSort()}
-                      disabled={isBusy}
-                    >
-                      <Sparkles className="h-3 w-3" />
-                      Apply Recommended Order
-                    </Button>
-                  )}
-                  {(analysis?.missingInstalledInactiveDependencies.length ?? 0) > 0 && !isDirty && (
-                    <Button 
-                      size="sm" 
-                      variant="outline"
-                      className="h-6 px-3 text-[9px] font-black uppercase gap-1.5 border-primary/30 text-primary hover:bg-primary/5"
-                      onClick={() => void handleEnableMissingDependencies()}
-                      disabled={isBusy}
-                    >
-                      <Link2 className="h-3 w-3" />
-                      Auto-Enable {analysis?.missingInstalledInactiveDependencies.length ?? 0} Deps
-                    </Button>
-                  )}
+                  {analysis &&
+                    !isDirty &&
+                    !analysis.hasBlockingIssues &&
+                    analysis.sortDifferenceCount > 0 && (
+                      <Button
+                        size="sm"
+                        className="h-8 gap-1.5 px-3 text-xs"
+                        onClick={() => void handleAutoSort()}
+                        disabled={isBusy}
+                      >
+                        <Sparkles className="h-3.5 w-3.5" />
+                        Apply Recommended Order
+                      </Button>
+                    )}
+                  {(analysis?.missingInstalledInactiveDependencies.length ??
+                    0) > 0 &&
+                    !isDirty && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8 gap-1.5 px-3 text-xs"
+                        onClick={() => void handleEnableMissingDependencies()}
+                        disabled={isBusy}
+                      >
+                        <Link2 className="h-3.5 w-3.5" />
+                        Auto-Enable{" "}
+                        {analysis?.missingInstalledInactiveDependencies
+                          .length ?? 0}{" "}
+                        Deps
+                      </Button>
+                    )}
                 </div>
               </div>
             </div>
           ) : null}
 
           {/* Mod Table Header */}
-          <div className="shrink-0 sticky top-0 z-10 flex items-center px-6 py-2 text-[9px] font-black uppercase tracking-[0.2em] text-muted-foreground/60 bg-background border-b border-border/40">
-            <div className="w-10 text-center">Active</div>
-            <div className="w-8 mr-2 text-center">Ord</div>
-            <div className="flex-1">Mod Specification</div>
-            <div className="w-20 text-right">Version</div>
+          <div className="shrink-0 sticky top-0 z-10 flex items-center gap-4 border-b border-border/40 bg-background px-6 py-3 text-xs font-medium text-muted-foreground">
+            <div className="w-11 text-center">Active</div>
+            <div className="w-12 text-center">Order</div>
+            <div className="flex-1">Mod</div>
           </div>
 
           {/* Scrollable Mod List */}
@@ -1172,7 +1373,9 @@ export function HomePage() {
               filteredMods.map((mod, index) => {
                 const isSelected = selectedMod?.id === mod.id;
                 const packageId = mod.dependencyMetadata.packageIdNormalized;
-                const activeIndex = packageId ? draftActivePackageIds.indexOf(packageId) : -1;
+                const activeIndex = packageId
+                  ? draftActivePackageIds.indexOf(packageId)
+                  : -1;
 
                 return (
                   <div
@@ -1187,93 +1390,115 @@ export function HomePage() {
                       }
                     }}
                     className={cn(
-                      "group flex w-full items-center border-b border-border/10 px-6 py-1.5 text-left transition-all",
-                      isSelected ? "bg-primary/10 ring-1 ring-inset ring-primary/20" : index % 2 === 0 ? "bg-transparent" : "bg-muted/5",
-                      "hover:bg-primary/5"
+                      "group flex w-full items-start gap-3 border-b border-border/10 px-6 py-3 text-left transition-all",
+                      isSelected
+                        ? "bg-primary/10 ring-1 ring-inset ring-primary/20"
+                        : index % 2 === 0
+                          ? "bg-transparent"
+                          : "bg-muted/5",
+                      "hover:bg-primary/5",
                     )}
                   >
-                    <div className="flex w-10 justify-center shrink-0">
+                    <div className="flex w-11 justify-center pt-1 shrink-0">
                       <Checkbox
                         aria-label={`Toggle ${mod.name}`}
                         checked={mod.enabled}
                         disabled={!packageId || isBusy}
-                        className="h-3.5 w-3.5"
+                        className="h-4 w-4"
                         onChange={() => {
                           if (packageId) toggleMod(packageId);
                         }}
                         onClick={(event) => event.stopPropagation()}
                       />
                     </div>
-                    
-                    <div className="w-8 flex flex-col items-center justify-center shrink-0 mr-2">
+
+                    <div className="flex w-12 flex-col items-center justify-center shrink-0">
                       {mod.enabled ? (
                         <>
                           <Button
                             size="sm"
                             variant="ghost"
-                            className="h-3.5 w-3.5 p-0 hover:bg-primary/20 text-muted-foreground/40 hover:text-primary transition-opacity opacity-0 group-hover:opacity-100"
+                            className="h-5 w-5 p-0 text-muted-foreground/50 transition-opacity hover:bg-primary/20 hover:text-primary md:opacity-0 md:group-hover:opacity-100"
                             disabled={isBusy || activeIndex === 0}
                             onClick={(e) => {
                               e.stopPropagation();
-                              if (packageId) moveActivePackageId(packageId, "up");
+                              if (packageId)
+                                moveActivePackageId(packageId, "up");
                             }}
                           >
-                            <ArrowUp className="h-2.5 w-2.5" />
+                            <ArrowUp className="h-3 w-3" />
                           </Button>
-                          <span className="text-[9px] font-black text-primary/80 leading-none py-0.5">
+                          <span className="py-1 text-xs font-semibold text-primary/80 leading-none">
                             {activeIndex + 1}
                           </span>
                           <Button
                             size="sm"
                             variant="ghost"
-                            className="h-3.5 w-3.5 p-0 hover:bg-primary/20 text-muted-foreground/40 hover:text-primary transition-opacity opacity-0 group-hover:opacity-100"
-                            disabled={isBusy || activeIndex === draftActivePackageIds.length - 1}
+                            className="h-5 w-5 p-0 text-muted-foreground/50 transition-opacity hover:bg-primary/20 hover:text-primary md:opacity-0 md:group-hover:opacity-100"
+                            disabled={
+                              isBusy ||
+                              activeIndex === draftActivePackageIds.length - 1
+                            }
                             onClick={(e) => {
                               e.stopPropagation();
-                              if (packageId) moveActivePackageId(packageId, "down");
+                              if (packageId)
+                                moveActivePackageId(packageId, "down");
                             }}
                           >
-                            <ArrowDown className="h-2.5 w-2.5" />
+                            <ArrowDown className="h-3 w-3" />
                           </Button>
                         </>
                       ) : (
-                        <div className="h-4 w-4 rounded-full border border-border/40 bg-muted/10 opacity-20" />
+                        <div className="h-5 w-5 rounded-full border border-border/40 bg-muted/10 opacity-30" />
                       )}
                     </div>
 
-                    <div className="min-w-0 flex-1 flex flex-col gap-0.5">
-                      <div className="flex items-center gap-2">
-                        <span className={cn(
-                          "truncate text-[11px] font-bold tracking-tight",
-                          !mod.enabled ? "text-muted-foreground font-medium" : "text-foreground"
-                        )}>
+                    <div className="min-w-0 flex-1 space-y-1.5">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span
+                          className={cn(
+                            "truncate text-sm font-semibold tracking-tight",
+                            !mod.enabled
+                              ? "text-muted-foreground font-medium"
+                              : "text-foreground",
+                          )}
+                        >
                           {mod.name}
                         </span>
                         <div className="flex items-center gap-1 shrink-0">
                           {mod.isOfficial && (
-                            <div className="bg-primary/10 text-primary text-[7px] font-black px-1 py-0 rounded uppercase ring-1 ring-inset ring-primary/20">Official</div>
+                            <div className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary ring-1 ring-inset ring-primary/20">
+                              Official
+                            </div>
                           )}
                           {!mod.hasAboutXml && (
-                            <div className="bg-destructive/10 text-destructive text-[7px] font-black px-1 py-0 rounded uppercase ring-1 ring-inset ring-destructive/20">Invalid</div>
+                            <div className="rounded-full bg-destructive/10 px-2 py-0.5 text-[10px] font-semibold text-destructive ring-1 ring-inset ring-destructive/20">
+                              Invalid
+                            </div>
                           )}
                         </div>
                       </div>
-                      <span className="truncate font-mono text-[8px] text-muted-foreground/50 tracking-tight">
+                      <span className="truncate font-mono text-[11px] text-muted-foreground/80">
                         {mod.packageId ?? mod.windowsPath}
                       </span>
-                    </div>
-
-                    <div className="w-24 text-right shrink-0 pr-2">
-                      <Badge variant="outline" className={cn(
-                        "h-4 text-[8px] px-1 font-bold uppercase ring-1 ring-inset",
-                        mod.source === "installation" ? "bg-emerald-500/5 text-emerald-600/70 border-emerald-500/20" : "bg-blue-500/5 text-blue-600/70 border-blue-500/20"
-                      )}>
-                        {mod.source === "installation" ? "Local" : "Workshop"}
-                      </Badge>
-                    </div>
-
-                    <div className="w-20 text-right text-[9px] font-black font-mono text-muted-foreground/60 shrink-0">
-                      {mod.version ? `v${mod.version}` : "v?.?.?"}
+                      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            "h-6 rounded-full px-2 font-medium",
+                            mod.source === "installation"
+                              ? "border-emerald-500/30 bg-emerald-500/5 text-emerald-700"
+                              : "border-blue-500/30 bg-blue-500/5 text-blue-700",
+                          )}
+                        >
+                          {mod.source === "installation" ? "Local" : "Workshop"}
+                        </Badge>
+                        <span className="font-mono text-[11px]">
+                          {mod.version
+                            ? `Version ${mod.version}`
+                            : "Version unknown"}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 );
@@ -1286,31 +1511,38 @@ export function HomePage() {
                     <Search className="absolute -bottom-1 -right-1 h-6 w-6 text-muted-foreground" />
                   </div>
                   <div className="space-y-1">
-                    <p className="text-sm font-black uppercase tracking-[0.2em] rw-text">No Matches</p>
-                    <p className="text-[10px] font-medium leading-relaxed">Adjust your filters or search query to find the mods you're looking for.</p>
+                    <p className="text-sm font-semibold text-foreground">
+                      No matches
+                    </p>
+                    <p className="text-sm leading-relaxed text-muted-foreground">
+                      Adjust your filters or search query to find the mods
+                      you&apos;re looking for.
+                    </p>
                   </div>
                 </div>
               </div>
             )}
           </div>
 
-          <footer className="shrink-0 flex justify-between items-center border-t border-border/60 bg-card/20 px-6 py-2.5">
-            <div className="flex items-center gap-4 text-[9px] font-bold uppercase tracking-widest text-muted-foreground/60">
+          <footer className="shrink-0 flex flex-wrap justify-between gap-3 border-t border-border/60 bg-card/20 px-6 py-3">
+            <div className="flex items-center gap-4 text-xs text-muted-foreground">
               <div className="flex items-center gap-1.5">
                 <div className="h-1 w-1 rounded-full bg-emerald-500" />
                 <span>Scanner Active</span>
               </div>
               <span className="opacity-30">|</span>
-              <span>Last Scan: {new Date(modLibrary.scannedAt).toLocaleTimeString()}</span>
+              <span>
+                Last Scan: {new Date(modLibrary.scannedAt).toLocaleTimeString()}
+              </span>
             </div>
-            <div className="text-[9px] font-black text-muted-foreground/40 bg-muted/10 px-2 py-0.5 rounded">
+            <div className="rounded-full bg-muted/20 px-3 py-1 text-xs font-medium text-muted-foreground">
               {filteredMods.length} Visible
             </div>
           </footer>
         </section>
 
         {/* Resizer Handle */}
-        <div 
+        <div
           className="shrink-0 w-1 hover:w-1.5 h-full cursor-col-resize bg-border/40 hover:bg-primary/40 transition-all flex items-center justify-center z-20"
           onMouseDown={handleMouseDown}
         >
@@ -1318,56 +1550,87 @@ export function HomePage() {
         </div>
 
         {/* Side Panel: Mod Information */}
-        <aside 
+        <aside
           className="shrink-0 flex flex-col bg-card/10 overflow-hidden"
           style={{ width: `${asideWidth}%` }}
         >
           {selectedMod ? (
             <div className="flex flex-col h-full">
-              <header className="shrink-0 border-b border-border/60 bg-background/40 p-8">
-                <div className="flex flex-col gap-6">
-                  <div className="flex items-start justify-between gap-6">
-                    <div className="space-y-3 min-w-0">
-                      <h3 className="text-3xl font-black uppercase tracking-tight rw-text leading-[1.1] text-foreground">
-                        {selectedMod.name}
-                      </h3>
+              <header className="shrink-0 border-b border-border/60 bg-background/40 p-6">
+                <div className="flex flex-col gap-5">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0 space-y-3">
+                      <div className="space-y-1">
+                        <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+                          Module Detail
+                        </p>
+                        <h3 className="text-2xl font-black tracking-tight text-foreground">
+                          {selectedMod.name}
+                        </h3>
+                      </div>
+
                       <div className="flex flex-wrap gap-2">
                         <Badge
                           variant={selectedMod.enabled ? "default" : "outline"}
-                          className={cn("h-5 text-[9px] font-black uppercase ring-1 ring-inset", 
-                            selectedMod.enabled ? "bg-primary text-primary-foreground ring-primary/20" : "bg-muted/10 text-muted-foreground border-border/60 ring-black/5")}
+                          className={cn(
+                            "h-7 rounded-full px-3",
+                            selectedMod.enabled
+                              ? "bg-primary text-primary-foreground"
+                              : "bg-background text-muted-foreground",
+                          )}
                         >
                           {selectedMod.enabled ? "Enabled" : "Disabled"}
                         </Badge>
-                        <Badge variant="outline" className="h-5 text-[9px] font-bold uppercase border-border/60 text-muted-foreground bg-muted/5">
-                          {selectedMod.source}
+                        <Badge
+                          variant="outline"
+                          className="h-7 rounded-full px-3 text-muted-foreground"
+                        >
+                          {selectedMod.source === "installation"
+                            ? "Local install"
+                            : "Workshop"}
                         </Badge>
-                        {selectedMod.isOfficial && (
-                          <div className="bg-primary/10 text-primary text-[9px] font-black px-2 py-0.5 rounded uppercase ring-1 ring-inset ring-primary/20">Official Core</div>
-                        )}
+                        {selectedMod.isOfficial ? (
+                          <Badge
+                            variant="outline"
+                            className="h-7 rounded-full border-primary/30 bg-primary/10 px-3 text-primary"
+                          >
+                            Official core
+                          </Badge>
+                        ) : null}
                       </div>
                     </div>
-                    {selectedMod.isOfficial && (
-                      <div className="shrink-0 p-2.5 rounded-xl bg-primary/10 text-primary ring-1 ring-primary/20 shadow-sm">
-                        <ShieldCheck className="h-8 w-8" />
+
+                    {selectedMod.isOfficial ? (
+                      <div className="shrink-0 rounded-2xl border border-primary/20 bg-primary/10 p-3 text-primary shadow-sm">
+                        <ShieldCheck className="h-7 w-7" />
                       </div>
-                    )}
+                    ) : null}
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="rounded-xl border border-border/40 bg-background/40 p-3.5 shadow-sm ring-1 ring-black/5">
-                      <p className="text-[9px] font-black uppercase tracking-[0.2em] text-muted-foreground/60 mb-1.5">Identification</p>
-                      <p className="font-mono text-[10px] font-bold truncate select-text" title={selectedMod.packageId ?? "N/A"}>
+                  <div className="grid gap-3">
+                    <div className="rounded-2xl border border-border/60 bg-background/80 p-4">
+                      <p className="text-xs font-medium text-muted-foreground">
+                        Package ID
+                      </p>
+                      <p
+                        className="mt-2 break-all font-mono text-xs text-foreground select-text"
+                        title={selectedMod.packageId ?? "N/A"}
+                      >
                         {selectedMod.packageId ?? "None"}
                       </p>
                     </div>
-                    <div className="rounded-xl border border-border/40 bg-background/40 p-3.5 shadow-sm ring-1 ring-black/5">
-                      <p className="text-[9px] font-black uppercase tracking-[0.2em] text-muted-foreground/60 mb-1.5">Distribution</p>
-                      <div className="flex items-center justify-between">
-                        <span className="text-[11px] font-bold truncate mr-2" title={selectedMod.author ?? "Unknown Author"}>
+                    <div className="rounded-2xl border border-border/60 bg-background/80 p-4">
+                      <p className="text-xs font-medium text-muted-foreground">
+                        Author & Version
+                      </p>
+                      <div className="mt-2 space-y-1">
+                        <span
+                          className="block break-words text-sm font-medium text-foreground"
+                          title={selectedMod.author ?? "Unknown author"}
+                        >
                           {selectedMod.author ?? "Unknown"}
                         </span>
-                        <span className="shrink-0 font-mono text-[10px] text-muted-foreground/80 font-black">
+                        <span className="block font-mono text-xs text-muted-foreground">
                           v{selectedMod.version ?? "?.?"}
                         </span>
                       </div>
@@ -1376,103 +1639,159 @@ export function HomePage() {
                 </div>
               </header>
 
-              <div className="flex-1 overflow-y-auto p-8 space-y-8 no-scrollbar bg-background/5">
-                {analysis?.hasBlockingIssues && (
-                  <section className="space-y-3">
-                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-destructive/80 flex items-center gap-2">
-                      <div className="h-1.5 w-1.5 rounded-full bg-destructive animate-pulse" />
-                      Critical Deployment Issues
-                    </p>
-                    <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-5 ring-1 ring-destructive/10">
-                      {analysis.missingUnavailableDependencies.length > 0 && (
-                        <div className="space-y-2">
-                          <p className="text-[11px] font-black text-destructive uppercase tracking-wide">
-                            Missing Runtime Dependencies:
-                          </p>
-                          <ul className="list-disc space-y-1.5 pl-5 text-[11px] font-medium leading-normal text-destructive/90 select-text">
-                            {analysis.missingUnavailableDependencies.map((issue) => (
-                              <li key={issue.packageId} className="marker:text-destructive/40">
-                                <span className="font-mono font-black">{issue.packageId}</span> 
-                                <span className="text-destructive/60 font-bold ml-1 italic">(Required by {issue.requiredByNames.join(", ")})</span>
+              <div className="flex-1 overflow-y-auto bg-background/5 p-6 no-scrollbar">
+                <div className="space-y-4">
+                  {analysis?.hasBlockingIssues ? (
+                    <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-5">
+                      <p className="flex items-center gap-2 text-sm font-semibold text-destructive">
+                        <span className="h-2 w-2 rounded-full bg-destructive" />
+                        Critical deployment issues
+                      </p>
+                      {analysis.missingUnavailableDependencies.length > 0 ? (
+                        <ul className="mt-4 list-disc space-y-2 pl-5 text-sm leading-relaxed text-destructive/90">
+                          {analysis.missingUnavailableDependencies.map(
+                            (issue) => (
+                              <li key={issue.packageId}>
+                                <span className="font-mono font-semibold">
+                                  {issue.packageId}
+                                </span>{" "}
+                                is required by{" "}
+                                {issue.requiredByNames.join(", ")}.
                               </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
+                            ),
+                          )}
+                        </ul>
+                      ) : null}
                     </div>
-                  </section>
-                )}
+                  ) : null}
 
-                <section className="space-y-3">
-                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/60">Module Description</p>
-                  <div className="rounded-xl border border-border/40 bg-background/40 p-6 text-[12px] leading-relaxed text-foreground/80 select-text shadow-sm ring-1 ring-black/5">
-                    <div className="prose prose-sm prose-invert max-w-none">
+                  <DetailSection
+                    title="Description"
+                    description="Primary summary shown to users before they inspect compatibility details."
+                    open={openSections.description}
+                    onToggle={() =>
+                      setOpenSections((current) => ({
+                        ...current,
+                        description: !current.description,
+                      }))
+                    }
+                  >
+                    <div className="space-y-4 text-sm leading-relaxed text-foreground/90 select-text">
                       {renderDescriptionBlocks(selectedMod.description)}
                     </div>
-                  </div>
-                </section>
+                  </DetailSection>
 
-                <section className="space-y-3">
-                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/60">Execution Order Hints</p>
-                  <div className="grid gap-4">
-                    {[
-                      { label: "Absolute Dependencies", items: selectedMod.dependencyMetadata.dependencies, color: "bg-blue-500" },
-                      { label: "Initialize After", items: selectedMod.dependencyMetadata.loadAfter, color: "bg-emerald-500" },
-                      { label: "Initialize Before", items: selectedMod.dependencyMetadata.loadBefore, color: "bg-amber-500" },
-                      { label: "Incompatible Modules", items: selectedMod.dependencyMetadata.incompatibleWith, color: "bg-destructive" },
-                    ].map(({ label, items, color }) => (
-                      <div key={label} className="rounded-xl border border-border/40 bg-background/40 p-4 ring-1 ring-black/5">
-                        <div className="flex items-center gap-2 mb-3">
-                          <div className={cn("h-1.5 w-1.5 rounded-full shadow-[0_0_4px_rgba(0,0,0,0.2)]", color)} />
-                          <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/80">
-                            {label}
-                          </p>
+                  <DetailSection
+                    title="Execution Order Hints"
+                    description="Dependency and sort metadata that matters when you need to troubleshoot ordering."
+                    open={openSections.orderHints}
+                    onToggle={() =>
+                      setOpenSections((current) => ({
+                        ...current,
+                        orderHints: !current.orderHints,
+                      }))
+                    }
+                  >
+                    <div className="grid gap-3">
+                      {[
+                        {
+                          label: "Absolute Dependencies",
+                          items: selectedMod.dependencyMetadata.dependencies,
+                          color: "bg-blue-500",
+                        },
+                        {
+                          label: "Initialize After",
+                          items: selectedMod.dependencyMetadata.loadAfter,
+                          color: "bg-emerald-500",
+                        },
+                        {
+                          label: "Initialize Before",
+                          items: selectedMod.dependencyMetadata.loadBefore,
+                          color: "bg-amber-500",
+                        },
+                        {
+                          label: "Incompatible Modules",
+                          items:
+                            selectedMod.dependencyMetadata.incompatibleWith,
+                          color: "bg-destructive",
+                        },
+                      ].map(({ label, items, color }) => (
+                        <div
+                          key={label}
+                          className="rounded-2xl border border-border/50 bg-background p-4"
+                        >
+                          <div className="mb-3 flex items-center gap-2">
+                            <div
+                              className={cn("h-2 w-2 rounded-full", color)}
+                            />
+                            <p className="text-xs font-medium text-muted-foreground">
+                              {label}
+                            </p>
+                          </div>
+                          {renderPackageList(items)}
                         </div>
-                        {renderPackageList(items)}
-                      </div>
-                    ))}
-                  </div>
-                </section>
+                      ))}
+                    </div>
+                  </DetailSection>
 
-                {selectedExplanation?.reasons.length ? (
-                  <section className="space-y-3">
-                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-primary/80">Deployment Logic Analysis</p>
-                    <div className="rounded-xl border border-primary/20 bg-primary/5 p-5 ring-1 ring-primary/10">
-                      <ul className="space-y-2 text-[11px] font-medium leading-normal text-foreground/80 select-text">
-                        {selectedExplanation.reasons.map((reason, i) => (
-                          <li key={i} className="flex gap-3">
-                            <span className="text-primary font-black shrink-0">{i + 1}.</span>
+                  {selectedExplanation?.reasons.length ? (
+                    <DetailSection
+                      title="Deployment Logic Analysis"
+                      description="Why this mod lands in its current position or triggers a recommendation."
+                      open={openSections.analysis}
+                      onToggle={() =>
+                        setOpenSections((current) => ({
+                          ...current,
+                          analysis: !current.analysis,
+                        }))
+                      }
+                    >
+                      <ul className="space-y-3 text-sm leading-relaxed text-foreground/85 select-text">
+                        {selectedExplanation.reasons.map((reason, index) => (
+                          <li key={index} className="flex gap-3">
+                            <span className="font-semibold text-primary">
+                              {index + 1}.
+                            </span>
                             <span>{reason}</span>
                           </li>
                         ))}
                       </ul>
-                    </div>
-                  </section>
-                ) : null}
+                    </DetailSection>
+                  ) : null}
 
-                <section className="space-y-3">
-                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/60">Physical Environment</p>
-                  <div className="rounded-xl border border-border/40 bg-background/40 p-5 space-y-4 font-mono text-[10px] ring-1 ring-black/5">
-                    <div className="group/path">
-                      <p className="text-[8px] font-black text-muted-foreground/40 uppercase mb-1.5 flex items-center gap-2">
-                        <FolderSearch className="h-2.5 w-2.5" />
-                        Host System Location
-                      </p>
-                      <p className="break-all text-muted-foreground/80 group-hover/path:text-foreground transition-colors select-text px-2 py-1.5 bg-background/20 rounded border border-border/20">
-                        {selectedMod.windowsPath}
-                      </p>
+                  <DetailSection
+                    title="Physical Environment"
+                    description="Underlying filesystem paths for manual inspection and debugging."
+                    open={openSections.paths}
+                    onToggle={() =>
+                      setOpenSections((current) => ({
+                        ...current,
+                        paths: !current.paths,
+                      }))
+                    }
+                  >
+                    <div className="space-y-4 font-mono text-xs">
+                      <div className="space-y-2">
+                        <p className="flex items-center gap-2 font-sans text-xs font-medium text-muted-foreground">
+                          <FolderSearch className="h-3.5 w-3.5" />
+                          Host system location
+                        </p>
+                        <p className="rounded-xl border border-border/50 bg-background px-3 py-3 break-all text-muted-foreground select-text">
+                          {selectedMod.windowsPath}
+                        </p>
+                      </div>
+                      <div className="space-y-2">
+                        <p className="flex items-center gap-2 font-sans text-xs font-medium text-muted-foreground">
+                          <HardDrive className="h-3.5 w-3.5" />
+                          Metadata manifest
+                        </p>
+                        <p className="rounded-xl border border-border/50 bg-background px-3 py-3 break-all text-muted-foreground select-text">
+                          {selectedMod.manifestPath ?? "N/A"}
+                        </p>
+                      </div>
                     </div>
-                    <div className="group/path">
-                      <p className="text-[8px] font-black text-muted-foreground/40 uppercase mb-1.5 flex items-center gap-2">
-                        <HardDrive className="h-2.5 w-2.5" />
-                        Metadata Manifest
-                      </p>
-                      <p className="break-all text-muted-foreground/80 group-hover/path:text-foreground transition-colors select-text px-2 py-1.5 bg-background/20 rounded border border-border/20">
-                        {selectedMod.manifestPath ?? "N/A"}
-                      </p>
-                    </div>
-                  </div>
-                </section>
+                  </DetailSection>
+                </div>
               </div>
             </div>
           ) : (
@@ -1483,11 +1802,12 @@ export function HomePage() {
                   <div className="absolute inset-0 bg-primary/20 blur-2xl rounded-full" />
                 </div>
                 <div className="space-y-2">
-                  <p className="text-lg font-black uppercase tracking-[0.3em] rw-text text-muted-foreground/40">
-                    No Module Selected
+                  <p className="text-lg font-semibold text-muted-foreground">
+                    No module selected
                   </p>
-                  <p className="text-[10px] font-bold text-muted-foreground/30 leading-relaxed uppercase tracking-widest">
-                    Select a module from the repository to view its deployment specifications and dependency graph.
+                  <p className="text-sm leading-relaxed text-muted-foreground">
+                    Select a module from the list to inspect its description,
+                    ordering hints, and filesystem paths.
                   </p>
                 </div>
               </div>

@@ -9,4 +9,4 @@ packages/*/artifacts/
 *.db-shm
 *.db-wal
 coverage/
-
+.factory/

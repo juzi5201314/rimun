@@ -25,6 +25,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   CheckCircle2,
+  ChevronDown,
+  ChevronRight,
   FolderSearch,
   HardDrive,
   LoaderCircle,
@@ -207,6 +209,7 @@ export function SettingsPage() {
   const [lastValidation, setLastValidation] = useState<ValidatePathResult[]>(
     [],
   );
+  const [isGuideOpen, setIsGuideOpen] = useState(false);
 
   useEffect(() => {
     if (settingsQuery.data) {
@@ -338,11 +341,11 @@ export function SettingsPage() {
       <div className="sticky top-0 z-10 border-b-2 border-border bg-card px-6 py-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h2 className="flex items-center gap-3 text-2xl font-black uppercase tracking-wide rw-text-shadow">
+            <h2 className="flex items-center gap-3 text-2xl font-black tracking-tight">
               <SettingsIcon className="h-6 w-6" />
               Core Config
             </h2>
-            <p className="mt-1 text-sm font-bold text-muted-foreground">
+            <p className="mt-1 text-sm text-muted-foreground">
               Configure only the paths and channels currently supported by the
               desktop backend.
             </p>
@@ -370,10 +373,10 @@ export function SettingsPage() {
             aria-live="polite"
             className={
               feedback.tone === "success"
-                ? "rounded-lg border border-primary/40 bg-primary/10 px-4 py-3 text-sm font-bold text-primary"
+                ? "rounded-2xl border border-primary/40 bg-primary/10 px-4 py-3 text-sm font-medium text-primary"
                 : feedback.tone === "warning"
-                  ? "rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm font-bold text-amber-700"
-                  : "rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm font-bold text-destructive"
+                  ? "rounded-2xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm font-medium text-amber-700"
+                  : "rounded-2xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm font-medium text-destructive"
             }
           >
             {feedback.message}
@@ -492,45 +495,67 @@ export function SettingsPage() {
         <form onSubmit={(event) => void handleSubmit(event)}>
           <fieldset disabled={isBusy} className="space-y-6">
             <Card className="border-border/60 bg-card/60">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">Path Format Guide</CardTitle>
-                <CardDescription>
-                  Keep path semantics explicit when working across Windows and
-                  WSL.
-                </CardDescription>
+              <CardHeader className="pb-0">
+                <button
+                  type="button"
+                  className="flex w-full items-start justify-between gap-4 text-left"
+                  onClick={() => setIsGuideOpen((current) => !current)}
+                >
+                  <div className="space-y-1">
+                    <CardTitle className="text-base">
+                      Path Format Guide
+                    </CardTitle>
+                    <CardDescription>
+                      Keep path semantics explicit when working across Windows
+                      and WSL.
+                    </CardDescription>
+                  </div>
+                  <span className="rounded-full border border-border/60 bg-background/80 p-1.5 text-muted-foreground">
+                    {isGuideOpen ? (
+                      <ChevronDown className="h-4 w-4" />
+                    ) : (
+                      <ChevronRight className="h-4 w-4" />
+                    )}
+                  </span>
+                </button>
               </CardHeader>
-              <CardContent className="grid gap-3 md:grid-cols-3">
-                <div className="rounded-lg border border-border/60 bg-background/70 p-4">
-                  <p className="text-[11px] font-black uppercase tracking-widest text-muted-foreground">
-                    Enter Windows Paths
-                  </p>
-                  <p className="mt-2 text-sm text-foreground/90">
-                    Use Windows absolute paths like{" "}
-                    <span className="font-mono text-xs">C:\Games\RimWorld</span>
-                    . Do not save{" "}
-                    <span className="font-mono text-xs">/mnt/c/...</span> here.
-                  </p>
-                </div>
-                <div className="rounded-lg border border-border/60 bg-background/70 p-4">
-                  <p className="text-[11px] font-black uppercase tracking-widest text-muted-foreground">
-                    Required First
-                  </p>
-                  <p className="mt-2 text-sm text-foreground/90">
-                    Installation path is required before the desktop backend can
-                    scan mods. Workshop and Config can stay empty until
-                    detected.
-                  </p>
-                </div>
-                <div className="rounded-lg border border-border/60 bg-background/70 p-4">
-                  <p className="text-[11px] font-black uppercase tracking-widest text-muted-foreground">
-                    Auto Detect Flow
-                  </p>
-                  <p className="mt-2 text-sm text-foreground/90">
-                    Auto Detect fills the draft form immediately. Review the
-                    detected Windows paths, then save to persist them.
-                  </p>
-                </div>
-              </CardContent>
+              {isGuideOpen ? (
+                <CardContent className="grid gap-3 pt-4 md:grid-cols-3">
+                  <div className="rounded-lg border border-border/60 bg-background/70 p-4">
+                    <p className="text-[11px] font-black uppercase tracking-widest text-muted-foreground">
+                      Enter Windows Paths
+                    </p>
+                    <p className="mt-2 text-sm text-foreground/90">
+                      Use Windows absolute paths like{" "}
+                      <span className="font-mono text-xs">
+                        C:\Games\RimWorld
+                      </span>
+                      . Do not save{" "}
+                      <span className="font-mono text-xs">/mnt/c/...</span>{" "}
+                      here.
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-border/60 bg-background/70 p-4">
+                    <p className="text-[11px] font-black uppercase tracking-widest text-muted-foreground">
+                      Required First
+                    </p>
+                    <p className="mt-2 text-sm text-foreground/90">
+                      Installation path is required before the desktop backend
+                      can scan mods. Workshop and Config can stay empty until
+                      detected.
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-border/60 bg-background/70 p-4">
+                    <p className="text-[11px] font-black uppercase tracking-widest text-muted-foreground">
+                      Auto Detect Flow
+                    </p>
+                    <p className="mt-2 text-sm text-foreground/90">
+                      Auto Detect fills the draft form immediately. Review the
+                      detected Windows paths, then save to persist them.
+                    </p>
+                  </div>
+                </CardContent>
+              ) : null}
             </Card>
 
             <Card>
@@ -639,7 +664,7 @@ export function SettingsPage() {
                   </p>
                 </div>
               </CardContent>
-              <CardFooter className="justify-between bg-muted/50 py-4">
+              <CardFooter className="flex flex-wrap justify-between gap-3 bg-muted/50 py-4">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <CheckCircle2 className="h-4 w-4" />
                   Save uses backend schema validation and repository
