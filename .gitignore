@@ -10,3 +10,4 @@ packages/*/artifacts/
 *.db-wal
 coverage/
 .factory/
+conductor/
