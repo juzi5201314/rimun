@@ -68,7 +68,11 @@ export const ModLibraryColumn = memo(function ModLibraryColumn({
     dropIndicator.packageId === null;
 
   return (
-    <section className="flex min-h-0 min-w-0 flex-1 flex-col rounded-[1.75rem] border border-border/60 bg-background/70 shadow-sm">
+    <section
+      data-testid="mod-library-column"
+      data-column-id={columnId}
+      className="flex min-h-0 min-w-0 flex-1 flex-col rounded-[1.75rem] border border-border/60 bg-background/70 shadow-sm"
+    >
       <header className="shrink-0 border-b border-border/50 px-5 py-4">
         <div className="flex items-center justify-between gap-3">
           <div>
@@ -87,6 +91,8 @@ export const ModLibraryColumn = memo(function ModLibraryColumn({
 
       <div
         ref={setScrollNodeRef}
+        data-testid="mod-library-column-scroll"
+        data-column-id={columnId}
         className="no-scrollbar min-h-0 flex-1 overflow-y-auto px-3 py-3"
       >
         {items.length ? (

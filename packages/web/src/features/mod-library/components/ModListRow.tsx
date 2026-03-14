@@ -213,7 +213,13 @@ export const ModListRow = memo(function ModListRow({
   );
 
   return (
-    <div ref={setNodeRef}>
+    <div
+      ref={setNodeRef}
+      data-testid="mod-library-row"
+      data-column-id={item.columnId}
+      data-mod-id={item.id}
+      data-package-id={item.packageIdNormalized ?? undefined}
+    >
       <ModListRowCard
         dragHandle={dragHandle}
         isDragging={
