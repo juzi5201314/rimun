@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+RIMUN_TMP_ROOT="${RIMUN_TMP_ROOT:-${BUN_TMPDIR:-/tmp}}"
+
+export BUN_TMPDIR="${BUN_TMPDIR:-${RIMUN_TMP_ROOT}}"
+export BUN_INSTALL="${BUN_INSTALL:-${RIMUN_TMP_ROOT}/bun-install}"
+export RIMUN_CEF_STATE_ROOT="${RIMUN_CEF_STATE_ROOT:-${RIMUN_TMP_ROOT}/rimun-cef-automation}"

@@ -1,5 +1,12 @@
 import type { ElectrobunConfig } from "electrobun";
 
+const electrobunBuildEnv = process.env["ELECTROBUN_BUILD_ENV"] ?? "dev";
+const linuxCdpPort = process.env["RIMUN_CDP_PORT"] ?? "9222";
+const enableLinuxCefAutomation =
+  process.platform === "linux" &&
+  electrobunBuildEnv !== "stable" &&
+  process.env["RIMUN_ENABLE_CEF_AUTOMATION"] === "1";
+
 export default {
   app: {
     name: "rimun",
@@ -19,7 +26,13 @@ export default {
       bundleCEF: false,
     },
     linux: {
-      bundleCEF: false,
+      bundleCEF: enableLinuxCefAutomation,
+      defaultRenderer: enableLinuxCefAutomation ? "cef" : "native",
+      chromiumFlags: enableLinuxCefAutomation
+        ? {
+            "remote-debugging-port": linuxCdpPort,
+          }
+        : undefined,
     },
     win: {
       bundleCEF: false,

@@ -1,4 +1,5 @@
 import { setTimeout as sleep } from "node:timers/promises";
+import { createToolEnv } from "./env";
 
 const ROOT_DIR = new URL("..", import.meta.url);
 const WEB_DIR = new URL("../packages/web", import.meta.url);
@@ -6,15 +7,6 @@ const DESKTOP_DIR = new URL("../packages/desktop", import.meta.url);
 const DEV_SERVER_URL = "http://127.0.0.1:5173";
 
 type Child = ReturnType<typeof Bun.spawn>;
-
-function createToolEnv(overrides: Record<string, string>) {
-  return {
-    ...process.env,
-    BUN_TMPDIR: process.env.BUN_TMPDIR ?? "/tmp",
-    BUN_INSTALL: process.env.BUN_INSTALL ?? "/tmp/bun-install",
-    ...overrides,
-  };
-}
 
 function spawnLoggedProcess(
   cwd: URL,

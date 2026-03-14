@@ -2,12 +2,15 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+# shellcheck source=./common-env.sh
+source "${ROOT_DIR}/tools/common-env.sh"
 WEB_PID=""
 DESKTOP_PID=""
 HOST_PID=""
 REQUIRED_LINUX_WEBKIT_LIBRARY="libwebkit2gtk-4.1.so.0"
 DEV_MODE="$(printf '%s' "${RIMUN_DEV_MODE:-auto}" | tr '[:upper:]' '[:lower:]')"
 DEV_HOST_PORT="${RIMUN_DEV_HOST_PORT:-3070}"
+CEF_AUTOMATION_ENABLED="${RIMUN_ENABLE_CEF_AUTOMATION:-0}"
 
 cleanup() {
   if [[ -n "${DESKTOP_PID}" ]]; then
@@ -39,6 +42,10 @@ should_launch_desktop() {
     return 1
   fi
 
+  if [[ "$(uname -s)" == "Linux" && "${CEF_AUTOMATION_ENABLED}" == "1" ]]; then
+    return 0
+  fi
+
   if [[ "$(uname -s)" != "Linux" ]]; then
     return 0
   fi
@@ -56,6 +63,17 @@ should_launch_desktop() {
 
   echo "${message} Falling back to web-only dev mode."
   return 1
+}
+
+prepare_cef_automation_env() {
+  mkdir -p \
+    "${RIMUN_CEF_STATE_ROOT}/home/.config/rimun" \
+    "${RIMUN_CEF_STATE_ROOT}/home/.cache" \
+    "${RIMUN_CEF_STATE_ROOT}/home/.cache/sh.blackboard.rimun/dev/CEF" \
+    "${RIMUN_CEF_STATE_ROOT}/home/.cache/sh.blackboard.rimun/dev/CEF/Partitions/default" \
+    "${RIMUN_CEF_STATE_ROOT}/home/.pki/nssdb" \
+    "${RIMUN_CEF_STATE_ROOT}/runtime"
+  chmod 700 "${RIMUN_CEF_STATE_ROOT}/runtime"
 }
 
 cd "${ROOT_DIR}/packages/web"
@@ -92,9 +110,24 @@ if ! should_launch_desktop; then
   exit $?
 fi
 
-RIMUN_DEV_SERVER_URL="http://127.0.0.1:5173" \
-RIMUN_DEV_WORKSPACE_ROOT="${ROOT_DIR}" \
-bun run dev &
+if [[ "$(uname -s)" == "Linux" && "${CEF_AUTOMATION_ENABLED}" == "1" ]]; then
+  prepare_cef_automation_env
+
+  HOME="${RIMUN_CEF_STATE_ROOT}/home" \
+  XDG_CONFIG_HOME="${RIMUN_CEF_STATE_ROOT}/home/.config" \
+  XDG_CACHE_HOME="${RIMUN_CEF_STATE_ROOT}/home/.cache" \
+  XDG_RUNTIME_DIR="${RIMUN_CEF_STATE_ROOT}/runtime" \
+  CHROME_CONFIG_HOME="${RIMUN_CEF_STATE_ROOT}/home/.config" \
+  CHROME_USER_DATA_DIR="${RIMUN_CEF_STATE_ROOT}/home/.config/rimun" \
+  RIMUN_DEV_SERVER_URL="http://127.0.0.1:5173" \
+  RIMUN_DEV_WORKSPACE_ROOT="${ROOT_DIR}" \
+  bun run dev &
+else
+  RIMUN_DEV_SERVER_URL="http://127.0.0.1:5173" \
+  RIMUN_DEV_WORKSPACE_ROOT="${ROOT_DIR}" \
+  bun run dev &
+fi
+
 DESKTOP_PID=$!
 
 wait "${DESKTOP_PID}"

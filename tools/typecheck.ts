@@ -1,12 +1,6 @@
-const ROOT_DIR = new URL("..", import.meta.url);
+import { createToolEnv } from "./env";
 
-function createToolEnv() {
-  return {
-    ...process.env,
-    BUN_TMPDIR: process.env.BUN_TMPDIR ?? "/tmp",
-    BUN_INSTALL: process.env.BUN_INSTALL ?? "/tmp/bun-install",
-  };
-}
+const ROOT_DIR = new URL("..", import.meta.url);
 
 async function runStep(cmd: string[]) {
   const process = Bun.spawn(["/usr/bin/env", ...cmd], {
