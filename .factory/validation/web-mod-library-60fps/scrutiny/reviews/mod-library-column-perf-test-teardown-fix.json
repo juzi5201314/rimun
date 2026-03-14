@@ -1,0 +1,15 @@
+{
+  "featureId": "mod-library-column-perf-test-teardown-fix",
+  "reviewedAt": "2026-03-15T00:33:06+08:00",
+  "commitId": "eaff4ebabb513c2ed7044e18865aa35373bb8ec7",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The fix keeps the existing VAL-PERF-001 coverage intact while making teardown explicit: the harness is now unmounted in a finally block, the DOM is awaited to fully disappear, Testing Library cleanup is rerun after unmount, and a queued microtask is flushed before afterEach restores globals. Focused and repeated runs of the perf test stayed green with no post-teardown `window is not defined` exception, so the change addresses the previously observed flake without broadening the test's responsibility.",
+    "issues": []
+  },
+  "sharedStateObservations": [],
+  "addressesFailureFrom": "web-mod-library-dnd-render-optimization",
+  "summary": "Pass. The teardown hardening is narrowly scoped to the virtualized perf harness, preserves the DOM-cap regression guard, and repeated targeted runs stayed stable without the prior react-virtual post-teardown error."
+}
