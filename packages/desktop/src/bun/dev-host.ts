@@ -4,6 +4,8 @@ import { createRimunHostService } from "./host-service";
 
 const HOST = "127.0.0.1";
 const PORT = Number.parseInt(process.env["RIMUN_DEV_HOST_PORT"] ?? "3070", 10);
+const DEV_SERVER_ORIGIN =
+  process.env["RIMUN_DEV_SERVER_URL"] ?? "http://127.0.0.1:5173";
 
 const repository = new SettingsRepository();
 const hostService = createRimunHostService(repository);
@@ -32,7 +34,7 @@ function jsonResponse(status: number, body: unknown) {
   return Response.json(body, {
     status,
     headers: {
-      "Access-Control-Allow-Origin": "http://127.0.0.1:5173",
+      "Access-Control-Allow-Origin": DEV_SERVER_ORIGIN,
       "Access-Control-Allow-Headers": "content-type",
       "Access-Control-Allow-Methods": "POST, OPTIONS",
     },
@@ -50,7 +52,7 @@ Bun.serve({
       return new Response(null, {
         status: 204,
         headers: {
-          "Access-Control-Allow-Origin": "http://127.0.0.1:5173",
+          "Access-Control-Allow-Origin": DEV_SERVER_ORIGIN,
           "Access-Control-Allow-Headers": "content-type",
           "Access-Control-Allow-Methods": "POST, OPTIONS",
         },

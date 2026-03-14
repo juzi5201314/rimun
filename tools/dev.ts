@@ -4,7 +4,9 @@ import { createToolEnv } from "./env";
 const ROOT_DIR = new URL("..", import.meta.url);
 const WEB_DIR = new URL("../packages/web", import.meta.url);
 const DESKTOP_DIR = new URL("../packages/desktop", import.meta.url);
-const DEV_SERVER_URL = "http://127.0.0.1:5173";
+const WEB_PORT = process.env["RIMUN_WEB_PORT"] ?? "5173";
+const DEV_SERVER_URL =
+  process.env["RIMUN_DEV_SERVER_URL"] ?? `http://127.0.0.1:${WEB_PORT}`;
 
 type Child = ReturnType<typeof Bun.spawn>;
 
@@ -45,7 +47,17 @@ async function waitForHttpReady(url: string, timeoutMs: number) {
 async function main() {
   const webProcess = spawnLoggedProcess(
     WEB_DIR,
-    ["bun", "run", "dev", "--", "--host", "127.0.0.1", "--port", "5173"],
+    [
+      "bun",
+      "run",
+      "dev",
+      "--",
+      "--host",
+      "127.0.0.1",
+      "--port",
+      WEB_PORT,
+      "--strictPort",
+    ],
     createToolEnv({}),
   );
   let desktopProcess: Child | null = null;

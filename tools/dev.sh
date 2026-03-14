@@ -11,6 +11,8 @@ REQUIRED_LINUX_WEBKIT_LIBRARY="libwebkit2gtk-4.1.so.0"
 DEV_MODE="$(printf '%s' "${RIMUN_DEV_MODE:-auto}" | tr '[:upper:]' '[:lower:]')"
 DEV_HOST_PORT="${RIMUN_DEV_HOST_PORT:-3070}"
 CEF_AUTOMATION_ENABLED="${RIMUN_ENABLE_CEF_AUTOMATION:-0}"
+DEV_SERVER_URL="${RIMUN_DEV_SERVER_URL}"
+WEB_PORT="${RIMUN_WEB_PORT}"
 
 cleanup() {
   if [[ -n "${DESKTOP_PID}" ]]; then
@@ -78,21 +80,23 @@ prepare_cef_automation_env() {
 
 cd "${ROOT_DIR}/packages/web"
 RIMUN_DEV_HOST_PORT="${DEV_HOST_PORT}" \
-bun run dev -- --host 127.0.0.1 --port 5173 &
+bun run dev -- --host 127.0.0.1 --port "${WEB_PORT}" --strictPort &
 WEB_PID=$!
 
 for _ in $(seq 1 120); do
-  if curl --silent --fail http://127.0.0.1:5173 >/dev/null 2>&1; then
+  if curl --silent --fail "${DEV_SERVER_URL}" >/dev/null 2>&1; then
     break
   fi
 
   sleep 0.25
 done
 
-curl --silent --fail http://127.0.0.1:5173 >/dev/null 2>&1
+curl --silent --fail "${DEV_SERVER_URL}" >/dev/null 2>&1
 
 cd "${ROOT_DIR}/packages/desktop"
-RIMUN_DEV_HOST_PORT="${DEV_HOST_PORT}" bun run dev:host &
+RIMUN_DEV_HOST_PORT="${DEV_HOST_PORT}" \
+RIMUN_DEV_SERVER_URL="${DEV_SERVER_URL}" \
+bun run dev:host &
 HOST_PID=$!
 
 for _ in $(seq 1 120); do
@@ -119,11 +123,11 @@ if [[ "$(uname -s)" == "Linux" && "${CEF_AUTOMATION_ENABLED}" == "1" ]]; then
   XDG_RUNTIME_DIR="${RIMUN_CEF_STATE_ROOT}/runtime" \
   CHROME_CONFIG_HOME="${RIMUN_CEF_STATE_ROOT}/home/.config" \
   CHROME_USER_DATA_DIR="${RIMUN_CEF_STATE_ROOT}/home/.config/rimun" \
-  RIMUN_DEV_SERVER_URL="http://127.0.0.1:5173" \
+  RIMUN_DEV_SERVER_URL="${DEV_SERVER_URL}" \
   RIMUN_DEV_WORKSPACE_ROOT="${ROOT_DIR}" \
   bun run dev &
 else
-  RIMUN_DEV_SERVER_URL="http://127.0.0.1:5173" \
+  RIMUN_DEV_SERVER_URL="${DEV_SERVER_URL}" \
   RIMUN_DEV_WORKSPACE_ROOT="${ROOT_DIR}" \
   bun run dev &
 fi
