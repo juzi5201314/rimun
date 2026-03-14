@@ -119,6 +119,20 @@ Bun.serve({
                 await request.json(),
               ),
             );
+          case "getLlmSettings":
+            return hostService.getLlmSettings();
+          case "saveLlmSettings":
+            return hostService.saveLlmSettings(
+              rimunRpcSchemas.bun.requests.saveLlmSettings.params.parse(
+                await request.json(),
+              ),
+            );
+          case "searchModelMetadata":
+            return hostService.searchModelMetadata(
+              rimunRpcSchemas.bun.requests.searchModelMetadata.params.parse(
+                await request.json(),
+              ),
+            );
           case "detectPaths":
             return hostService.detectPaths(
               rimunRpcSchemas.bun.requests.detectPaths.params.parse(

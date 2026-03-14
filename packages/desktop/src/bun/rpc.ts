@@ -24,6 +24,10 @@ export function createMainWindowRpc(
           hostService.getModSourceSnapshot(payload),
         getSettings: () => hostService.getSettings(),
         saveSettings: (payload) => hostService.saveSettings(payload),
+        getLlmSettings: () => hostService.getLlmSettings(),
+        saveLlmSettings: (payload) => hostService.saveLlmSettings(payload),
+        searchModelMetadata: (payload) =>
+          hostService.searchModelMetadata(payload),
         detectPaths: (payload) => hostService.detectPaths(payload),
         validatePath: (payload) => hostService.validatePath(payload),
         applyActivePackageIds: (payload) =>

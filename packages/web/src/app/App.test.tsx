@@ -126,6 +126,16 @@ function renderApp(
   );
 }
 
+function getFirstButtonByName(name: RegExp) {
+  const button = screen.getAllByRole("button", { name })[0];
+
+  if (!button) {
+    throw new Error(`Expected a button matching ${name.toString()}.`);
+  }
+
+  return button;
+}
+
 async function expandActiveProfilePanel() {
   const toggleButton = screen.getByRole("button", {
     name: /Toggle Active Profile Panel/i,
@@ -544,5 +554,178 @@ describe("App", () => {
         lastScanLabel,
       );
     });
+  });
+
+  it("configures llm providers, auto-fetches model metadata, and saves", async () => {
+    const savedProviders: string[] = [];
+
+    const hostApi = createTestHostApi({
+      onSearchModelMetadata: async (input) => ({
+        query: input.modelId,
+        cachedAt: "2026-03-14T12:00:00.000Z",
+        matches: [
+          {
+            sourceProviderId: "anthropic",
+            sourceProviderName: "Anthropic",
+            sourceProviderApi: "https://api.anthropic.com/v1",
+            modelId: input.modelId,
+            modelName: "Claude Sonnet 4.5",
+            family: "claude-sonnet",
+            metadata: {
+              contextLimit: 200000,
+              inputLimit: null,
+              outputLimit: 64000,
+              supportsToolCall: true,
+              supportsReasoning: true,
+              supportsStructuredOutput: false,
+              releaseDate: "2025-09-29",
+              lastUpdated: "2025-09-29",
+              pricing: null,
+            },
+          },
+        ],
+      }),
+      onSaveLlmSettings: async (input) => {
+        savedProviders.push(
+          ...input.providers.map((provider) => provider.name),
+        );
+
+        return {
+          providers: input.providers,
+          updatedAt: "2026-03-14T12:05:00.000Z",
+        };
+      },
+    });
+
+    renderApp({
+      hostApi,
+      initialEntries: ["/settings"],
+    });
+
+    expect(
+      await screen.findByRole("heading", { name: /LLM Providers/i }),
+    ).toBeInTheDocument();
+
+    await userEvent.click(getFirstButtonByName(/Add Provider/i));
+    await userEvent.clear(
+      screen.getByRole("textbox", { name: /Provider Name/i }),
+    );
+    await userEvent.type(
+      screen.getByRole("textbox", { name: /Provider Name/i }),
+      "Anthropic Primary",
+    );
+    await userEvent.type(screen.getByPlaceholderText("sk-..."), "secret-key");
+    await userEvent.click(screen.getByRole("button", { name: /Add Model/i }));
+
+    const modelIdInput = await screen.findByRole("textbox", {
+      name: /Model ID/i,
+    });
+    await userEvent.clear(modelIdInput);
+    await userEvent.type(modelIdInput, "claude-sonnet-4-5-20250929");
+
+    await waitFor(() => {
+      expect(screen.getByText(/Context 200,000/i)).toBeInTheDocument();
+    });
+
+    await userEvent.click(
+      screen.getByRole("button", { name: /Save LLM Config/i }),
+    );
+
+    await waitFor(() => {
+      expect(savedProviders).toEqual(["Anthropic Primary"]);
+    });
+
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "LLM settings saved.",
+    );
+  });
+
+  it("lets the user choose among multiple metadata matches", async () => {
+    const hostApi = createTestHostApi({
+      onSearchModelMetadata: async (input) => ({
+        query: input.modelId,
+        cachedAt: "2026-03-14T12:10:00.000Z",
+        matches: [
+          {
+            sourceProviderId: "anthropic",
+            sourceProviderName: "Anthropic",
+            sourceProviderApi: "https://api.anthropic.com/v1",
+            modelId: input.modelId,
+            modelName: "Claude Sonnet 4.5",
+            family: "claude-sonnet",
+            metadata: {
+              contextLimit: 200000,
+              inputLimit: null,
+              outputLimit: 64000,
+              supportsToolCall: true,
+              supportsReasoning: true,
+              supportsStructuredOutput: false,
+              releaseDate: "2025-09-29",
+              lastUpdated: "2025-09-29",
+              pricing: null,
+            },
+          },
+          {
+            sourceProviderId: "openrouter",
+            sourceProviderName: "OpenRouter",
+            sourceProviderApi: "https://openrouter.ai/api/v1",
+            modelId: input.modelId,
+            modelName: "Claude Sonnet 4.5",
+            family: "claude-sonnet",
+            metadata: {
+              contextLimit: 1000000,
+              inputLimit: null,
+              outputLimit: 64000,
+              supportsToolCall: true,
+              supportsReasoning: true,
+              supportsStructuredOutput: true,
+              releaseDate: "2025-09-29",
+              lastUpdated: "2025-09-30",
+              pricing: null,
+            },
+          },
+        ],
+      }),
+    });
+
+    renderApp({
+      hostApi,
+      initialEntries: ["/settings"],
+    });
+
+    expect(
+      await screen.findByRole("heading", { name: /LLM Providers/i }),
+    ).toBeInTheDocument();
+
+    await userEvent.click(getFirstButtonByName(/Add Provider/i));
+    await userEvent.click(screen.getByRole("button", { name: /Add Model/i }));
+
+    const modelIdInput = await screen.findByRole("textbox", {
+      name: /Model ID/i,
+    });
+    await userEvent.type(modelIdInput, "claude-sonnet-4-5-20250929");
+
+    const dialog = await screen.findByRole("dialog", {
+      name: /Choose Metadata Source/i,
+    });
+    const dialogControls = within(dialog);
+    const radios = dialogControls.getAllByRole("radio");
+    const secondRadio = radios[1];
+
+    if (!secondRadio) {
+      throw new Error("Expected a second metadata source option.");
+    }
+
+    await userEvent.click(secondRadio);
+    await userEvent.click(
+      dialogControls.getByRole("button", { name: /Use Selected Metadata/i }),
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/Metadata source: OpenRouter/i),
+      ).toBeInTheDocument();
+    });
+    expect(screen.getByText(/Context 1,000,000/i)).toBeInTheDocument();
   });
 });

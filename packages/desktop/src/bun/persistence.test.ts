@@ -36,6 +36,66 @@ describe("settings repository", () => {
     cleanupRepository(repository);
   });
 
+  it("persists llm settings and models.dev cache", () => {
+    const repository = createRepository();
+    const savedLlmSettings = repository.saveLlmSettings({
+      providers: [
+        {
+          id: "provider-1",
+          name: "Anthropic Primary",
+          format: "anthropic",
+          baseUrl: "https://api.anthropic.com/v1",
+          apiKey: "secret-key",
+          enabled: true,
+          models: [
+            {
+              id: "model-1",
+              modelId: "claude-sonnet-4-5-20250929",
+              label: "Claude Sonnet 4.5",
+              enabled: true,
+              metadata: {
+                contextLimit: 200000,
+                inputLimit: null,
+                outputLimit: 64000,
+                supportsToolCall: true,
+                supportsReasoning: true,
+                supportsStructuredOutput: false,
+                releaseDate: "2025-09-29",
+                lastUpdated: "2025-09-29",
+                pricing: null,
+              },
+              metadataSelection: {
+                sourceProviderId: "anthropic",
+                sourceProviderName: "Anthropic",
+              },
+              lastMetadataRefreshAt: "2026-03-14T12:00:00.000Z",
+            },
+          ],
+        },
+      ],
+    });
+    const loadedLlmSettings = repository.getLlmSettings();
+    const savedCache = repository.saveModelsDevCache(
+      JSON.stringify({
+        anthropic: {
+          id: "anthropic",
+          name: "Anthropic",
+          models: {},
+        },
+      }),
+    );
+    const loadedCache = repository.getModelsDevCache();
+
+    expect(savedLlmSettings.providers).toHaveLength(1);
+    expect(loadedLlmSettings.providers[0]?.models[0]?.modelId).toBe(
+      "claude-sonnet-4-5-20250929",
+    );
+    expect(savedCache.payloadJson).toContain("anthropic");
+    expect(loadedCache?.payloadJson).toContain("Anthropic");
+
+    cleanupRepository(repository);
+  });
+
   it("initializes a default profile from imported active mods", () => {
     const repository = createRepository();
     const catalog = repository.getProfileCatalog([

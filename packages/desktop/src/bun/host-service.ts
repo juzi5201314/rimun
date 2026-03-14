@@ -9,15 +9,18 @@ import type {
   ProfileScopedInput,
   RenameProfileInput,
   RimunHostApi,
+  SaveLlmSettingsInput,
   SaveProfileInput,
   SaveProfileResult,
   SaveSettingsInput,
   SaveSettingsResult,
+  SearchModelMetadataInput,
   SwitchProfileInput,
   ValidatePathInput,
   ValidatePathResult,
 } from "@rimun/shared";
 import { rimunRpcSchemas } from "@rimun/shared";
+import { searchModelMetadata } from "./llm/models-dev";
 import {
   createReadablePathResolver,
   readActivePackageIdsFromSelection,
@@ -339,6 +342,30 @@ export function createRimunHostService(
         settings,
         validation,
       } satisfies SaveSettingsResult);
+    },
+    getLlmSettings: async () =>
+      rimunRpcSchemas.bun.requests.getLlmSettings.response.parse(
+        repository.getLlmSettings(),
+      ),
+    saveLlmSettings: async (payload: SaveLlmSettingsInput) => {
+      const input = assertRequestSchema(
+        rimunRpcSchemas.bun.requests.saveLlmSettings.params,
+        payload,
+      );
+
+      return rimunRpcSchemas.bun.requests.saveLlmSettings.response.parse(
+        repository.saveLlmSettings(input),
+      );
+    },
+    searchModelMetadata: async (payload: SearchModelMetadataInput) => {
+      const input = assertRequestSchema(
+        rimunRpcSchemas.bun.requests.searchModelMetadata.params,
+        payload,
+      );
+
+      return rimunRpcSchemas.bun.requests.searchModelMetadata.response.parse(
+        await searchModelMetadata(repository, input),
+      );
     },
     detectPaths: async (payload: DetectPathsInput) => {
       const input = assertRequestSchema(

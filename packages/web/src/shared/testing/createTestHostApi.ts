@@ -5,14 +5,18 @@ import type {
   CreateProfileInput,
   DetectPathsInput,
   DetectPathsResult,
+  LlmSettings,
   ModProfileSummary,
   ModSourceSnapshot,
   ProfileCatalogResult,
   RimunHostApi,
+  SaveLlmSettingsInput,
   SaveProfileInput,
   SaveProfileResult,
   SaveSettingsInput,
   SaveSettingsResult,
+  SearchModelMetadataInput,
+  SearchModelMetadataResult,
   ValidatePathInput,
   ValidatePathResult,
 } from "@rimun/shared";
@@ -97,6 +101,11 @@ const defaultBootstrap: BootstrapPayload = {
   settings: defaultSettings,
   supportedChannels: ["steam", "manual"],
   preferredSelection: defaultDetectPaths.preferredSelection,
+};
+
+const defaultLlmSettings: LlmSettings = {
+  providers: [],
+  updatedAt: null,
 };
 
 const baseEntries: ModSourceSnapshot["entries"] = [
@@ -213,6 +222,7 @@ function createSnapshot(activePackageIds: string[]): ModSourceSnapshot {
 type Overrides = Partial<{
   bootstrap: BootstrapPayload;
   settings: AppSettings;
+  llmSettings: LlmSettings;
   detectPaths: DetectPathsResult;
   profileCatalog: ProfileCatalogResult;
   modSourceSnapshotsByProfile: Record<string, ModSourceSnapshot>;
@@ -226,6 +236,12 @@ type Overrides = Partial<{
   onSave: (
     input: SaveSettingsInput,
   ) => SaveSettingsResult | Promise<SaveSettingsResult>;
+  onSaveLlmSettings: (
+    input: SaveLlmSettingsInput,
+  ) => LlmSettings | Promise<LlmSettings>;
+  onSearchModelMetadata: (
+    input: SearchModelMetadataInput,
+  ) => SearchModelMetadataResult | Promise<SearchModelMetadataResult>;
   onValidatePath: (
     input: ValidatePathInput,
   ) => ValidatePathResult | Promise<ValidatePathResult>;
@@ -379,6 +395,29 @@ export function createTestHostApi(overrides: Overrides = {}): RimunHostApi {
           updatedAt: defaultSettings.updatedAt,
         },
         validation: [],
+      };
+    },
+    getLlmSettings: async () =>
+      clone(overrides.llmSettings ?? defaultLlmSettings),
+    saveLlmSettings: async (input) => {
+      if (overrides.onSaveLlmSettings) {
+        return overrides.onSaveLlmSettings(input);
+      }
+
+      return {
+        providers: clone(input.providers),
+        updatedAt: "2026-03-13T01:00:00.000Z",
+      };
+    },
+    searchModelMetadata: async (input) => {
+      if (overrides.onSearchModelMetadata) {
+        return overrides.onSearchModelMetadata(input);
+      }
+
+      return {
+        query: input.modelId,
+        cachedAt: "2026-03-13T01:05:00.000Z",
+        matches: [],
       };
     },
     detectPaths: async (input) => {

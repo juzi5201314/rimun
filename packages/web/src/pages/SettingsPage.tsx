@@ -1,3 +1,4 @@
+import { LlmSettingsSection } from "@/features/settings/components/LlmSettingsSection";
 import { useDetectPathsMutation } from "@/features/settings/hooks/useDetectPathsMutation";
 import { useSaveSettingsMutation } from "@/features/settings/hooks/useSaveSettingsMutation";
 import { useSettingsQuery } from "@/features/settings/hooks/useSettingsQuery";
@@ -682,6 +683,8 @@ export function SettingsPage() {
         </form>
 
         <ValidationCard validation={lastValidation} />
+
+        <LlmSettingsSection />
       </div>
     </div>
   );

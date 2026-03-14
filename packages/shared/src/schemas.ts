@@ -121,6 +121,73 @@ export const appSettingsSchema = pathSelectionSchema.extend({
   updatedAt: isoDateTimeSchema.nullable(),
 });
 
+export const llmApiFormatSchema = z.enum([
+  "anthropic",
+  "openai-chat",
+  "openai-responses",
+  "gemini",
+]);
+
+export const llmModelPricingSchema = z.object({
+  inputCostPerMillion: z.number().nonnegative().nullable(),
+  outputCostPerMillion: z.number().nonnegative().nullable(),
+  reasoningCostPerMillion: z.number().nonnegative().nullable(),
+  cacheReadCostPerMillion: z.number().nonnegative().nullable(),
+  cacheWriteCostPerMillion: z.number().nonnegative().nullable(),
+});
+
+export const llmModelMetadataSchema = z.object({
+  contextLimit: z.number().int().positive().nullable(),
+  inputLimit: z.number().int().positive().nullable(),
+  outputLimit: z.number().int().positive().nullable(),
+  supportsToolCall: z.boolean(),
+  supportsReasoning: z.boolean(),
+  supportsStructuredOutput: z.boolean(),
+  releaseDate: z.string().trim().min(1).nullable(),
+  lastUpdated: z.string().trim().min(1).nullable(),
+  pricing: llmModelPricingSchema.nullable(),
+});
+
+export const llmModelMetadataSelectionSchema = z.object({
+  sourceProviderId: z.string().trim().min(1),
+  sourceProviderName: z.string().trim().min(1),
+});
+
+export const llmModelConfigSchema = z.object({
+  id: z.string().trim().min(1),
+  modelId: z.string().trim().max(256),
+  label: z.string().trim().max(128),
+  enabled: z.boolean(),
+  metadata: llmModelMetadataSchema.nullable(),
+  metadataSelection: llmModelMetadataSelectionSchema.nullable(),
+  lastMetadataRefreshAt: isoDateTimeSchema.nullable(),
+});
+
+export const llmProviderConfigSchema = z.object({
+  id: z.string().trim().min(1),
+  name: z.string().trim().min(1).max(128),
+  format: llmApiFormatSchema,
+  baseUrl: z.string().trim().url(),
+  apiKey: z.string().trim(),
+  enabled: z.boolean(),
+  models: z.array(llmModelConfigSchema).default([]),
+});
+
+export const llmSettingsSchema = z.object({
+  providers: z.array(llmProviderConfigSchema).default([]),
+  updatedAt: isoDateTimeSchema.nullable(),
+});
+
+export const llmModelMetadataMatchSchema = z.object({
+  sourceProviderId: z.string().trim().min(1),
+  sourceProviderName: z.string().trim().min(1),
+  sourceProviderApi: z.string().trim().url().nullable(),
+  modelId: z.string().trim().min(1),
+  modelName: z.string().trim().min(1).nullable(),
+  family: z.string().trim().min(1).nullable(),
+  metadata: llmModelMetadataSchema,
+});
+
 export const modDependencyMetadataSchema = z.object({
   packageIdNormalized: z.string().trim().min(1).nullable(),
   dependencies: z.array(z.string().trim().min(1)).default([]),
@@ -306,6 +373,20 @@ export const saveSettingsResultSchema = z.object({
   validation: z.array(validatePathResultSchema),
 });
 
+export const saveLlmSettingsInputSchema = z.object({
+  providers: z.array(llmProviderConfigSchema).default([]),
+});
+
+export const searchModelMetadataInputSchema = z.object({
+  modelId: z.string().trim().min(1).max(256),
+});
+
+export const searchModelMetadataResultSchema = z.object({
+  query: z.string().trim().min(1),
+  cachedAt: isoDateTimeSchema.nullable(),
+  matches: z.array(llmModelMetadataMatchSchema),
+});
+
 export const createProfileInputSchema = z.object({
   name: profileNameSchema,
   sourceProfileId: profileIdSchema,
@@ -350,6 +431,7 @@ export type PathKind = z.infer<typeof pathKindSchema>;
 export type PathDiscoverySource = z.infer<typeof pathDiscoverySourceSchema>;
 export type ValidationIssueCode = z.infer<typeof validationIssueCodeSchema>;
 export type ErrorCode = z.infer<typeof errorCodeSchema>;
+export type LlmApiFormat = z.infer<typeof llmApiFormatSchema>;
 export type ModSource = z.infer<typeof modSourceSchema>;
 export type ModOrderRecommendationAction = z.infer<
   typeof modOrderRecommendationActionSchema
@@ -365,6 +447,15 @@ export type AppError = z.infer<typeof appErrorSchema>;
 export type DetectedPath = z.infer<typeof detectedPathSchema>;
 export type PathSelection = z.infer<typeof pathSelectionSchema>;
 export type AppSettings = z.infer<typeof appSettingsSchema>;
+export type LlmModelPricing = z.infer<typeof llmModelPricingSchema>;
+export type LlmModelMetadata = z.infer<typeof llmModelMetadataSchema>;
+export type LlmModelMetadataSelection = z.infer<
+  typeof llmModelMetadataSelectionSchema
+>;
+export type LlmModelConfig = z.infer<typeof llmModelConfigSchema>;
+export type LlmProviderConfig = z.infer<typeof llmProviderConfigSchema>;
+export type LlmSettings = z.infer<typeof llmSettingsSchema>;
+export type LlmModelMetadataMatch = z.infer<typeof llmModelMetadataMatchSchema>;
 export type ModDependencyMetadata = z.infer<typeof modDependencyMetadataSchema>;
 export type ModRecord = z.infer<typeof modRecordSchema>;
 export type ModSourceSnapshotEntry = z.infer<
@@ -391,6 +482,13 @@ export type ValidatePathInput = z.infer<typeof validatePathInputSchema>;
 export type ValidatePathResult = z.infer<typeof validatePathResultSchema>;
 export type SaveSettingsInput = z.infer<typeof saveSettingsInputSchema>;
 export type SaveSettingsResult = z.infer<typeof saveSettingsResultSchema>;
+export type SaveLlmSettingsInput = z.infer<typeof saveLlmSettingsInputSchema>;
+export type SearchModelMetadataInput = z.infer<
+  typeof searchModelMetadataInputSchema
+>;
+export type SearchModelMetadataResult = z.infer<
+  typeof searchModelMetadataResultSchema
+>;
 export type CreateProfileInput = z.infer<typeof createProfileInputSchema>;
 export type RenameProfileInput = z.infer<typeof renameProfileInputSchema>;
 export type DeleteProfileInput = z.infer<typeof deleteProfileInputSchema>;

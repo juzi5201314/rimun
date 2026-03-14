@@ -5,8 +5,10 @@ import { join } from "node:path";
 import type {
   AppSettings,
   CreateProfileInput,
+  LlmSettings,
   ModProfileSummary,
   ProfileCatalogResult,
+  SaveLlmSettingsInput,
   SaveProfileInput,
   SaveSettingsInput,
 } from "@rimun/shared";
@@ -16,6 +18,8 @@ import { sqliteTable, text } from "drizzle-orm/sqlite-core";
 import { APP_NAME, DATABASE_FILENAME } from "./config";
 
 const SETTINGS_ROW_ID = "singleton";
+const LLM_SETTINGS_ROW_ID = "singleton";
+const MODELS_DEV_CACHE_ROW_ID = "singleton";
 const APP_STATE_ROW_ID = "singleton";
 const DEFAULT_PROFILE_ID = "default";
 const DEFAULT_PROFILE_NAME = "Default";
@@ -29,6 +33,18 @@ const appSettingsTable = sqliteTable("app_settings", {
   workshopPath: text("workshop_path"),
   configPath: text("config_path"),
   updatedAt: text("updated_at"),
+});
+
+const llmSettingsTable = sqliteTable("llm_settings", {
+  id: text("id").primaryKey(),
+  settingsJson: text("settings_json").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+const modelsDevCacheTable = sqliteTable("models_dev_cache", {
+  id: text("id").primaryKey(),
+  payloadJson: text("payload_json").notNull(),
+  fetchedAt: text("fetched_at").notNull(),
 });
 
 const modProfilesTable = sqliteTable("mod_profiles", {
@@ -215,6 +231,18 @@ function createDatabase() {
       updated_at TEXT
     );
 
+    CREATE TABLE IF NOT EXISTS llm_settings (
+      id TEXT PRIMARY KEY NOT NULL,
+      settings_json TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS models_dev_cache (
+      id TEXT PRIMARY KEY NOT NULL,
+      payload_json TEXT NOT NULL,
+      fetched_at TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS mod_profiles (
       id TEXT PRIMARY KEY NOT NULL,
       name TEXT NOT NULL,
@@ -271,6 +299,37 @@ export class SettingsRepository {
     };
   }
 
+  public getLlmSettings(): LlmSettings {
+    const row = this.db
+      .select()
+      .from(llmSettingsTable)
+      .where(eq(llmSettingsTable.id, LLM_SETTINGS_ROW_ID))
+      .get();
+
+    if (!row) {
+      return {
+        providers: [],
+        updatedAt: null,
+      };
+    }
+
+    try {
+      const parsed = JSON.parse(row.settingsJson) as {
+        providers?: LlmSettings["providers"];
+      };
+
+      return {
+        providers: Array.isArray(parsed.providers) ? parsed.providers : [],
+        updatedAt: row.updatedAt,
+      };
+    } catch {
+      return {
+        providers: [],
+        updatedAt: row.updatedAt,
+      };
+    }
+  }
+
   public saveSettings(input: SaveSettingsInput): AppSettings {
     const updatedAt = new Date().toISOString();
 
@@ -302,6 +361,67 @@ export class SettingsRepository {
       workshopPath: input.workshopPath,
       configPath: input.configPath,
       updatedAt,
+    };
+  }
+
+  public saveLlmSettings(input: SaveLlmSettingsInput): LlmSettings {
+    const updatedAt = new Date().toISOString();
+    const settingsJson = JSON.stringify({
+      providers: input.providers,
+    });
+
+    this.db
+      .insert(llmSettingsTable)
+      .values({
+        id: LLM_SETTINGS_ROW_ID,
+        settingsJson,
+        updatedAt,
+      })
+      .onConflictDoUpdate({
+        target: llmSettingsTable.id,
+        set: {
+          settingsJson,
+          updatedAt,
+        },
+      })
+      .run();
+
+    return {
+      providers: input.providers,
+      updatedAt,
+    };
+  }
+
+  public getModelsDevCache() {
+    return this.db
+      .select()
+      .from(modelsDevCacheTable)
+      .where(eq(modelsDevCacheTable.id, MODELS_DEV_CACHE_ROW_ID))
+      .get();
+  }
+
+  public saveModelsDevCache(payloadJson: string) {
+    const fetchedAt = new Date().toISOString();
+
+    this.db
+      .insert(modelsDevCacheTable)
+      .values({
+        id: MODELS_DEV_CACHE_ROW_ID,
+        payloadJson,
+        fetchedAt,
+      })
+      .onConflictDoUpdate({
+        target: modelsDevCacheTable.id,
+        set: {
+          payloadJson,
+          fetchedAt,
+        },
+      })
+      .run();
+
+    return {
+      payloadJson,
+      fetchedAt,
     };
   }
 

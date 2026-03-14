@@ -4,14 +4,17 @@ import {
   bootstrapPayloadSchema,
   createProfileInputSchema,
   detectPathsResultSchema,
+  llmSettingsSchema,
   modOrderAnalysisResultSchema,
   modSourceSnapshotSchema,
   profileCatalogResultSchema,
   profileScopedInputSchema,
   rimunRpcSchemas,
+  saveLlmSettingsInputSchema,
   saveProfileInputSchema,
   saveProfileResultSchema,
   saveSettingsInputSchema,
+  searchModelMetadataResultSchema,
   validatePathResultSchema,
 } from "../src/index";
 
@@ -258,6 +261,82 @@ describe("shared schemas", () => {
     expect(input.activePackageIds).toHaveLength(2);
     expect(result.updatedAt).toBe("2026-03-13T10:30:00.000Z");
   });
+
+  it("accepts llm settings payloads and metadata search results", () => {
+    const settings = llmSettingsSchema.parse({
+      providers: [
+        {
+          id: "provider-1",
+          name: "Anthropic Primary",
+          format: "anthropic",
+          baseUrl: "https://api.anthropic.com/v1",
+          apiKey: "secret-key",
+          enabled: true,
+          models: [
+            {
+              id: "model-1",
+              modelId: "claude-sonnet-4-5-20250929",
+              label: "Claude Sonnet 4.5",
+              enabled: true,
+              metadata: {
+                contextLimit: 200000,
+                inputLimit: null,
+                outputLimit: 64000,
+                supportsToolCall: true,
+                supportsReasoning: true,
+                supportsStructuredOutput: false,
+                releaseDate: "2025-09-29",
+                lastUpdated: "2025-09-29",
+                pricing: {
+                  inputCostPerMillion: 3,
+                  outputCostPerMillion: 15,
+                  reasoningCostPerMillion: null,
+                  cacheReadCostPerMillion: null,
+                  cacheWriteCostPerMillion: null,
+                },
+              },
+              metadataSelection: {
+                sourceProviderId: "anthropic",
+                sourceProviderName: "Anthropic",
+              },
+              lastMetadataRefreshAt: "2026-03-14T10:00:00.000Z",
+            },
+          ],
+        },
+      ],
+      updatedAt: "2026-03-14T10:05:00.000Z",
+    });
+
+    const saveInput = saveLlmSettingsInputSchema.parse({
+      providers: settings.providers,
+    });
+    const savedMetadata = settings.providers[0]?.models[0]?.metadata;
+
+    if (!savedMetadata) {
+      throw new Error("Expected test metadata to be present.");
+    }
+
+    const searchResult = searchModelMetadataResultSchema.parse({
+      query: "claude-sonnet-4-5-20250929",
+      cachedAt: "2026-03-14T10:06:00.000Z",
+      matches: [
+        {
+          sourceProviderId: "anthropic",
+          sourceProviderName: "Anthropic",
+          sourceProviderApi: "https://api.anthropic.com/v1",
+          modelId: "claude-sonnet-4-5-20250929",
+          modelName: "Claude Sonnet 4.5",
+          family: "claude-sonnet",
+          metadata: savedMetadata,
+        },
+      ],
+    });
+
+    expect(saveInput.providers[0]?.models[0]?.modelId).toBe(
+      "claude-sonnet-4-5-20250929",
+    );
+    expect(searchResult.matches[0]?.metadata.contextLimit).toBe(200000);
+  });
 });
 
 describe("rpc schema map", () => {
@@ -270,12 +349,15 @@ describe("rpc schema map", () => {
       "deleteProfile",
       "detectPaths",
       "getBootstrap",
+      "getLlmSettings",
       "getModSourceSnapshot",
       "getProfileCatalog",
       "getSettings",
       "renameProfile",
+      "saveLlmSettings",
       "saveProfile",
       "saveSettings",
+      "searchModelMetadata",
       "switchProfile",
       "validatePath",
     ]);

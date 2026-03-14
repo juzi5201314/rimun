@@ -8,14 +8,18 @@ import type {
   DetectPathsInput,
   DetectPathsResult,
   EmptyParams,
+  LlmSettings,
   ModSourceSnapshot,
   ProfileCatalogResult,
   ProfileScopedInput,
   RenameProfileInput,
+  SaveLlmSettingsInput,
   SaveProfileInput,
   SaveProfileResult,
   SaveSettingsInput,
   SaveSettingsResult,
+  SearchModelMetadataInput,
+  SearchModelMetadataResult,
   SwitchProfileInput,
   ValidatePathInput,
   ValidatePathResult,
@@ -30,14 +34,18 @@ import {
   detectPathsInputSchema,
   detectPathsResultSchema,
   emptyParamsSchema,
+  llmSettingsSchema,
   modSourceSnapshotSchema,
   profileCatalogResultSchema,
   profileScopedInputSchema,
   renameProfileInputSchema,
+  saveLlmSettingsInputSchema,
   saveProfileInputSchema,
   saveProfileResultSchema,
   saveSettingsInputSchema,
   saveSettingsResultSchema,
+  searchModelMetadataInputSchema,
+  searchModelMetadataResultSchema,
   switchProfileInputSchema,
   validatePathInputSchema,
   validatePathResultSchema,
@@ -74,6 +82,12 @@ export type RimunHostRequests = {
   >;
   getSettings: RpcRequestDefinition<EmptyParams, AppSettings>;
   saveSettings: RpcRequestDefinition<SaveSettingsInput, SaveSettingsResult>;
+  getLlmSettings: RpcRequestDefinition<EmptyParams, LlmSettings>;
+  saveLlmSettings: RpcRequestDefinition<SaveLlmSettingsInput, LlmSettings>;
+  searchModelMetadata: RpcRequestDefinition<
+    SearchModelMetadataInput,
+    SearchModelMetadataResult
+  >;
   detectPaths: RpcRequestDefinition<DetectPathsInput, DetectPathsResult>;
   validatePath: RpcRequestDefinition<ValidatePathInput, ValidatePathResult>;
   applyActivePackageIds: RpcRequestDefinition<
@@ -102,6 +116,11 @@ export type RimunHostApi = {
   getModSourceSnapshot(input: ProfileScopedInput): Promise<ModSourceSnapshot>;
   getSettings(): Promise<AppSettings>;
   saveSettings(input: SaveSettingsInput): Promise<SaveSettingsResult>;
+  getLlmSettings(): Promise<LlmSettings>;
+  saveLlmSettings(input: SaveLlmSettingsInput): Promise<LlmSettings>;
+  searchModelMetadata(
+    input: SearchModelMetadataInput,
+  ): Promise<SearchModelMetadataResult>;
   detectPaths(input: DetectPathsInput): Promise<DetectPathsResult>;
   validatePath(input: ValidatePathInput): Promise<ValidatePathResult>;
   applyActivePackageIds(
@@ -151,6 +170,18 @@ export const rimunRpcSchemas = {
       saveSettings: {
         params: saveSettingsInputSchema,
         response: saveSettingsResultSchema,
+      },
+      getLlmSettings: {
+        params: emptyParamsSchema,
+        response: llmSettingsSchema,
+      },
+      saveLlmSettings: {
+        params: saveLlmSettingsInputSchema,
+        response: llmSettingsSchema,
+      },
+      searchModelMetadata: {
+        params: searchModelMetadataInputSchema,
+        response: searchModelMetadataResultSchema,
       },
       detectPaths: {
         params: detectPathsInputSchema,
