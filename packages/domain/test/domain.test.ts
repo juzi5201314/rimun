@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import type { ModSourceSnapshot } from "@rimun/shared";
+import { rimunTmpPath } from "../../shared/test/tmp-path";
 import {
   analyzeModOrder,
   buildModLibraryFromSnapshot,
@@ -10,6 +11,13 @@ import {
 } from "../src/index";
 
 function createSnapshot(activePackageIds: string[]): ModSourceSnapshot {
+  const installationReadablePath = rimunTmpPath("installation", "Mods", "Core");
+  const workshopHugsLibReadablePath = rimunTmpPath(
+    "workshop",
+    "818773962",
+  );
+  const workshopPawnsReadablePath = rimunTmpPath("workshop", "999999999");
+
   return {
     environment: {
       platform: "linux",
@@ -36,7 +44,7 @@ function createSnapshot(activePackageIds: string[]): ModSourceSnapshot {
         entryName: "Core",
         source: "installation",
         modWindowsPath: "C:\\Games\\RimWorld\\Mods\\Core",
-        modReadablePath: "/tmp/installation/Mods/Core",
+        modReadablePath: installationReadablePath,
         manifestPath: "C:\\Games\\RimWorld\\Mods\\Core\\About\\About.xml",
         hasAboutXml: true,
         aboutXmlText: `
@@ -54,7 +62,7 @@ function createSnapshot(activePackageIds: string[]): ModSourceSnapshot {
         source: "workshop",
         modWindowsPath:
           "C:\\Games\\Steam\\steamapps\\workshop\\content\\294100\\818773962",
-        modReadablePath: "/tmp/workshop/818773962",
+        modReadablePath: workshopHugsLibReadablePath,
         manifestPath:
           "C:\\Games\\Steam\\steamapps\\workshop\\content\\294100\\818773962\\About\\About.xml",
         hasAboutXml: true,
@@ -73,7 +81,7 @@ function createSnapshot(activePackageIds: string[]): ModSourceSnapshot {
         source: "workshop",
         modWindowsPath:
           "C:\\Games\\Steam\\steamapps\\workshop\\content\\294100\\999999999",
-        modReadablePath: "/tmp/workshop/999999999",
+        modReadablePath: workshopPawnsReadablePath,
         manifestPath:
           "C:\\Games\\Steam\\steamapps\\workshop\\content\\294100\\999999999\\About\\About.xml",
         hasAboutXml: true,

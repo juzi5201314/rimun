@@ -1,7 +1,8 @@
 import { describe, expect, it } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { PathSelection } from "@rimun/shared";
+import { createRimunTempDir } from "../../../shared/test/tmp-path";
 import {
   parseAboutXml,
   parseModsConfigXml,
@@ -10,7 +11,7 @@ import {
 } from "./mods";
 
 function createSandboxLayout() {
-  const sandboxRoot = mkdtempSync(join("/tmp", "rimun-mod-scan-"));
+  const sandboxRoot = createRimunTempDir("rimun-mod-scan-");
   const installationModsRoot = join(sandboxRoot, "installation", "Mods");
   const installationDataRoot = join(sandboxRoot, "installation", "Data");
   const workshopRoot = join(sandboxRoot, "workshop");
