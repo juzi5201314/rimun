@@ -233,6 +233,7 @@ function buildTopologicalOrder(
       comparePackagePriority(left, right, groups, currentOrderIndex),
     );
   const ordered: string[] = [];
+  const orderedSet = new Set<string>();
 
   // 稳定拓扑排序：在满足硬约束前提下尽量保持当前顺序。
   while (ready.length > 0) {
@@ -243,6 +244,7 @@ function buildTopologicalOrder(
     }
 
     ordered.push(currentPackageId);
+    orderedSet.add(currentPackageId);
 
     for (const nextPackageId of adjacency.get(currentPackageId) ?? []) {
       const nextIndegree = (indegree.get(nextPackageId) ?? 0) - 1;
@@ -259,7 +261,7 @@ function buildTopologicalOrder(
 
   return {
     ordered,
-    remaining: packageIds.filter((packageId) => !ordered.includes(packageId)),
+    remaining: packageIds.filter((packageId) => !orderedSet.has(packageId)),
   };
 }
 
@@ -267,8 +269,9 @@ function countSortDifferences(
   currentActivePackageIds: string[],
   recommendedOrderPackageIds: string[],
 ) {
+  const currentActivePackageIdSet = new Set(currentActivePackageIds);
   const filteredRecommended = recommendedOrderPackageIds.filter((packageId) =>
-    currentActivePackageIds.includes(packageId),
+    currentActivePackageIdSet.has(packageId),
   );
   const maxLength = Math.max(
     currentActivePackageIds.length,
@@ -322,6 +325,7 @@ export function analyzeModOrder(
   }
 
   const recommendedActivePackageIds = [...currentActivePackageIds];
+  const recommendedActivePackageIdSet = new Set(recommendedActivePackageIds);
 
   for (const activePackageId of currentActivePackageIds) {
     const activeGroup = groups.get(activePackageId);
@@ -349,7 +353,7 @@ export function analyzeModOrder(
 
     for (const dependencyPackageId of activeMod.dependencyMetadata
       .dependencies) {
-      if (recommendedActivePackageIds.includes(dependencyPackageId)) {
+      if (recommendedActivePackageIdSet.has(dependencyPackageId)) {
         continue;
       }
 
@@ -357,6 +361,7 @@ export function analyzeModOrder(
 
       if (dependencyGroup?.mods.length === 1 && dependencyGroup.preferredMod) {
         recommendedActivePackageIds.push(dependencyPackageId);
+        recommendedActivePackageIdSet.add(dependencyPackageId);
         upsertDependencyIssue(
           missingInstalledInactiveDependencies,
           dependencyPackageId,
@@ -403,6 +408,7 @@ export function analyzeModOrder(
     const group = groups.get(packageId);
     return group?.mods.length === 1 && group.preferredMod !== null;
   });
+  const sortablePackageIdSet = new Set(sortablePackageIds);
 
   for (const packageId of sortablePackageIds) {
     const group = groups.get(packageId);
@@ -453,7 +459,7 @@ export function analyzeModOrder(
     }
 
     for (const dependencyPackageId of mod.dependencyMetadata.dependencies) {
-      if (!sortablePackageIds.includes(dependencyPackageId)) {
+      if (!sortablePackageIdSet.has(dependencyPackageId)) {
         continue;
       }
 
@@ -469,7 +475,7 @@ export function analyzeModOrder(
     }
 
     for (const dependencyPackageId of mod.dependencyMetadata.loadAfter) {
-      if (!sortablePackageIds.includes(dependencyPackageId)) {
+      if (!sortablePackageIdSet.has(dependencyPackageId)) {
         continue;
       }
 
@@ -486,7 +492,7 @@ export function analyzeModOrder(
     }
 
     for (const dependencyPackageId of mod.dependencyMetadata.forceLoadAfter) {
-      if (!sortablePackageIds.includes(dependencyPackageId)) {
+      if (!sortablePackageIdSet.has(dependencyPackageId)) {
         continue;
       }
 
@@ -502,7 +508,7 @@ export function analyzeModOrder(
     }
 
     for (const targetPackageId of mod.dependencyMetadata.loadBefore) {
-      if (!sortablePackageIds.includes(targetPackageId)) {
+      if (!sortablePackageIdSet.has(targetPackageId)) {
         continue;
       }
 
@@ -519,7 +525,7 @@ export function analyzeModOrder(
     }
 
     for (const targetPackageId of mod.dependencyMetadata.forceLoadBefore) {
-      if (!sortablePackageIds.includes(targetPackageId)) {
+      if (!sortablePackageIdSet.has(targetPackageId)) {
         continue;
       }
 
@@ -536,7 +542,7 @@ export function analyzeModOrder(
 
     for (const incompatiblePackageId of mod.dependencyMetadata
       .incompatibleWith) {
-      if (!recommendedActivePackageIds.includes(incompatiblePackageId)) {
+      if (!recommendedActivePackageIdSet.has(incompatiblePackageId)) {
         continue;
       }
 

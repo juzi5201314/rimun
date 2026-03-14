@@ -106,29 +106,50 @@ export function applyDropToDraftModOrder(
     return currentOrder;
   }
 
-  const activePackageIds = currentOrder.activePackageIds.filter(
-    (current) => current !== input.packageId,
-  );
-  const inactivePackageIds = currentOrder.inactivePackageIds.filter(
-    (current) => current !== input.packageId,
-  );
+  if (input.sourceColumn === input.targetColumn) {
+    if (input.targetColumn === "active") {
+      return {
+        activePackageIds: insertPackageId(
+          currentOrder.activePackageIds,
+          input.packageId,
+          input.targetPackageId,
+          input.placement,
+        ),
+        inactivePackageIds: currentOrder.inactivePackageIds,
+      };
+    }
 
-  if (input.targetColumn === "active") {
     return {
-      activePackageIds: insertPackageId(
-        activePackageIds,
+      activePackageIds: currentOrder.activePackageIds,
+      inactivePackageIds: insertPackageId(
+        currentOrder.inactivePackageIds,
         input.packageId,
         input.targetPackageId,
         input.placement,
       ),
-      inactivePackageIds,
+    };
+  }
+
+  if (input.targetColumn === "active") {
+    return {
+      activePackageIds: insertPackageId(
+        currentOrder.activePackageIds,
+        input.packageId,
+        input.targetPackageId,
+        input.placement,
+      ),
+      inactivePackageIds: currentOrder.inactivePackageIds.filter(
+        (current) => current !== input.packageId,
+      ),
     };
   }
 
   return {
-    activePackageIds,
+    activePackageIds: currentOrder.activePackageIds.filter(
+      (current) => current !== input.packageId,
+    ),
     inactivePackageIds: insertPackageId(
-      inactivePackageIds,
+      currentOrder.inactivePackageIds,
       input.packageId,
       input.targetPackageId,
       input.placement,
