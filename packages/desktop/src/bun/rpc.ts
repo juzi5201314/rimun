@@ -1,7 +1,7 @@
 import type { RimunRpc } from "@rimun/shared";
 import { BrowserView } from "electrobun/bun";
-import type { SettingsRepository } from "./persistence";
 import { createRimunHostService } from "./host-service";
+import type { SettingsRepository } from "./persistence";
 
 export function createMainWindowRpc(
   repository: SettingsRepository,

@@ -1,7 +1,7 @@
 import type { RimunHostApi } from "@rimun/shared";
 import {
-  createContext,
   type PropsWithChildren,
+  createContext,
   useContext,
   useState,
 } from "react";

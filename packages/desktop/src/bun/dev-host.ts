@@ -1,6 +1,6 @@
 import { rimunRpcSchemas } from "@rimun/shared";
-import { SettingsRepository } from "./persistence";
 import { createRimunHostService } from "./host-service";
+import { SettingsRepository } from "./persistence";
 
 const HOST = "127.0.0.1";
 const PORT = Number.parseInt(process.env["RIMUN_DEV_HOST_PORT"] ?? "3070", 10);
@@ -10,25 +10,8 @@ const DEV_SERVER_ORIGIN =
 const repository = new SettingsRepository();
 const hostService = createRimunHostService(repository);
 
-const requestHandlers = {
-  getBootstrap: () => hostService.getBootstrap(),
-  getProfileCatalog: () => hostService.getProfileCatalog(),
-  createProfile: (payload: any) => hostService.createProfile(payload),
-  renameProfile: (payload: any) => hostService.renameProfile(payload),
-  saveProfile: (payload: any) => hostService.saveProfile(payload),
-  deleteProfile: (payload: any) => hostService.deleteProfile(payload),
-  switchProfile: (payload: any) => hostService.switchProfile(payload),
-  getModSourceSnapshot: (payload: any) =>
-    hostService.getModSourceSnapshot(payload),
-  getSettings: () => hostService.getSettings(),
-  saveSettings: (payload: any) => hostService.saveSettings(payload),
-  detectPaths: (payload: any) => hostService.detectPaths(payload),
-  validatePath: (payload: any) => hostService.validatePath(payload),
-  applyActivePackageIds: (payload: any) =>
-    hostService.applyActivePackageIds(payload),
-} as const;
-
-type RequestMethod = keyof typeof requestHandlers;
+type RimunRequestSchemas = typeof rimunRpcSchemas.bun.requests;
+type RequestMethod = keyof RimunRequestSchemas;
 
 function jsonResponse(status: number, body: unknown) {
   return Response.json(body, {
@@ -72,9 +55,9 @@ Bun.serve({
       });
     }
 
-    const method = url.pathname.slice("/api/rimun/".length) as RequestMethod;
+    const method = url.pathname.slice("/api/rimun/".length);
 
-    if (!(method in requestHandlers)) {
+    if (!(method in rimunRpcSchemas.bun.requests)) {
       return jsonResponse(404, {
         error: {
           code: "unknown_method",
@@ -83,19 +66,79 @@ Bun.serve({
       });
     }
 
-    const schema =
-      rimunRpcSchemas.bun.requests[
-        method as keyof typeof rimunRpcSchemas.bun.requests
-      ];
+    const requestMethod = method as RequestMethod;
 
     try {
-      const payload =
-        schema.params === rimunRpcSchemas.bun.requests.getBootstrap.params ||
-        schema.params === rimunRpcSchemas.bun.requests.getProfileCatalog.params ||
-        schema.params === rimunRpcSchemas.bun.requests.getSettings.params
-          ? {}
-          : await request.json();
-      const result = await requestHandlers[method](payload);
+      const result = await (async () => {
+        switch (requestMethod) {
+          case "getBootstrap":
+            return hostService.getBootstrap();
+          case "getProfileCatalog":
+            return hostService.getProfileCatalog();
+          case "createProfile":
+            return hostService.createProfile(
+              rimunRpcSchemas.bun.requests.createProfile.params.parse(
+                await request.json(),
+              ),
+            );
+          case "renameProfile":
+            return hostService.renameProfile(
+              rimunRpcSchemas.bun.requests.renameProfile.params.parse(
+                await request.json(),
+              ),
+            );
+          case "saveProfile":
+            return hostService.saveProfile(
+              rimunRpcSchemas.bun.requests.saveProfile.params.parse(
+                await request.json(),
+              ),
+            );
+          case "deleteProfile":
+            return hostService.deleteProfile(
+              rimunRpcSchemas.bun.requests.deleteProfile.params.parse(
+                await request.json(),
+              ),
+            );
+          case "switchProfile":
+            return hostService.switchProfile(
+              rimunRpcSchemas.bun.requests.switchProfile.params.parse(
+                await request.json(),
+              ),
+            );
+          case "getModSourceSnapshot":
+            return hostService.getModSourceSnapshot(
+              rimunRpcSchemas.bun.requests.getModSourceSnapshot.params.parse(
+                await request.json(),
+              ),
+            );
+          case "getSettings":
+            return hostService.getSettings();
+          case "saveSettings":
+            return hostService.saveSettings(
+              rimunRpcSchemas.bun.requests.saveSettings.params.parse(
+                await request.json(),
+              ),
+            );
+          case "detectPaths":
+            return hostService.detectPaths(
+              rimunRpcSchemas.bun.requests.detectPaths.params.parse(
+                await request.json(),
+              ),
+            );
+          case "validatePath":
+            return hostService.validatePath(
+              rimunRpcSchemas.bun.requests.validatePath.params.parse(
+                await request.json(),
+              ),
+            );
+          case "applyActivePackageIds":
+            return hostService.applyActivePackageIds(
+              rimunRpcSchemas.bun.requests.applyActivePackageIds.params.parse(
+                await request.json(),
+              ),
+            );
+        }
+      })();
       return jsonResponse(200, result);
     } catch (error) {
       const message =

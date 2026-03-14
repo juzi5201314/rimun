@@ -1,5 +1,4 @@
 import type {
-  ApplyModOrderRecommendationInput,
   ModLibraryResult,
   ModOrderAnalysisResult,
   ModOrderDependencyIssue,
@@ -7,6 +6,7 @@ import type {
   ModOrderEdge,
   ModOrderEdgeKind,
   ModOrderExplanation,
+  ModOrderRecommendationAction,
   ModRecord,
 } from "@rimun/shared";
 
@@ -625,7 +625,7 @@ export function analyzeModOrder(
 
 export function resolveRecommendedActivePackageIds(
   analysis: ModOrderAnalysisResult,
-  actions: ApplyModOrderRecommendationInput["actions"],
+  actions: ModOrderRecommendationAction[],
 ) {
   let nextActivePackageIds = [...analysis.currentActivePackageIds];
 

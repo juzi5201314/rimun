@@ -12,7 +12,9 @@ export function useModSourceSnapshotQuery(profileId: string | null) {
     enabled: profileId !== null,
     queryFn: async () => {
       if (!profileId) {
-        throw new Error("Profile id is required to load the mod source snapshot.");
+        throw new Error(
+          "Profile id is required to load the mod source snapshot.",
+        );
       }
 
       const hostApi = await getHostApi();

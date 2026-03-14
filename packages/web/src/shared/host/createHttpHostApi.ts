@@ -18,7 +18,10 @@ async function callHost<T>(method: string, payload: unknown): Promise<T> {
       };
 
   if (!response.ok) {
-    throw new Error((data as { error?: { message?: string } }).error?.message ?? "Host request failed.");
+    throw new Error(
+      (data as { error?: { message?: string } }).error?.message ??
+        "Host request failed.",
+    );
   }
 
   return data as T;

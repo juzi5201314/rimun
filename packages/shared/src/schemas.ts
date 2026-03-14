@@ -262,18 +262,6 @@ export const modOrderAnalysisResultSchema = z.object({
   sortDifferenceCount: z.number().int().min(0),
 });
 
-export const applyModOrderRecommendationInputSchema = z.object({
-  profileId: profileIdSchema,
-  actions: z.array(modOrderRecommendationActionSchema).min(1),
-});
-
-export const modOrderApplyResultSchema = z.object({
-  appliedActions: z.array(modOrderRecommendationActionSchema).min(1),
-  activePackageIds: z.array(z.string().trim().min(1)).default([]),
-  modLibrary: modLibraryResultSchema,
-  analysis: modOrderAnalysisResultSchema,
-});
-
 export const detectPathsInputSchema = z.object({
   preferredChannels: z
     .array(distributionChannelSchema)
@@ -415,7 +403,3 @@ export type ApplyActivePackageIdsInput = z.infer<
 export type ApplyActivePackageIdsResult = z.infer<
   typeof applyActivePackageIdsResultSchema
 >;
-export type ApplyModOrderRecommendationInput = z.infer<
-  typeof applyModOrderRecommendationInputSchema
->;
-export type ModOrderApplyResult = z.infer<typeof modOrderApplyResultSchema>;

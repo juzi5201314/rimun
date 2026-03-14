@@ -3,11 +3,7 @@ import type {
   ModRecord,
   ModSourceSnapshot,
 } from "@rimun/shared";
-import {
-  getEntryReadableWslPath,
-  isOfficialMod,
-  parseAboutXml,
-} from "./xml";
+import { getEntryReadableWslPath, isOfficialMod, parseAboutXml } from "./xml";
 
 function createEmptyDependencyMetadata() {
   return {
@@ -26,7 +22,9 @@ function buildModRecord(
   entry: ModSourceSnapshot["entries"][number],
   activePackageIds: Set<string>,
 ): ModRecord {
-  const parsedAbout = entry.aboutXmlText ? parseAboutXml(entry.aboutXmlText) : null;
+  const parsedAbout = entry.aboutXmlText
+    ? parseAboutXml(entry.aboutXmlText)
+    : null;
 
   return {
     id: `${entry.source}:${parsedAbout?.packageId ?? entry.entryName}`,

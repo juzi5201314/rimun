@@ -28,6 +28,13 @@ const defaultSettings: AppSettings = {
   updatedAt: "2026-03-12T00:00:00.000Z",
 };
 
+const defaultInstallationPath =
+  "C:\\Program Files (x86)\\Steam\\steamapps\\common\\RimWorld";
+const defaultWorkshopPath =
+  "C:\\Program Files (x86)\\Steam\\steamapps\\workshop\\content\\294100";
+const defaultConfigPath =
+  "C:\\Users\\player\\AppData\\LocalLow\\Ludeon Studios\\RimWorld by Ludeon Studios\\Config";
+
 const defaultDetectPaths: DetectPathsResult = {
   environment: {
     platform: "linux",
@@ -39,7 +46,7 @@ const defaultDetectPaths: DetectPathsResult = {
       kind: "installation",
       channel: "steam",
       source: "auto",
-      windowsPath: defaultSettings.installationPath!,
+      windowsPath: defaultInstallationPath,
       wslPath: "/mnt/c/Program Files (x86)/Steam/steamapps/common/RimWorld",
       exists: true,
       readable: true,
@@ -50,7 +57,7 @@ const defaultDetectPaths: DetectPathsResult = {
       kind: "workshop",
       channel: "steam",
       source: "auto",
-      windowsPath: defaultSettings.workshopPath!,
+      windowsPath: defaultWorkshopPath,
       wslPath:
         "/mnt/c/Program Files (x86)/Steam/steamapps/workshop/content/294100",
       exists: true,
@@ -62,7 +69,7 @@ const defaultDetectPaths: DetectPathsResult = {
       kind: "config",
       channel: "steam",
       source: "auto",
-      windowsPath: defaultSettings.configPath!,
+      windowsPath: defaultConfigPath,
       wslPath:
         "/mnt/c/Users/player/AppData/LocalLow/Ludeon Studios/RimWorld by Ludeon Studios/Config",
       exists: true,
@@ -288,7 +295,9 @@ export function createTestHostApi(overrides: Overrides = {}): RimunHostApi {
       setProfileSummary(newProfile);
       setSnapshot(
         newProfile.id,
-        clone(modSourceSnapshotsByProfile[sourceProfile.id] ?? createSnapshot([])),
+        clone(
+          modSourceSnapshotsByProfile[sourceProfile.id] ?? createSnapshot([]),
+        ),
       );
 
       return createCatalog();

@@ -62,6 +62,7 @@ function RootLayout() {
         )}
       >
         <button
+          type="button"
           onClick={() => setIsCollapsed(!isCollapsed)}
           aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
           className="absolute right-0 top-10 z-30 flex h-8 w-8 translate-x-1/2 items-center justify-center rounded-full border border-border bg-background text-muted-foreground shadow-sm transition-colors hover:text-foreground"

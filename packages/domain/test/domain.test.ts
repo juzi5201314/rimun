@@ -12,10 +12,7 @@ import {
 
 function createSnapshot(activePackageIds: string[]): ModSourceSnapshot {
   const installationReadablePath = rimunTmpPath("installation", "Mods", "Core");
-  const workshopHugsLibReadablePath = rimunTmpPath(
-    "workshop",
-    "818773962",
-  );
+  const workshopHugsLibReadablePath = rimunTmpPath("workshop", "818773962");
   const workshopPawnsReadablePath = rimunTmpPath("workshop", "999999999");
 
   return {
@@ -183,10 +180,129 @@ describe("domain mod derivation", () => {
         "enableMissingDependencies",
         "reorderActiveMods",
       ]),
-    ).toEqual([
-      "ludeon.rimworld",
-      "unlimitedhugs.hugslib",
-      "example.pawns",
+    ).toEqual(["ludeon.rimworld", "unlimitedhugs.hugslib", "example.pawns"]);
+  });
+
+  it("reports unavailable dependencies as blocking issues", () => {
+    const library = buildModLibraryFromSnapshot({
+      ...createSnapshot(["ludeon.rimworld", "example.pawns"]),
+      entries: createSnapshot(["ludeon.rimworld", "example.pawns"]).entries.map(
+        (entry) =>
+          entry.entryName === "Pawns"
+            ? {
+                ...entry,
+                aboutXmlText: `
+                  <ModMetaData>
+                    <name>Pawns</name>
+                    <packageId>example.pawns</packageId>
+                    <author>Storyteller</author>
+                    <supportedVersions><li>1.5</li></supportedVersions>
+                    <modDependencies><li>missing.foundation</li></modDependencies>
+                  </ModMetaData>
+                `,
+              }
+            : entry,
+      ),
+    });
+    const analysis = analyzeModOrder(library);
+
+    expect(analysis.hasBlockingIssues).toBe(true);
+    expect(analysis.missingUnavailableDependencies).toEqual([
+      {
+        packageId: "missing.foundation",
+        modName: null,
+        requiredByPackageIds: ["example.pawns"],
+        requiredByNames: ["Pawns"],
+      },
     ]);
+    expect(
+      analysis.diagnostics.some(
+        (diagnostic) => diagnostic.code === "missing_unavailable_dependency",
+      ),
+    ).toBe(true);
+  });
+
+  it("detects dependency cycles and blocks reorder recommendations", () => {
+    const snapshot = createSnapshot([
+      "ludeon.rimworld",
+      "example.alpha",
+      "example.beta",
+    ]);
+    const [coreEntry] = snapshot.entries;
+
+    if (!coreEntry) {
+      throw new Error("Expected the snapshot to contain the Core entry.");
+    }
+
+    const library = buildModLibraryFromSnapshot({
+      ...snapshot,
+      entries: [
+        coreEntry,
+        {
+          entryName: "Alpha",
+          source: "workshop",
+          modWindowsPath:
+            "C:\\Games\\Steam\\steamapps\\workshop\\content\\294100\\111111111",
+          modReadablePath: rimunTmpPath("workshop", "111111111"),
+          manifestPath:
+            "C:\\Games\\Steam\\steamapps\\workshop\\content\\294100\\111111111\\About\\About.xml",
+          hasAboutXml: true,
+          aboutXmlText: `
+            <ModMetaData>
+              <name>Alpha</name>
+              <packageId>example.alpha</packageId>
+              <loadAfter><li>example.beta</li></loadAfter>
+            </ModMetaData>
+          `,
+          notes: [],
+        },
+        {
+          entryName: "Beta",
+          source: "workshop",
+          modWindowsPath:
+            "C:\\Games\\Steam\\steamapps\\workshop\\content\\294100\\222222222",
+          modReadablePath: rimunTmpPath("workshop", "222222222"),
+          manifestPath:
+            "C:\\Games\\Steam\\steamapps\\workshop\\content\\294100\\222222222\\About\\About.xml",
+          hasAboutXml: true,
+          aboutXmlText: `
+            <ModMetaData>
+              <name>Beta</name>
+              <packageId>example.beta</packageId>
+              <loadAfter><li>example.alpha</li></loadAfter>
+            </ModMetaData>
+          `,
+          notes: [],
+        },
+      ],
+    });
+    const analysis = analyzeModOrder(library);
+
+    expect(analysis.hasBlockingIssues).toBe(true);
+    expect(
+      analysis.diagnostics.some(
+        (diagnostic) => diagnostic.code === "cycle_detected",
+      ),
+    ).toBe(true);
+    expect(() =>
+      resolveRecommendedActivePackageIds(analysis, ["reorderActiveMods"]),
+    ).toThrow("Cannot reorder mods while blocking issues remain.");
+  });
+
+  it("reorders active mods without enabling new dependencies when only sorting is requested", () => {
+    const library = buildModLibraryFromSnapshot(
+      createSnapshot([
+        "ludeon.rimworld",
+        "unlimitedhugs.hugslib",
+        "example.pawns",
+      ]),
+    );
+    const analysis = analyzeModOrder(library);
+
+    expect(analysis.hasBlockingIssues).toBe(false);
+    expect(analysis.sortDifferenceCount).toBe(0);
+    expect(
+      resolveRecommendedActivePackageIds(analysis, ["reorderActiveMods"]),
+    ).toEqual(["ludeon.rimworld", "unlimitedhugs.hugslib", "example.pawns"]);
   });
 });

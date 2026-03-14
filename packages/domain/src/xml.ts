@@ -332,7 +332,10 @@ function replaceXmlListBlock(
   return null;
 }
 
-export function replaceActiveModsBlock(xml: string, activePackageIds: string[]) {
+export function replaceActiveModsBlock(
+  xml: string,
+  activePackageIds: string[],
+) {
   const { activeModsPackageIds, knownExpansionIds } =
     splitActivePackageIdsForConfig(activePackageIds);
   const activeModsBlock = buildActiveModsXml(activeModsPackageIds);

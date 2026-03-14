@@ -17,7 +17,12 @@ import type {
   ValidatePathResult,
 } from "@rimun/shared";
 import { rimunRpcSchemas } from "@rimun/shared";
-import { createReadablePathResolver, readActivePackageIdsFromSelection, readModSourceSnapshot, writeActiveModsToConfig } from "./mods";
+import {
+  createReadablePathResolver,
+  readActivePackageIdsFromSelection,
+  readModSourceSnapshot,
+  writeActiveModsToConfig,
+} from "./mods";
 import type { SettingsRepository } from "./persistence";
 import { detectPaths, getExecutionEnvironment, validatePath } from "./platform";
 
@@ -121,10 +126,8 @@ export function createRimunHostService(
         rimunRpcSchemas.bun.requests.createProfile.params,
         payload,
       );
-      const initialActivePackageIds = await resolveInitialProfileActivePackageIds(
-        repository,
-        toReadablePath,
-      );
+      const initialActivePackageIds =
+        await resolveInitialProfileActivePackageIds(repository, toReadablePath);
 
       return rimunRpcSchemas.bun.requests.createProfile.response.parse(
         repository.createProfile(input, initialActivePackageIds),
@@ -135,10 +138,8 @@ export function createRimunHostService(
         rimunRpcSchemas.bun.requests.renameProfile.params,
         payload,
       );
-      const initialActivePackageIds = await resolveInitialProfileActivePackageIds(
-        repository,
-        toReadablePath,
-      );
+      const initialActivePackageIds =
+        await resolveInitialProfileActivePackageIds(repository, toReadablePath);
 
       return rimunRpcSchemas.bun.requests.renameProfile.response.parse(
         repository.renameProfile(
@@ -153,10 +154,8 @@ export function createRimunHostService(
         rimunRpcSchemas.bun.requests.saveProfile.params,
         payload,
       );
-      const initialActivePackageIds = await resolveInitialProfileActivePackageIds(
-        repository,
-        toReadablePath,
-      );
+      const initialActivePackageIds =
+        await resolveInitialProfileActivePackageIds(repository, toReadablePath);
       const profile = repository.saveProfile(input, initialActivePackageIds);
       const currentProfileId = repository.getCurrentProfileId();
       const selection = resolvePreferredSelection(repository);
@@ -176,10 +175,8 @@ export function createRimunHostService(
         rimunRpcSchemas.bun.requests.deleteProfile.params,
         payload,
       );
-      const initialActivePackageIds = await resolveInitialProfileActivePackageIds(
-        repository,
-        toReadablePath,
-      );
+      const initialActivePackageIds =
+        await resolveInitialProfileActivePackageIds(repository, toReadablePath);
       const previousCurrentProfileId = repository.getCurrentProfileId(
         initialActivePackageIds,
       );
@@ -208,10 +205,8 @@ export function createRimunHostService(
         rimunRpcSchemas.bun.requests.switchProfile.params,
         payload,
       );
-      const initialActivePackageIds = await resolveInitialProfileActivePackageIds(
-        repository,
-        toReadablePath,
-      );
+      const initialActivePackageIds =
+        await resolveInitialProfileActivePackageIds(repository, toReadablePath);
       const catalog = repository.switchProfile(
         input.profileId,
         initialActivePackageIds,
@@ -317,10 +312,8 @@ export function createRimunHostService(
         rimunRpcSchemas.bun.requests.applyActivePackageIds.params,
         payload,
       );
-      const initialActivePackageIds = await resolveInitialProfileActivePackageIds(
-        repository,
-        toReadablePath,
-      );
+      const initialActivePackageIds =
+        await resolveInitialProfileActivePackageIds(repository, toReadablePath);
       const currentProfile = repository.getProfile(
         input.profileId,
         initialActivePackageIds,

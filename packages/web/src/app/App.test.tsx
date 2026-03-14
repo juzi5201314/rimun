@@ -5,10 +5,12 @@ import type { DetectPathsInput } from "@rimun/shared";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-function renderApp(options: {
-  hostApi?: ReturnType<typeof createTestHostApi>;
-  initialEntries?: string[];
-} = {}) {
+function renderApp(
+  options: {
+    hostApi?: ReturnType<typeof createTestHostApi>;
+    initialEntries?: string[];
+  } = {},
+) {
   render(
     <App
       hostApi={options.hostApi}

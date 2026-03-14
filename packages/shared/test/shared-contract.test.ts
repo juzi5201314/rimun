@@ -1,7 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
 import {
-  applyModOrderRecommendationInputSchema,
   bootstrapPayloadSchema,
   createProfileInputSchema,
   detectPathsResultSchema,
@@ -223,15 +222,6 @@ describe("shared schemas", () => {
     });
 
     expect(parsed.recommendedOrderPackageIds[1]).toBe("unlimitedhugs.hugslib");
-  });
-
-  it("accepts apply recommendation input", () => {
-    const parsed = applyModOrderRecommendationInputSchema.parse({
-      profileId: "default",
-      actions: ["enableMissingDependencies", "reorderActiveMods"],
-    });
-
-    expect(parsed.actions).toHaveLength(2);
   });
 
   it("accepts a profile-scoped request input", () => {
