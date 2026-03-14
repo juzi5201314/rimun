@@ -1,29 +1,9 @@
-import {
-  type ColumnDropIndicator,
-  ModLibraryColumn,
-} from "@/features/mod-library/components/ModLibraryColumn";
-import { ModListRowCard } from "@/features/mod-library/components/ModListRow";
-import type {
-  HomePageController,
-  HomePageModListItem,
-} from "@/features/mod-library/hooks/useHomePageController";
-import type {
-  DropPlacement,
-  ModColumnId,
-} from "@/features/mod-library/lib/mod-list-order";
+import { ModLibraryDragSurface } from "@/features/mod-library/components/ModLibraryDragSurface";
+import type { HomePageController } from "@/features/mod-library/hooks/useHomePageController";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
 import { cn } from "@/shared/lib/utils";
-import {
-  DndContext,
-  type DragOverEvent,
-  DragOverlay,
-  type DragStartEvent,
-  PointerSensor,
-  useSensor,
-  useSensors,
-} from "@dnd-kit/core";
 import {
   AlertTriangle,
   ChevronDown,
@@ -38,7 +18,6 @@ import {
   Sparkles,
   Trash2,
 } from "lucide-react";
-import { useMemo, useState } from "react";
 
 function ToolbarChip({
   label,
@@ -59,89 +38,11 @@ function ToolbarChip({
   );
 }
 
-function areDropIndicatorsEqual(
-  left: ColumnDropIndicator,
-  right: ColumnDropIndicator,
-) {
-  if (left === right) {
-    return true;
-  }
-
-  if (!left || !right) {
-    return false;
-  }
-
-  return (
-    left.packageId === right.packageId &&
-    left.placement === right.placement &&
-    left.targetColumn === right.targetColumn
-  );
-}
-
-function resolveDropIndicator(event: DragOverEvent): ColumnDropIndicator {
-  const over = event.over;
-  const overData = over?.data.current;
-
-  if (!overData) {
-    return null;
-  }
-
-  if (overData["type"] === "mod-column") {
-    return {
-      packageId: null,
-      placement: "end",
-      targetColumn: overData["columnId"] as ModColumnId,
-    };
-  }
-
-  if (overData["type"] !== "mod-row-drop" || !over) {
-    return null;
-  }
-
-  const translatedRect = event.active.rect.current.translated;
-  const activeMidY = translatedRect
-    ? translatedRect.top + translatedRect.height / 2
-    : over.rect.top;
-  const overMidY = over.rect.top + over.rect.height / 2;
-  const placement: DropPlacement = activeMidY >= overMidY ? "after" : "before";
-
-  return {
-    packageId: overData["packageId"] as string | null,
-    placement,
-    targetColumn: overData["columnId"] as ModColumnId,
-  };
-}
-
 export function ModLibraryPane({
   controller,
 }: {
   controller: HomePageController;
 }) {
-  const [activeDragPackageId, setActiveDragPackageId] = useState<string | null>(
-    null,
-  );
-  const [dropIndicator, setDropIndicator] = useState<ColumnDropIndicator>(null);
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: {
-        distance: 6,
-      },
-    }),
-  );
-  const draggableItemsByPackageId = useMemo(() => {
-    const nextMap = new Map<string, HomePageModListItem>();
-
-    for (const mod of [...controller.activeMods, ...controller.inactiveMods]) {
-      if (mod.packageIdNormalized && mod.isDraggable) {
-        nextMap.set(mod.packageIdNormalized, mod);
-      }
-    }
-
-    return nextMap;
-  }, [controller.activeMods, controller.inactiveMods]);
-  const activeDragItem = activeDragPackageId
-    ? (draggableItemsByPackageId.get(activeDragPackageId) ?? null)
-    : null;
   const visibleCount =
     controller.visibleActiveMods.length + controller.visibleInactiveMods.length;
 
@@ -149,31 +50,8 @@ export function ModLibraryPane({
     return null;
   }
 
-  function handleDragStart(event: DragStartEvent) {
-    const packageId = event.active.data.current?.["packageId"];
-
-    if (typeof packageId === "string") {
-      setActiveDragPackageId(packageId);
-    } else {
-      setActiveDragPackageId(null);
-    }
-  }
-
-  function handleDragOver(event: DragOverEvent) {
-    const nextIndicator = resolveDropIndicator(event);
-
-    setDropIndicator((current) =>
-      areDropIndicatorsEqual(current, nextIndicator) ? current : nextIndicator,
-    );
-  }
-
-  function resetDragState() {
-    setActiveDragPackageId(null);
-    setDropIndicator(null);
-  }
-
   return (
-    <section className="flex min-w-0 flex-col border-r border-border/60 bg-background/20">
+    <section className="flex min-h-0 min-w-0 flex-1 flex-col border-r border-border/60 bg-background/20">
       <h2 className="sr-only">Mod Library</h2>
 
       <header className="shrink-0 border-b border-border/60 bg-card/40 px-6 py-4">
@@ -562,78 +440,7 @@ export function ModLibraryPane({
         </div>
       </div>
 
-      <DndContext
-        sensors={sensors}
-        onDragCancel={resetDragState}
-        onDragEnd={(event) => {
-          const packageId = event.active.data.current?.["packageId"];
-          const sourceColumn = event.active.data.current?.["columnId"];
-
-          if (
-            typeof packageId === "string" &&
-            (sourceColumn === "active" || sourceColumn === "inactive") &&
-            dropIndicator
-          ) {
-            controller.handleDropMod({
-              packageId,
-              placement: dropIndicator.placement,
-              sourceColumn,
-              targetColumn: dropIndicator.targetColumn,
-              targetPackageId: dropIndicator.packageId,
-            });
-          }
-
-          resetDragState();
-        }}
-        onDragOver={handleDragOver}
-        onDragStart={handleDragStart}
-      >
-        <div className="min-h-0 flex-1 bg-background/5 p-4">
-          <div className="grid h-full min-h-0 grid-cols-2 gap-4">
-            <ModLibraryColumn
-              activeDragPackageId={activeDragPackageId}
-              columnId="inactive"
-              description="Installed but not active. Drag within this column to stage a temporary order for this session."
-              dropIndicator={dropIndicator}
-              items={controller.visibleInactiveMods}
-              selectedModId={controller.selectedMod?.id ?? null}
-              title="Inactive Mods"
-              totalCount={controller.inactiveMods.length}
-              onSelectMod={controller.setSelectedModId}
-            />
-            <ModLibraryColumn
-              activeDragPackageId={activeDragPackageId}
-              columnId="active"
-              description="Exact RimWorld load order. Top to bottom is the sequence that will be saved."
-              dropIndicator={dropIndicator}
-              items={controller.visibleActiveMods}
-              selectedModId={controller.selectedMod?.id ?? null}
-              title="Active Mods"
-              totalCount={controller.activeMods.length}
-              onSelectMod={controller.setSelectedModId}
-            />
-          </div>
-        </div>
-
-        <DragOverlay>
-          {activeDragItem ? (
-            <div className="w-[30rem] max-w-[calc(50vw-4rem)] opacity-95">
-              <ModListRowCard
-                dragHandle={
-                  <div className="flex h-8 w-8 items-center justify-center rounded-xl border border-primary/30 bg-primary/10 text-primary">
-                    <GripVertical className="h-4 w-4" />
-                  </div>
-                }
-                isDragging={false}
-                isSelected={false}
-                item={activeDragItem}
-                showDropAfter={false}
-                showDropBefore={false}
-              />
-            </div>
-          ) : null}
-        </DragOverlay>
-      </DndContext>
+      <ModLibraryDragSurface controller={controller} />
 
       <footer className="flex shrink-0 flex-wrap justify-between gap-3 border-t border-border/60 bg-card/20 px-6 py-3">
         <div className="flex items-center gap-4 text-xs text-muted-foreground">

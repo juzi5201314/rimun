@@ -13,13 +13,144 @@ import {
   Package,
   ShieldCheck,
 } from "lucide-react";
-import { type ReactNode, memo, useCallback } from "react";
+import { type ReactNode, type RefObject, memo, useEffect, useRef } from "react";
 
-type DropIndicator = {
+export type DropIndicator = {
   packageId: string | null;
   placement: DropPlacement;
   targetColumn: ModColumnId;
 } | null;
+
+export type ModListRowProps = {
+  activeDragPackageId: string | null;
+  dropIndicator: DropIndicator;
+  isSelected: boolean;
+  item: HomePageModListItem;
+  onSelect: (modId: string) => void;
+};
+
+function getRowDropPlacement(
+  dropIndicator: DropIndicator,
+  item: HomePageModListItem,
+) {
+  if (
+    dropIndicator?.targetColumn === item.columnId &&
+    dropIndicator.packageId === item.packageIdNormalized
+  ) {
+    return dropIndicator.placement;
+  }
+
+  return null;
+}
+
+function isRowDragged(
+  activeDragPackageId: string | null,
+  item: HomePageModListItem,
+) {
+  return (
+    activeDragPackageId !== null &&
+    activeDragPackageId === item.packageIdNormalized
+  );
+}
+
+export function areModListRowPropsEqual(
+  previous: ModListRowProps,
+  next: ModListRowProps,
+) {
+  return (
+    previous.item === next.item &&
+    previous.isSelected === next.isSelected &&
+    previous.onSelect === next.onSelect &&
+    getRowDropPlacement(previous.dropIndicator, previous.item) ===
+      getRowDropPlacement(next.dropIndicator, next.item) &&
+    isRowDragged(previous.activeDragPackageId, previous.item) ===
+      isRowDragged(next.activeDragPackageId, next.item)
+  );
+}
+
+function ModListRowDroppableRegistration({
+  item,
+  rowElementRef,
+}: {
+  item: HomePageModListItem;
+  rowElementRef: RefObject<HTMLDivElement | null>;
+}) {
+  const { setNodeRef } = useDroppable({
+    data: {
+      columnId: item.columnId,
+      packageId: item.packageIdNormalized,
+      type: "mod-row-drop",
+    },
+    disabled: !item.isDraggable || !item.packageIdNormalized,
+    id: `drop:${item.columnId}:${item.packageIdNormalized ?? item.id}`,
+  });
+
+  useEffect(() => {
+    setNodeRef(rowElementRef.current);
+
+    return () => {
+      setNodeRef(null);
+    };
+  }, [rowElementRef, setNodeRef]);
+
+  return null;
+}
+
+function ModListRowDragHandle({
+  item,
+  rowElementRef,
+}: {
+  item: HomePageModListItem;
+  rowElementRef: RefObject<HTMLDivElement | null>;
+}) {
+  const { attributes, listeners, setNodeRef } = useDraggable({
+    data: {
+      columnId: item.columnId,
+      packageId: item.packageIdNormalized,
+      type: "mod-row",
+    },
+    disabled: !item.isDraggable || !item.packageIdNormalized,
+    id: `drag:${item.packageIdNormalized ?? item.id}`,
+  });
+
+  useEffect(() => {
+    setNodeRef(rowElementRef.current);
+
+    return () => {
+      setNodeRef(null);
+    };
+  }, [rowElementRef, setNodeRef]);
+
+  if (!item.isDraggable) {
+    return (
+      <div
+        className="flex h-8 w-8 items-center justify-center rounded-xl border border-border/50 bg-muted/20 text-muted-foreground/55"
+        title={item.dragDisabledReason ?? "This mod cannot be dragged."}
+      >
+        {item.isOfficial ? (
+          <ShieldCheck className="h-4 w-4" />
+        ) : item.packageIdNormalized ? (
+          <Lock className="h-4 w-4" />
+        ) : (
+          <Package className="h-4 w-4" />
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      aria-label={`Drag ${item.name}`}
+      className="flex h-8 w-8 items-center justify-center rounded-xl border border-border/60 bg-background/90 text-muted-foreground transition-colors hover:border-primary/30 hover:bg-primary/5 hover:text-primary"
+      {...attributes}
+      {...listeners}
+      onClick={(event) => event.stopPropagation()}
+    >
+      <GripVertical className="h-4 w-4" />
+    </button>
+  );
+}
 
 function SourceBadge({ source }: { source: HomePageModListItem["source"] }) {
   return (
@@ -144,89 +275,30 @@ export const ModListRow = memo(function ModListRow({
   isSelected,
   item,
   onSelect,
-}: {
-  activeDragPackageId: string | null;
-  dropIndicator: DropIndicator;
-  isSelected: boolean;
-  item: HomePageModListItem;
-  onSelect: (modId: string) => void;
-}) {
-  const {
-    attributes,
-    isDragging,
-    listeners,
-    setNodeRef: setDraggableNodeRef,
-  } = useDraggable({
-    data: {
-      columnId: item.columnId,
-      packageId: item.packageIdNormalized,
-      type: "mod-row",
-    },
-    disabled: !item.isDraggable || !item.packageIdNormalized,
-    id: `drag:${item.packageIdNormalized ?? item.id}`,
-  });
-  const { setNodeRef: setDroppableNodeRef } = useDroppable({
-    data: {
-      columnId: item.columnId,
-      packageId: item.packageIdNormalized,
-      type: "mod-row-drop",
-    },
-    disabled: !item.isDraggable || !item.packageIdNormalized,
-    id: `drop:${item.columnId}:${item.packageIdNormalized ?? item.id}`,
-  });
-  const setNodeRef = useCallback(
-    (node: HTMLDivElement | null) => {
-      setDraggableNodeRef(node);
-      setDroppableNodeRef(node);
-    },
-    [setDraggableNodeRef, setDroppableNodeRef],
-  );
-  const isDropTarget =
-    dropIndicator?.targetColumn === item.columnId &&
-    dropIndicator.packageId === item.packageIdNormalized;
-  const showDropBefore = isDropTarget && dropIndicator.placement === "before";
-  const showDropAfter = isDropTarget && dropIndicator.placement === "after";
-  const dragHandle = item.isDraggable ? (
-    <button
-      type="button"
-      aria-label={`Drag ${item.name}`}
-      className="flex h-8 w-8 items-center justify-center rounded-xl border border-border/60 bg-background/90 text-muted-foreground transition-colors hover:border-primary/30 hover:bg-primary/5 hover:text-primary"
-      {...attributes}
-      {...listeners}
-      onClick={(event) => event.stopPropagation()}
-    >
-      <GripVertical className="h-4 w-4" />
-    </button>
-  ) : (
-    <div
-      className="flex h-8 w-8 items-center justify-center rounded-xl border border-border/50 bg-muted/20 text-muted-foreground/55"
-      title={item.dragDisabledReason ?? "This mod cannot be dragged."}
-    >
-      {item.isOfficial ? (
-        <ShieldCheck className="h-4 w-4" />
-      ) : item.packageIdNormalized ? (
-        <Lock className="h-4 w-4" />
-      ) : (
-        <Package className="h-4 w-4" />
-      )}
-    </div>
-  );
+}: ModListRowProps) {
+  const rowElementRef = useRef<HTMLDivElement | null>(null);
+  const dropPlacement = getRowDropPlacement(dropIndicator, item);
+  const showDropBefore = dropPlacement === "before";
+  const showDropAfter = dropPlacement === "after";
+  const isActiveDragRow = isRowDragged(activeDragPackageId, item);
 
   return (
     <div
-      ref={setNodeRef}
+      ref={rowElementRef}
       data-testid="mod-library-row"
       data-column-id={item.columnId}
       data-mod-id={item.id}
       data-package-id={item.packageIdNormalized ?? undefined}
     >
+      <ModListRowDroppableRegistration
+        item={item}
+        rowElementRef={rowElementRef}
+      />
       <ModListRowCard
-        dragHandle={dragHandle}
-        isDragging={
-          isDragging ||
-          (activeDragPackageId !== null &&
-            activeDragPackageId === item.packageIdNormalized)
+        dragHandle={
+          <ModListRowDragHandle item={item} rowElementRef={rowElementRef} />
         }
+        isDragging={isActiveDragRow}
         isSelected={isSelected}
         item={item}
         onSelect={() => onSelect(item.id)}
@@ -235,4 +307,4 @@ export const ModListRow = memo(function ModListRow({
       />
     </div>
   );
-});
+}, areModListRowPropsEqual);

@@ -51,7 +51,7 @@ export function HomePageWorkspace({
       ) : null}
 
       <div
-        className="flex min-w-0 flex-col"
+        className="flex min-h-0 min-w-0 flex-1 flex-col"
         style={{ width: `${100 - asideWidth}%` }}
       >
         <ModLibraryPane controller={controller} />
@@ -65,7 +65,7 @@ export function HomePageWorkspace({
       </div>
 
       <div
-        className="flex shrink-0 flex-col"
+        className="flex min-h-0 shrink-0 flex-col"
         style={{ width: `${asideWidth}%` }}
       >
         <ModDetailsPane controller={controller} />

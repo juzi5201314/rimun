@@ -8,7 +8,13 @@ import { cn } from "@/shared/lib/utils";
 import { useDroppable } from "@dnd-kit/core";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Inbox, Search } from "lucide-react";
-import { memo, useCallback, useRef } from "react";
+import {
+  type ReactNode,
+  type RefObject,
+  memo,
+  useCallback,
+  useRef,
+} from "react";
 
 export type ColumnDropIndicator = {
   packageId: string | null;
@@ -16,17 +22,7 @@ export type ColumnDropIndicator = {
   targetColumn: ModColumnId;
 } | null;
 
-export const ModLibraryColumn = memo(function ModLibraryColumn({
-  activeDragPackageId,
-  columnId,
-  description,
-  dropIndicator,
-  items,
-  selectedModId,
-  title,
-  totalCount,
-  onSelectMod,
-}: {
+export type ModLibraryColumnProps = {
   activeDragPackageId: string | null;
   columnId: ModColumnId;
   description: string;
@@ -36,8 +32,43 @@ export const ModLibraryColumn = memo(function ModLibraryColumn({
   title: string;
   totalCount: number;
   onSelectMod: (modId: string) => void;
+};
+
+function getColumnDropIndicatorKey(dropIndicator: ColumnDropIndicator) {
+  if (!dropIndicator) {
+    return null;
+  }
+
+  return `${dropIndicator.packageId ?? "end"}:${dropIndicator.placement}`;
+}
+
+export function areModLibraryColumnPropsEqual(
+  previous: ModLibraryColumnProps,
+  next: ModLibraryColumnProps,
+) {
+  return (
+    previous.activeDragPackageId === next.activeDragPackageId &&
+    previous.columnId === next.columnId &&
+    previous.description === next.description &&
+    getColumnDropIndicatorKey(previous.dropIndicator) ===
+      getColumnDropIndicatorKey(next.dropIndicator) &&
+    previous.items === next.items &&
+    previous.selectedModId === next.selectedModId &&
+    previous.title === next.title &&
+    previous.totalCount === next.totalCount &&
+    previous.onSelectMod === next.onSelectMod
+  );
+}
+
+function ColumnScrollArea({
+  children,
+  columnId,
+  scrollElementRef,
+}: {
+  children: ReactNode;
+  columnId: ModColumnId;
+  scrollElementRef: RefObject<HTMLDivElement | null>;
 }) {
-  const scrollElementRef = useRef<HTMLDivElement | null>(null);
   const { setNodeRef: setDroppableNodeRef } = useDroppable({
     data: {
       columnId,
@@ -50,8 +81,33 @@ export const ModLibraryColumn = memo(function ModLibraryColumn({
       scrollElementRef.current = node;
       setDroppableNodeRef(node);
     },
-    [setDroppableNodeRef],
+    [scrollElementRef, setDroppableNodeRef],
   );
+
+  return (
+    <div
+      ref={setScrollNodeRef}
+      data-testid="mod-library-column-scroll"
+      data-column-id={columnId}
+      className="no-scrollbar min-h-0 flex-1 overflow-y-auto px-3 py-3"
+    >
+      {children}
+    </div>
+  );
+}
+
+export const ModLibraryColumn = memo(function ModLibraryColumn({
+  activeDragPackageId,
+  columnId,
+  description,
+  dropIndicator,
+  items,
+  selectedModId,
+  title,
+  totalCount,
+  onSelectMod,
+}: ModLibraryColumnProps) {
+  const scrollElementRef = useRef<HTMLDivElement | null>(null);
   const rowVirtualizer = useVirtualizer({
     count: items.length,
     estimateSize: () => 74,
@@ -89,12 +145,7 @@ export const ModLibraryColumn = memo(function ModLibraryColumn({
         </div>
       </header>
 
-      <div
-        ref={setScrollNodeRef}
-        data-testid="mod-library-column-scroll"
-        data-column-id={columnId}
-        className="no-scrollbar min-h-0 flex-1 overflow-y-auto px-3 py-3"
-      >
+      <ColumnScrollArea columnId={columnId} scrollElementRef={scrollElementRef}>
         {items.length ? (
           <div
             className="relative"
@@ -160,7 +211,7 @@ export const ModLibraryColumn = memo(function ModLibraryColumn({
             </div>
           </div>
         )}
-      </div>
+      </ColumnScrollArea>
     </section>
   );
-});
+}, areModLibraryColumnPropsEqual);
