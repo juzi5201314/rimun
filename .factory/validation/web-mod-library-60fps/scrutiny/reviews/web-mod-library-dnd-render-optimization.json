@@ -1,0 +1,22 @@
+{
+  "featureId": "web-mod-library-dnd-render-optimization",
+  "reviewedAt": "2026-03-14T16:17:56+00:00",
+  "commitId": "2c850fd04df2a4869b1cc542bd0dd48e2e8ad46b",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The feature moves drag state into a dedicated surface, scopes DnD props to the affected column and rows, and restores the height constraints that keep virtualization active on real datasets. The memo comparators are narrowly targeted, the row/column helper splits keep dnd-kit hook churn out of the heavy row card subtree, and the added render-scoping tests directly guard the intended performance behavior.",
+    "issues": [
+      {
+        "file": "packages/web/src/features/mod-library/components/ModLibraryColumn.perf.test.tsx",
+        "line": 135,
+        "severity": "non_blocking",
+        "description": "During scrutiny reruns, Vitest intermittently reported an unhandled `ReferenceError: window is not defined` after teardown from `@tanstack/react-virtual`, which points to this perf test leaving an async virtualizer notification alive after the jsdom environment is torn down. The suite passed on retry, so this is not a release blocker, but it makes the validator flaky and can mask future regressions."
+      }
+    ]
+  },
+  "sharedStateObservations": [],
+  "addressesFailureFrom": null,
+  "summary": "Pass with one non-blocking issue. The drag-render optimization is correctly scoped, preserves mod-library behavior, and adds maintainable guardrails for the render-localization strategy, but the new virtualization perf test showed an intermittent teardown-time error during scrutiny reruns."
+}
