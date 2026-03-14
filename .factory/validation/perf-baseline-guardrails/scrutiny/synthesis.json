@@ -1,0 +1,55 @@
+{
+  "milestone": "perf-baseline-guardrails",
+  "round": 1,
+  "status": "pass",
+  "validatorsRun": {
+    "test": {
+      "passed": true,
+      "command": "bun run test",
+      "exitCode": 0
+    },
+    "typecheck": {
+      "passed": true,
+      "command": "bun run typecheck",
+      "exitCode": 0
+    },
+    "lint": {
+      "passed": true,
+      "command": "bun run lint",
+      "exitCode": 0
+    }
+  },
+  "reviewsSummary": {
+    "total": 3,
+    "passed": 3,
+    "failed": 0,
+    "failedFeatures": []
+  },
+  "blockingIssues": [],
+  "appliedUpdates": [
+    {
+      "target": "library",
+      "description": "Recorded the Bun 1.3.10 workspace-script syntax requirement in `.factory/library/environment.md` so future workers use `bun run --cwd <path> <script>` instead of the legacy ordering.",
+      "sourceFeature": "perf-guardrails-virtualization-dom-cap"
+    }
+  ],
+  "suggestedGuidanceUpdates": [
+    {
+      "target": ".factory/skills/*.md",
+      "suggestion": "Update worker skills that still prescribe `bun --cwd <path> run test` to use Bun 1.3.10-compatible syntax (`bun run --cwd <path> test`).",
+      "evidence": "Both reviewed perf-guardrails features reported handoff deviations because the documented command printed Bun usage, and the same outdated syntax remains in `.factory/skills/perf-guardrails-worker/SKILL.md`, `.factory/skills/web-perf-worker/SKILL.md`, and `.factory/skills/desktop-perf-worker/SKILL.md`.",
+      "isSystemic": true
+    }
+  ],
+  "rejectedObservations": [
+    {
+      "observation": "`.factory/services.yaml` needs a Bun command syntax update.",
+      "reason": "already-documented-or-already-fixed: the current manifest already uses `bun run --cwd ...`, so the reviewed handoff note was stale by the time of scrutiny synthesis."
+    },
+    {
+      "observation": "Workers need guidance to invoke `.factory/init.sh` via `bash` because the file is not executable.",
+      "reason": "ambiguous: the current repository copy of `.factory/init.sh` is executable, so this appears to have been an environment-specific transient rather than a stable shared-state rule."
+    }
+  ],
+  "previousRound": null
+}

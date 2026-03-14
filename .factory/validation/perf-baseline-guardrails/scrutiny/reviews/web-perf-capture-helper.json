@@ -1,0 +1,28 @@
+{
+  "featureId": "web-perf-capture-helper",
+  "reviewedAt": "2026-03-14T14:55:28+00:00",
+  "commitId": "0af1a08b6fffb482a40c23beb1cff9825e20581b",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The feature introduces a focused dev/test-only performance capture API, wires it into the web entrypoint with a dynamic import, and backs it with deterministic unit coverage plus browser verification. The overall design is sound and satisfies the milestone's need for validator-facing longtask/rAF evidence.",
+    "issues": [
+      {
+        "file": "packages/web/src/shared/perf/rimunPerfCapture.ts",
+        "line": 187,
+        "severity": "non_blocking",
+        "description": "If `PerformanceObserver` exists but `observe({ entryTypes: [\"longtask\"] })` throws because longtask entries are unsupported, the helper still reports `longtask.supported: true` in summaries (`supported` is derived from constructor presence at line 272 rather than successful observer registration). That can mislabel unsupported browsers as longtask-capable and make validator evidence ambiguous outside the current Chrome-like environment."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The web-perf worker skill still documents `bun --cwd packages/web run test`, but Bun 1.3.10 in this repo requires `bun run --cwd packages/web test`.",
+      "evidence": "The reviewed worker recorded a deviation because the documented command printed Bun usage, and `.factory/skills/web-perf-worker/SKILL.md` still contains the legacy syntax in its validator step and example handoff."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Pass with one non-blocking issue. The helper is correctly gated to dev/test and useful for validators, but its longtask capability flag should reflect successful observer registration rather than constructor presence alone."
+}

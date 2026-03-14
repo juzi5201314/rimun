@@ -1,0 +1,21 @@
+{
+  "featureId": "perf-guardrails-virtualization-dom-cap",
+  "reviewedAt": "2026-03-14T14:55:28+00:00",
+  "commitId": "38755252ee07fc651b92da73bd2b23e7dd5d1b2b",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The feature adds stable row/column selectors and a deterministic virtualization guardrail without changing list behavior. The test exercises scroll, filter toggles, and a cross-column move at 2000 items, and the production changes are limited to inert data attributes.",
+    "issues": []
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The perf-guardrails worker skill still tells workers to run package tests as `bun --cwd <path> run test`, but Bun 1.3.10 in this repo requires `bun run --cwd <path> test`.",
+      "evidence": "The worker handoff records a deviation because `bun --cwd packages/web run test` printed usage instead of running, and `.factory/skills/perf-guardrails-worker/SKILL.md` still documents the old syntax in the validator step and example handoff."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Pass. The virtualization DOM-cap guardrail is correctly scoped, deterministic, and aligned with VAL-PERF-001; only a shared skill-command syntax mismatch was observed outside the feature code."
+}

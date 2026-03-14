@@ -1,0 +1,21 @@
+{
+  "featureId": "perf-guardrails-ordering-work-bounds",
+  "reviewedAt": "2026-03-14T14:55:28+00:00",
+  "commitId": "945fdea5c436102c21f40263d13e76979518dc2a",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The feature adds deterministic work-bound tests in web and domain layers, then removes unnecessary linear membership scans by switching to column-local filtering and Set-backed lookups. The optimization preserves existing ordering semantics while materially tightening the regression guardrails behind VAL-PERF-002 and VAL-PERF-003.",
+    "issues": []
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The perf-guardrails worker skill still documents package test commands with Bun's legacy `bun --cwd <path> run test` ordering, which does not run under the pinned Bun 1.3.10 toolchain.",
+      "evidence": "The reviewed worker reported a handoff deviation after the documented command failed, and `.factory/skills/perf-guardrails-worker/SKILL.md` still lists `bun --cwd packages/web run test` / `bun --cwd packages/domain run test` in both procedure and example sections."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Pass. The ordering-work guardrails are correct and maintainable, and the implementation change reduces needless large-list work without introducing behavior regressions."
+}
