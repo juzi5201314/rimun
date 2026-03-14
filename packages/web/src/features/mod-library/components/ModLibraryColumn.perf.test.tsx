@@ -3,6 +3,7 @@ import type { HomePageModListItem } from "@/features/mod-library/hooks/useHomePa
 import type { ModColumnId } from "@/features/mod-library/lib/mod-list-order";
 import { DndContext } from "@dnd-kit/core";
 import {
+  cleanup,
   fireEvent,
   render,
   screen,
@@ -133,9 +134,19 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  cleanup();
   globalThis.ResizeObserver = originalResizeObserver;
   vi.restoreAllMocks();
 });
+
+async function teardownPerfHarness(unmount: () => void) {
+  unmount();
+  await waitFor(() => {
+    expect(screen.queryAllByTestId("mod-library-column")).toHaveLength(0);
+  });
+  cleanup();
+  await new Promise<void>((resolve) => queueMicrotask(resolve));
+}
 
 function createSyntheticItem(index: number): HomePageModListItem {
   const packageId = `rimun.test.${String(index).padStart(4, "0")}`;
@@ -371,70 +382,78 @@ function ModLibraryPerfHarness() {
 
 describe("ModLibraryColumn perf guardrails", () => {
   it("VAL-PERF-001 keeps rendered DOM rows bounded for items=2000 across scroll, filter toggles, and cross-column move", async () => {
-    render(<ModLibraryPerfHarness />);
+    const view = render(<ModLibraryPerfHarness />);
 
-    await expectRenderedRowsWithinCap("inactive", "at-rest inactive");
-    await expectRenderedRowsWithinCap("active", "at-rest active");
+    try {
+      await expectRenderedRowsWithinCap("inactive", "at-rest inactive");
+      await expectRenderedRowsWithinCap("active", "at-rest active");
 
-    const activeScroll = getColumnScroll("active");
-    activeScroll.scrollTop = 74 * 900;
-    fireEvent.scroll(activeScroll);
+      const activeScroll = getColumnScroll("active");
+      activeScroll.scrollTop = 74 * 900;
+      fireEvent.scroll(activeScroll);
 
-    await expectRenderedRowsWithinCap("active", "after-scroll");
+      await expectRenderedRowsWithinCap("active", "after-scroll");
 
-    await userEvent.click(screen.getByRole("button", { name: /Local only/i }));
+      await userEvent.click(
+        screen.getByRole("button", { name: /Local only/i }),
+      );
 
-    activeScroll.scrollTop = 0;
-    fireEvent.scroll(activeScroll);
-    const inactiveScroll = getColumnScroll("inactive");
-    inactiveScroll.scrollTop = 0;
-    fireEvent.scroll(inactiveScroll);
+      activeScroll.scrollTop = 0;
+      fireEvent.scroll(activeScroll);
+      const inactiveScroll = getColumnScroll("inactive");
+      inactiveScroll.scrollTop = 0;
+      fireEvent.scroll(inactiveScroll);
 
-    await expectRenderedRowsWithinCap(
-      "inactive",
-      "after-source-local inactive",
-    );
-    await expectRenderedRowsWithinCap("active", "after-source-local active");
+      await expectRenderedRowsWithinCap(
+        "inactive",
+        "after-source-local inactive",
+      );
+      await expectRenderedRowsWithinCap("active", "after-source-local active");
 
-    fireEvent.change(screen.getByRole("textbox", { name: /Search mods/i }), {
-      target: { value: "0" },
-    });
+      fireEvent.change(screen.getByRole("textbox", { name: /Search mods/i }), {
+        target: { value: "0" },
+      });
 
-    await expectRenderedRowsWithinCap("inactive", "after-search inactive");
-    await expectRenderedRowsWithinCap("active", "after-search active");
+      await expectRenderedRowsWithinCap("inactive", "after-search inactive");
+      await expectRenderedRowsWithinCap("active", "after-search active");
 
-    fireEvent.change(screen.getByRole("textbox", { name: /Search mods/i }), {
-      target: { value: "" },
-    });
-    await userEvent.click(screen.getByRole("button", { name: /All sources/i }));
+      fireEvent.change(screen.getByRole("textbox", { name: /Search mods/i }), {
+        target: { value: "" },
+      });
+      await userEvent.click(
+        screen.getByRole("button", { name: /All sources/i }),
+      );
 
-    activeScroll.scrollTop = 0;
-    fireEvent.scroll(activeScroll);
+      activeScroll.scrollTop = 0;
+      fireEvent.scroll(activeScroll);
 
-    await expectRenderedRowsWithinCap(
-      "inactive",
-      "after-clearing-filters inactive",
-    );
-    await expectRenderedRowsWithinCap(
-      "active",
-      "after-clearing-filters active",
-    );
+      await expectRenderedRowsWithinCap(
+        "inactive",
+        "after-clearing-filters inactive",
+      );
+      await expectRenderedRowsWithinCap(
+        "active",
+        "after-clearing-filters active",
+      );
 
-    await userEvent.click(
-      screen.getByRole("button", { name: /Move inactive mod to active/i }),
-    );
+      await userEvent.click(
+        screen.getByRole("button", { name: /Move inactive mod to active/i }),
+      );
 
-    await waitFor(() => {
-      within(getColumn("active")).getByText("Mod 0500");
-    });
+      await waitFor(() => {
+        within(getColumn("active")).getByText("Mod 0500");
+      });
 
-    await expectRenderedRowsWithinCap(
-      "inactive",
-      "after-cross-column-move inactive",
-    );
-    await expectRenderedRowsWithinCap(
-      "active",
-      "after-cross-column-move active",
-    );
+      await expectRenderedRowsWithinCap(
+        "inactive",
+        "after-cross-column-move inactive",
+      );
+      await expectRenderedRowsWithinCap(
+        "active",
+        "after-cross-column-move active",
+      );
+    } finally {
+      await teardownPerfHarness(view.unmount);
+    }
   });
 });
