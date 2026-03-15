@@ -76,10 +76,7 @@ export function ModLibraryPane({
   saveShortcutState.current.hasCurrentProfile = Boolean(controller.currentProfile);
   saveShortcutState.current.handleSaveProfile = controller.handleSaveProfile;
 
-  const hasHardOrderViolation =
-    controller.analysis?.diagnostics.some(
-      (diagnostic) => diagnostic.code === "hard_order_violation",
-    ) ?? false;
+  const hasCurrentOrderViolation = controller.currentOrderViolations.length > 0;
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -407,14 +404,14 @@ export function ModLibraryPane({
                       "h-7 px-3",
                       controller.analysis.isOptimal
                         ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700"
-                        : hasHardOrderViolation
+                        : hasCurrentOrderViolation
                           ? "border-destructive/30 bg-destructive/10 text-destructive"
                           : "bg-primary/10 text-primary",
                     )}
                   >
                     {controller.analysis.isOptimal
                       ? t("mod_library.order_optimal")
-                      : hasHardOrderViolation
+                      : hasCurrentOrderViolation
                         ? t("mod_library.load_order_error")
                         : t("mod_library.optimization_recommended")}
                   </Badge>

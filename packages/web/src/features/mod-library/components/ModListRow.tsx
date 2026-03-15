@@ -218,11 +218,19 @@ export const ModListRowCard = memo(function ModListRowCard({
     <div
       className={cn(
         "relative rounded-2xl border bg-background/85 px-2.5 py-2 shadow-sm transition-colors",
+        item.hasCurrentOrderIssue
+          ? "border-destructive/20 bg-destructive/[0.04]"
+          : "border-border/50",
         isSelected
-          ? "border-primary/40 bg-primary/10 ring-1 ring-inset ring-primary/20"
-          : "border-border/50 hover:border-primary/20 hover:bg-primary/5",
+          ? item.hasCurrentOrderIssue
+            ? "border-destructive/35 bg-destructive/[0.08] ring-1 ring-inset ring-destructive/20"
+            : "border-primary/40 bg-primary/10 ring-1 ring-inset ring-primary/20"
+          : item.hasCurrentOrderIssue
+            ? "hover:border-destructive/30 hover:bg-destructive/[0.06]"
+            : "hover:border-primary/20 hover:bg-primary/5",
         isDragging && "opacity-25",
       )}
+      data-order-issue={item.hasCurrentOrderIssue ? "true" : undefined}
     >
       {showDropBefore ? (
         <div className="absolute inset-x-3 top-0 z-20 h-[3px] -translate-y-1/2 rounded-full bg-primary shadow-[0_0_0_1px_rgba(0,0,0,0.04)]" />
@@ -327,6 +335,7 @@ export const ModListRow = memo(function ModListRow({
       data-index={virtualIndex}
       data-column-id={item.columnId}
       data-mod-id={item.id}
+      data-order-issue={item.hasCurrentOrderIssue ? "true" : undefined}
       data-package-id={item.packageIdNormalized ?? undefined}
     >
       <ModListRowDroppableRegistration

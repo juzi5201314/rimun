@@ -16,7 +16,12 @@ import {
   buildModLibraryFromSnapshot,
   resolveRecommendedActivePackageIds,
 } from "@rimun/domain";
-import type { ModRecord, ProfileCatalogResult } from "@rimun/shared";
+import type {
+  ModOrderAnalysisResult,
+  ModOrderEdge,
+  ModRecord,
+  ProfileCatalogResult,
+} from "@rimun/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 
@@ -32,8 +37,35 @@ function sortModsByName(left: ModRecord, right: ModRecord) {
   return left.name.localeCompare(right.name);
 }
 
+function collectCurrentOrderViolations(
+  analysis: ModOrderAnalysisResult | null,
+): ModOrderEdge[] {
+  if (!analysis) {
+    return [];
+  }
+
+  const currentOrderIndex = new Map(
+    analysis.currentActivePackageIds.map((packageId, index) => [
+      packageId,
+      index,
+    ]),
+  );
+
+  return analysis.edges.filter((edge) => {
+    const fromIndex = currentOrderIndex.get(edge.fromPackageId);
+    const toIndex = currentOrderIndex.get(edge.toPackageId);
+
+    return (
+      fromIndex !== undefined &&
+      toIndex !== undefined &&
+      fromIndex >= toIndex
+    );
+  });
+}
+
 type PreparedModRecord = ModRecord & {
   dragDisabledReason: string | null;
+  hasCurrentOrderIssue: boolean;
   isDraggable: boolean;
   packageIdNormalized: string | null;
   searchText: string;
@@ -318,6 +350,21 @@ export function useHomePageController() {
       saveProfileMutation.isPending,
     400,
   );
+  const analysis = isDirty ? null : computedAnalysis;
+  const currentOrderViolations = useMemo(
+    () => collectCurrentOrderViolations(analysis),
+    [analysis],
+  );
+  const currentOrderProblemPackageIds = useMemo(
+    () =>
+      new Set(
+        currentOrderViolations.flatMap((edge) => [
+          edge.fromPackageId,
+          edge.toPackageId,
+        ]),
+      ),
+    [currentOrderViolations],
+  );
   const preparedMods = useMemo<PreparedModRecord[]>(() => {
     const draftActivePackageIdSet = new Set(draftActivePackageIds);
 
@@ -338,6 +385,9 @@ export function useHomePageController() {
             ? t("home_controller.duplicate_package_id")
             : null,
         enabled,
+        hasCurrentOrderIssue: packageIdNormalized
+          ? currentOrderProblemPackageIds.has(packageIdNormalized)
+          : false,
         isDraggable: Boolean(packageIdNormalized && isUniquePackageId),
         packageIdNormalized,
         searchText: [mod.name, mod.packageId ?? "", mod.author ?? ""]
@@ -345,7 +395,13 @@ export function useHomePageController() {
           .toLowerCase(),
       };
     });
-  }, [draftActivePackageIds, modLibrary, packageIdCounts, t]);
+  }, [
+    currentOrderProblemPackageIds,
+    draftActivePackageIds,
+    modLibrary,
+    packageIdCounts,
+    t,
+  ]);
   const activeIndexByPackageId = useMemo(() => {
     const nextMap = new Map<string, number>();
 
@@ -504,7 +560,6 @@ export function useHomePageController() {
     saveProfileMutation.isPending ||
     applyActivePackageIdsMutation.isPending;
   const isRescanning = isRescanInFlight || modSourceSnapshotQuery.isFetching;
-  const analysis = isDirty ? null : computedAnalysis;
 
   useEffect(() => {
     if (
@@ -881,6 +936,7 @@ export function useHomePageController() {
     createProfileMutation,
     currentProfile,
     currentProfileId,
+    currentOrderViolations,
     deleteProfileMutation,
     draftActivePackageIds,
     draftProfileName,

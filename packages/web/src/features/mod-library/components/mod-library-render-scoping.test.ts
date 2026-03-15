@@ -37,6 +37,7 @@ function createItem(
     dragDisabledReason: null,
     enabled: columnId === "active",
     hasAboutXml: true,
+    hasCurrentOrderIssue: false,
     id: `mod-${packageId}`,
     isDraggable: true,
     isOfficial: false,

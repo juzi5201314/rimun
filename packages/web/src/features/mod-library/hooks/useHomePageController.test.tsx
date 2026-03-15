@@ -180,6 +180,42 @@ function createOptimalHarmonySnapshot(): ModSourceSnapshot {
   };
 }
 
+function createMisorderedHarmonySnapshot(): ModSourceSnapshot {
+  return {
+    environment: {
+      platform: "linux",
+      isWsl: true,
+      wslDistro: "Ubuntu",
+    },
+    selection: {
+      channel: "steam",
+      installationPath:
+        "C:\\Program Files (x86)\\Steam\\steamapps\\common\\RimWorld",
+      workshopPath:
+        "C:\\Program Files (x86)\\Steam\\steamapps\\workshop\\content\\294100",
+      configPath:
+        "C:\\Users\\player\\AppData\\LocalLow\\Ludeon Studios\\RimWorld by Ludeon Studios\\Config",
+    },
+    scannedAt: "2026-03-15T01:00:00.000Z",
+    scannedRoots: {
+      installationModsPath:
+        "C:\\Program Files (x86)\\Steam\\steamapps\\common\\RimWorld\\Mods",
+      workshopPath:
+        "C:\\Program Files (x86)\\Steam\\steamapps\\workshop\\content\\294100",
+      modsConfigPath:
+        "C:\\Users\\player\\AppData\\LocalLow\\Ludeon Studios\\RimWorld by Ludeon Studios\\Config\\ModsConfig.xml",
+    },
+    activePackageIds: [
+      "ludeon.rimworld",
+      "brrainz.harmony",
+      "oskarpotocki.vanillafactionsexpanded.core",
+    ],
+    entries: createOptimalHarmonySnapshot().entries,
+    errors: [],
+    requiresConfiguration: false,
+  };
+}
+
 function createDeferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
   let reject!: (reason?: unknown) => void;
@@ -290,6 +326,25 @@ describe("useHomePageController", () => {
       expect(result.current.feedback?.message).toBe(
         "Mod library rescanned from the current configured roots.",
       );
+    });
+  });
+
+  it("marks active mods involved in current order violations", async () => {
+    const hostApi = createTestHostApi({
+      modSourceSnapshot: createMisorderedHarmonySnapshot(),
+    });
+    const wrapper = ({ children }: PropsWithChildren) => (
+      <AppProviders hostApi={hostApi}>{children}</AppProviders>
+    );
+    const { result } = renderHook(() => useHomePageController(), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.currentOrderViolations).toHaveLength(1);
+      expect(
+        result.current.visibleActiveMods
+          .filter((mod) => mod.hasCurrentOrderIssue)
+          .map((mod) => mod.packageIdNormalized),
+      ).toEqual(["ludeon.rimworld", "brrainz.harmony"]);
     });
   });
 

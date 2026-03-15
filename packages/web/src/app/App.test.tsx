@@ -202,6 +202,42 @@ function createOptimalHarmonySnapshot() {
   };
 }
 
+function createMisorderedHarmonySnapshot() {
+  return {
+    environment: {
+      platform: "linux" as const,
+      isWsl: true,
+      wslDistro: "Ubuntu",
+    },
+    selection: {
+      channel: "steam" as const,
+      installationPath:
+        "C:\\Program Files (x86)\\Steam\\steamapps\\common\\RimWorld",
+      workshopPath:
+        "C:\\Program Files (x86)\\Steam\\steamapps\\workshop\\content\\294100",
+      configPath:
+        "C:\\Users\\player\\AppData\\LocalLow\\Ludeon Studios\\RimWorld by Ludeon Studios\\Config",
+    },
+    scannedAt: "2026-03-15T01:00:00.000Z",
+    scannedRoots: {
+      installationModsPath:
+        "C:\\Program Files (x86)\\Steam\\steamapps\\common\\RimWorld\\Mods",
+      workshopPath:
+        "C:\\Program Files (x86)\\Steam\\steamapps\\workshop\\content\\294100",
+      modsConfigPath:
+        "C:\\Users\\player\\AppData\\LocalLow\\Ludeon Studios\\RimWorld by Ludeon Studios\\Config\\ModsConfig.xml",
+    },
+    activePackageIds: [
+      "ludeon.rimworld",
+      "brrainz.harmony",
+      "oskarpotocki.vanillafactionsexpanded.core",
+    ],
+    entries: createOptimalHarmonySnapshot().entries,
+    errors: [],
+    requiresConfiguration: false,
+  };
+}
+
 function createDeferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
   let reject!: (reason?: unknown) => void;
@@ -289,6 +325,43 @@ describe("App", () => {
       screen.queryByRole("button", { name: /Apply Recommended Order/i }),
     ).not.toBeInTheDocument();
     expect(screen.getByText(/^Harmony$/i)).toBeInTheDocument();
+  });
+
+  it("shows actionable load-order errors after skipping auto sort", async () => {
+    renderApp({
+      hostApi: createTestHostApi({
+        modSourceSnapshot: createMisorderedHarmonySnapshot(),
+      }),
+    });
+
+    const sortDialog = await screen.findByRole("dialog", {
+      name: /Apply Recommended Sort Order/i,
+    });
+
+    await userEvent.click(
+      within(sortDialog).getByRole("button", { name: /Keep Current Order/i }),
+    );
+
+    expect(
+      await screen.findByText(
+        /Kept the current order, but 1 load-order errors remain/i,
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/^Load Order Error$/i)).toBeInTheDocument();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: /Execution Order Hints/i }),
+    );
+
+    expect(
+      screen.getByText(/^1 order conflicts for this mod$/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/It should load after Harmony/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /Reason: Harmony declares loadBefore Core in About\.xml\./i,
+      ),
+    ).toBeInTheDocument();
   });
 
   it("auto-saves before switching profiles when the current draft is dirty", async () => {

@@ -13,6 +13,7 @@ export function HomePageDialogs({
   routeBlocker: Blocker;
 }) {
   const { t } = useI18n();
+  const currentOrderViolationCount = controller.currentOrderViolations.length;
 
   return (
     <>
@@ -140,7 +141,7 @@ export function HomePageDialogs({
         onCancel={() => {
           controller.setIsDependencyDialogOpen(false);
           if (controller.analysis) {
-          controller.setDismissedDependencyAnalysisAt(
+            controller.setDismissedDependencyAnalysisAt(
               controller.analysis.analyzedAt,
             );
           }
@@ -183,13 +184,18 @@ export function HomePageDialogs({
         onCancel={() => {
           controller.setIsSortDialogOpen(false);
           if (controller.analysis) {
-          controller.setDismissedSortAnalysisAt(
+            controller.setDismissedSortAnalysisAt(
               controller.analysis.analyzedAt,
             );
           }
           controller.setFeedback({
-            tone: "warning",
-            message: t("mod_library_dialogs.apply_sort_skipped_feedback"),
+            tone: currentOrderViolationCount > 0 ? "error" : "warning",
+            message:
+              currentOrderViolationCount > 0
+                ? t("mod_library_dialogs.apply_sort_skipped_error_feedback", {
+                    count: String(currentOrderViolationCount),
+                  })
+                : t("mod_library_dialogs.apply_sort_skipped_feedback"),
           });
         }}
       >

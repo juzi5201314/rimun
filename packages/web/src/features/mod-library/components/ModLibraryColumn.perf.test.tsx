@@ -173,6 +173,7 @@ function createSyntheticItem(index: number): HomePageModListItem {
     dragDisabledReason: null,
     enabled: isActive,
     hasAboutXml: true,
+    hasCurrentOrderIssue: false,
     id: `mod-${index}`,
     isDraggable: true,
     isOfficial: false,
