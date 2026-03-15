@@ -76,6 +76,72 @@ function normalizePackageId(value: string | null) {
   return value?.trim().toLowerCase() ?? null;
 }
 
+function getRootInnerXml(xml: string, rootTagName: string) {
+  const match = new RegExp(
+    `<${rootTagName}\\b[^>]*>([\\s\\S]*?)</${rootTagName}>`,
+    "i",
+  ).exec(xml);
+
+  return match?.[1] ?? xml;
+}
+
+function extractDirectChildTagBlocks(
+  xml: string,
+  tagName: string,
+  rootTagName = "ModMetaData",
+) {
+  const rootInnerXml = getRootInnerXml(xml, rootTagName);
+  const tagPattern =
+    /<!--[\s\S]*?-->|<!\[CDATA\[[\s\S]*?\]\]>|<\?[\s\S]*?\?>|<\/?([A-Za-z0-9:_-]+)\b[^>]*\/?>/g;
+  const blocks: string[] = [];
+  const stack: string[] = [];
+  let captureStart: number | null = null;
+
+  for (const match of rootInnerXml.matchAll(tagPattern)) {
+    const fullTag = match[0] ?? "";
+    const matchedTagName = match[1];
+
+    if (!matchedTagName) {
+      continue;
+    }
+
+    const normalizedTagName = matchedTagName.toLowerCase();
+    const targetTagName = tagName.toLowerCase();
+    const isClosingTag = fullTag.startsWith("</");
+    const isSelfClosingTag = !isClosingTag && fullTag.endsWith("/>");
+
+    if (!isClosingTag) {
+      if (stack.length === 0 && normalizedTagName === targetTagName) {
+        if (isSelfClosingTag) {
+          blocks.push("");
+          continue;
+        }
+
+        captureStart = (match.index ?? 0) + fullTag.length;
+      }
+
+      if (!isSelfClosingTag) {
+        stack.push(normalizedTagName);
+      }
+
+      continue;
+    }
+
+    const closedTagName = stack.pop();
+
+    if (
+      closedTagName === targetTagName &&
+      stack.length === 0 &&
+      captureStart !== null
+    ) {
+      blocks.push(rootInnerXml.slice(captureStart, match.index ?? 0));
+      captureStart = null;
+    }
+  }
+
+  return blocks;
+}
+
 function extractTagText(xml: string, tagName: string) {
   const match = new RegExp(`<${tagName}>([\\s\\S]*?)</${tagName}>`, "i").exec(
     xml,
@@ -102,6 +168,49 @@ function extractTagList(xml: string, tagName: string) {
   }
 
   return [...(match[1] ?? "").matchAll(/<li>([\s\S]*?)<\/li>/gi)]
+    .map((entry) => normalizeText(entry[1] ?? ""))
+    .filter(Boolean);
+}
+
+function extractDependencyPackageIds(xml: string) {
+  const dependencyXml = extractDirectChildTagBlocks(xml, "modDependencies").at(
+    0,
+  );
+
+  if (!dependencyXml) {
+    return [];
+  }
+
+  return [...dependencyXml.matchAll(/<li>([\s\S]*?)<\/li>/gi)]
+    .map((entry) => {
+      const dependencyItemXml = entry[1] ?? "";
+      const nestedPackageId = extractTagText(dependencyItemXml, "packageId");
+
+      return normalizePackageId(
+        nestedPackageId ?? normalizeText(dependencyItemXml),
+      );
+    })
+    .filter((value): value is string => Boolean(value));
+}
+
+function extractAboutTagText(xml: string, tagName: string) {
+  const block = extractDirectChildTagBlocks(xml, tagName).at(0);
+  return block ? normalizeText(block) || null : null;
+}
+
+function extractAboutTagMultilineText(xml: string, tagName: string) {
+  const block = extractDirectChildTagBlocks(xml, tagName).at(0);
+  return block ? normalizeMultilineText(block) || null : null;
+}
+
+function extractAboutTagList(xml: string, tagName: string) {
+  const block = extractDirectChildTagBlocks(xml, tagName).at(0);
+
+  if (!block) {
+    return [];
+  }
+
+  return [...block.matchAll(/<li>([\s\S]*?)<\/li>/gi)]
     .map((entry) => normalizeText(entry[1] ?? ""))
     .filter(Boolean);
 }
@@ -209,13 +318,13 @@ function splitActivePackageIdsForConfig(activePackageIds: string[]) {
 }
 
 export function parseAboutXml(xml: string) {
-  const authors = extractTagList(xml, "authors");
-  const authorText = extractTagText(xml, "author");
-  const supportedVersions = extractTagList(xml, "supportedVersions");
-  const packageId = extractTagText(xml, "packageId");
+  const authors = extractAboutTagList(xml, "authors");
+  const authorText = extractAboutTagText(xml, "author");
+  const supportedVersions = extractAboutTagList(xml, "supportedVersions");
+  const packageId = extractAboutTagText(xml, "packageId");
 
   return {
-    name: extractTagText(xml, "name"),
+    name: extractAboutTagText(xml, "name"),
     packageId,
     author:
       authors.length > 0
@@ -224,29 +333,27 @@ export function parseAboutXml(xml: string) {
           ? normalizeText(authorText)
           : null,
     version:
-      extractTagText(xml, "modVersion") ??
-      extractTagText(xml, "targetVersion") ??
+      extractAboutTagText(xml, "modVersion") ??
+      extractAboutTagText(xml, "targetVersion") ??
       supportedVersions[0] ??
       null,
-    description: extractTagMultilineText(xml, "description"),
+    description: extractAboutTagMultilineText(xml, "description"),
     dependencyMetadata: {
       packageIdNormalized: normalizePackageId(packageId),
-      dependencies: extractTagList(xml, "modDependencies").map((value) =>
+      dependencies: extractDependencyPackageIds(xml),
+      loadAfter: extractAboutTagList(xml, "loadAfter").map((value) =>
         value.toLowerCase(),
       ),
-      loadAfter: extractTagList(xml, "loadAfter").map((value) =>
+      loadBefore: extractAboutTagList(xml, "loadBefore").map((value) =>
         value.toLowerCase(),
       ),
-      loadBefore: extractTagList(xml, "loadBefore").map((value) =>
+      forceLoadAfter: extractAboutTagList(xml, "forceLoadAfter").map((value) =>
         value.toLowerCase(),
       ),
-      forceLoadAfter: extractTagList(xml, "forceLoadAfter").map((value) =>
+      forceLoadBefore: extractAboutTagList(xml, "forceLoadBefore").map((value) =>
         value.toLowerCase(),
       ),
-      forceLoadBefore: extractTagList(xml, "forceLoadBefore").map((value) =>
-        value.toLowerCase(),
-      ),
-      incompatibleWith: extractTagList(xml, "incompatibleWith").map((value) =>
+      incompatibleWith: extractAboutTagList(xml, "incompatibleWith").map((value) =>
         value.toLowerCase(),
       ),
       supportedVersions,

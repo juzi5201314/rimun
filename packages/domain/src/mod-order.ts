@@ -18,6 +18,16 @@ type ModGroup = {
 
 const CORE_PACKAGE_ID = "ludeon.rimworld";
 
+function shouldSkipOfficialAnchor(
+  anchorPackageId: string,
+  targetMod: ModRecord,
+) {
+  return (
+    targetMod.dependencyMetadata.loadBefore.includes(anchorPackageId) ||
+    targetMod.dependencyMetadata.forceLoadBefore.includes(anchorPackageId)
+  );
+}
+
 function uniquePackageIds(packageIds: string[]) {
   return [...new Set(packageIds.map((packageId) => packageId.toLowerCase()))];
 }
@@ -420,7 +430,13 @@ export function analyzeModOrder(
 
     if (packageId === CORE_PACKAGE_ID) {
       for (const targetPackageId of sortablePackageIds) {
+        const targetMod = groups.get(targetPackageId)?.preferredMod;
+
         if (targetPackageId === packageId) {
+          continue;
+        }
+
+        if (targetMod && shouldSkipOfficialAnchor(packageId, targetMod)) {
           continue;
         }
 
@@ -441,7 +457,8 @@ export function analyzeModOrder(
         if (
           !targetMod ||
           targetPackageId === packageId ||
-          targetMod.isOfficial
+          targetMod.isOfficial ||
+          shouldSkipOfficialAnchor(packageId, targetMod)
         ) {
           continue;
         }

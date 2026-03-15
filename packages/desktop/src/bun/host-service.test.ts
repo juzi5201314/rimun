@@ -9,6 +9,7 @@ import {
 import { join } from "node:path";
 import type { ModSourceSnapshot, PathSelection } from "@rimun/shared";
 import { createRimunTempDir } from "../../../shared/test/tmp-path";
+import { analyzeModOrder, buildModLibraryFromSnapshot } from "@rimun/domain";
 import { createRimunHostService } from "./host-service";
 import { SettingsRepository } from "./persistence";
 
@@ -377,6 +378,105 @@ describe("rimun host service", () => {
 
       expect(afterFiles.every(isAllowlistedSqliteArtifact)).toBe(true);
       expect(newFiles.every(isAllowlistedSqliteArtifact)).toBe(true);
+    } finally {
+      repository.close();
+    }
+  });
+
+  it("keeps structured dependency metadata from corrupting package ids in host snapshots", async () => {
+    const { configRoot, installationDataRoot, installationModsRoot, workshopRoot } =
+      createSandboxLayout();
+    writeAboutXml(
+      installationModsRoot,
+      "Core",
+      `
+        <ModMetaData>
+          <name>Core</name>
+          <packageId>ludeon.rimworld</packageId>
+        </ModMetaData>
+      `,
+    );
+    writeAboutXml(
+      workshopRoot,
+      "2009463077",
+      `
+        <ModMetaData>
+          <name>Harmony</name>
+          <packageId>brrainz.harmony</packageId>
+          <loadBefore><li>ludeon.rimworld</li></loadBefore>
+        </ModMetaData>
+      `,
+    );
+    writeAboutXml(
+      workshopRoot,
+      "2023507013",
+      `
+        <ModMetaData>
+          <name>Vanilla Expanded Framework</name>
+          <packageId>OskarPotocki.VanillaFactionsExpanded.Core</packageId>
+          <modDependencies>
+            <li>
+              <packageId>brrainz.harmony</packageId>
+              <displayName>Harmony</displayName>
+              <downloadUrl>https://github.com/pardeike/HarmonyRimWorld/releases/latest</downloadUrl>
+              <steamWorkshopUrl>https://steamcommunity.com/workshop/filedetails/?id=2009463077</steamWorkshopUrl>
+            </li>
+          </modDependencies>
+          <loadAfter><li>brrainz.harmony</li></loadAfter>
+        </ModMetaData>
+      `,
+    );
+    writeModsConfigXml(configRoot, [
+      "brrainz.harmony",
+      "ludeon.rimworld",
+      "oskarpotocki.vanillafactionsexpanded.core",
+    ]);
+    process.env["RIMUN_APP_DATA_DIR"] = createRimunTempDir("rimun-app-data-");
+
+    const repository = new SettingsRepository();
+
+    try {
+      repository.saveSettings(createSelection());
+
+      const hostService = createRimunHostService(repository, {
+        toReadablePath: createReadablePathResolver({
+          configRoot,
+          installationDataRoot,
+          installationModsRoot,
+          workshopRoot,
+        }),
+      });
+      const snapshot = await hostService.getModSourceSnapshot({
+        profileId: "default",
+      });
+      const modLibrary = buildModLibraryFromSnapshot(snapshot);
+      const analysis = analyzeModOrder(modLibrary);
+      const modByPackageId = new Map(
+        modLibrary.mods
+          .filter((mod) => mod.packageId)
+          .map((mod) => [mod.packageId?.toLowerCase() ?? "", mod]),
+      );
+
+      expect(modByPackageId.get("brrainz.harmony")?.name).toBe("Harmony");
+      expect(
+        modByPackageId.get("oskarpotocki.vanillafactionsexpanded.core")?.name,
+      ).toBe("Vanilla Expanded Framework");
+      expect(
+        modByPackageId.get("oskarpotocki.vanillafactionsexpanded.core")
+          ?.dependencyMetadata.dependencies,
+      ).toEqual(["brrainz.harmony"]);
+      expect(analysis.hasBlockingIssues).toBe(false);
+      expect(snapshot.activePackageIds).toEqual([
+        "ludeon.rimworld",
+        "brrainz.harmony",
+        "oskarpotocki.vanillafactionsexpanded.core",
+      ]);
+      expect(analysis.sortDifferenceCount).toBe(2);
+      expect(analysis.recommendedOrderPackageIds).toEqual([
+        "brrainz.harmony",
+        "ludeon.rimworld",
+        "oskarpotocki.vanillafactionsexpanded.core",
+      ]);
     } finally {
       repository.close();
     }

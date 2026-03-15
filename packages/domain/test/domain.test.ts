@@ -115,6 +115,33 @@ describe("domain xml helpers", () => {
     expect(parsed.version).toBe("1.5");
   });
 
+  it("extracts dependency package ids from structured modDependencies entries", () => {
+    const parsed = parseAboutXml(`
+      <ModMetaData>
+        <name>Framework Consumer</name>
+        <packageId>example.consumer</packageId>
+        <modDependencies>
+          <li>
+            <packageId>brrainz.harmony</packageId>
+            <displayName>Harmony</displayName>
+            <downloadUrl>https://github.com/pardeike/HarmonyRimWorld/releases/latest</downloadUrl>
+            <steamWorkshopUrl>https://steamcommunity.com/workshop/filedetails/?id=2009463077</steamWorkshopUrl>
+          </li>
+          <li>
+            <packageId>oskarpotocki.vanillafactionsexpanded.core</packageId>
+            <displayName>Vanilla Expanded Framework</displayName>
+          </li>
+        </modDependencies>
+      </ModMetaData>
+    `);
+
+    expect(parsed.packageId).toBe("example.consumer");
+    expect(parsed.dependencyMetadata.dependencies).toEqual([
+      "brrainz.harmony",
+      "oskarpotocki.vanillafactionsexpanded.core",
+    ]);
+  });
+
   it("merges known expansions from ModsConfig.xml", () => {
     const parsed = parseModsConfigXml(`
       <ModsConfigData>
@@ -304,5 +331,52 @@ describe("domain mod derivation", () => {
     expect(
       resolveRecommendedActivePackageIds(analysis, ["reorderActiveMods"]),
     ).toEqual(["ludeon.rimworld", "unlimitedhugs.hugslib", "example.pawns"]);
+  });
+
+  it("respects explicit loadBefore Core without reporting a cycle", () => {
+    const snapshot = createSnapshot(["brrainz.harmony", "ludeon.rimworld"]);
+    const [coreEntry] = snapshot.entries;
+
+    if (!coreEntry) {
+      throw new Error("Expected the snapshot to contain the Core entry.");
+    }
+
+    const library = buildModLibraryFromSnapshot({
+      ...snapshot,
+      entries: [
+        {
+          entryName: "Harmony",
+          source: "workshop",
+          modWindowsPath:
+            "C:\\Games\\Steam\\steamapps\\workshop\\content\\294100\\2009463077",
+          modReadablePath: rimunTmpPath("workshop", "2009463077"),
+          manifestPath:
+            "C:\\Games\\Steam\\steamapps\\workshop\\content\\294100\\2009463077\\About\\About.xml",
+          hasAboutXml: true,
+          aboutXmlText: `
+            <ModMetaData>
+              <name>Harmony</name>
+              <packageId>brrainz.harmony</packageId>
+              <loadBefore><li>ludeon.rimworld</li></loadBefore>
+            </ModMetaData>
+          `,
+          notes: [],
+        },
+        coreEntry,
+      ],
+    });
+    const analysis = analyzeModOrder(library);
+
+    expect(analysis.hasBlockingIssues).toBe(false);
+    expect(analysis.sortDifferenceCount).toBe(0);
+    expect(
+      analysis.diagnostics.some(
+        (diagnostic) => diagnostic.code === "cycle_detected",
+      ),
+    ).toBe(false);
+    expect(analysis.recommendedOrderPackageIds).toEqual([
+      "brrainz.harmony",
+      "ludeon.rimworld",
+    ]);
   });
 });
