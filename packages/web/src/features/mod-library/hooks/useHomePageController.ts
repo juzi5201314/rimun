@@ -271,7 +271,6 @@ export function useHomePageController() {
       return;
     }
 
-    setSearchQuery("");
     setSelectedModId(null);
     setFeedback(null);
     setIsDependencyDialogOpen(false);
