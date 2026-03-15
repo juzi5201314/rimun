@@ -5,6 +5,7 @@ import type {
   DeleteProfileInput,
   DetectPathsInput,
   ModProfileSummary,
+  ModSourceSnapshot,
   ProfileScopedInput,
   RenameProfileInput,
   RimunHostApi,
@@ -110,10 +111,70 @@ function resolveBootstrap(repository: SettingsRepository): BootstrapPayload {
   });
 }
 
+type CreateRimunHostServiceOptions = {
+  readModSourceSnapshot?: typeof readModSourceSnapshot;
+  toReadablePath?: (windowsPath: string) => string | null;
+};
+
+function createSnapshotRequestKey(args: {
+  activePackageIds: string[];
+  profileId: string;
+  selection: ReturnType<typeof resolvePreferredSelection>;
+}) {
+  const { activePackageIds, profileId, selection } = args;
+
+  return JSON.stringify({
+    activePackageIds,
+    configPath: selection?.configPath ?? null,
+    installationPath: selection?.installationPath ?? null,
+    profileId,
+    workshopPath: selection?.workshopPath ?? null,
+  });
+}
+
 export function createRimunHostService(
   repository: SettingsRepository,
+  options: CreateRimunHostServiceOptions = {},
 ): RimunHostApi {
-  const toReadablePath = createReadablePathResolver();
+  const toReadablePath = options.toReadablePath ?? createReadablePathResolver();
+  const readModSourceSnapshotImpl =
+    options.readModSourceSnapshot ?? readModSourceSnapshot;
+  const snapshotRequestsInFlight = new Map<
+    string,
+    Promise<ModSourceSnapshot>
+  >();
+
+  async function getModSourceSnapshotSingleFlight(profileId: string) {
+    const profile = await resolveStoredProfile(
+      repository,
+      profileId,
+      toReadablePath,
+    );
+    const selection = resolvePreferredSelection(repository);
+    const requestKey = createSnapshotRequestKey({
+      activePackageIds: profile.activePackageIds,
+      profileId,
+      selection,
+    });
+    const existingRequest = snapshotRequestsInFlight.get(requestKey);
+
+    if (existingRequest) {
+      return existingRequest;
+    }
+
+    const request = readModSourceSnapshotImpl(selection, {
+      activePackageIdsOverride: profile.activePackageIds,
+      toReadablePath,
+    }).finally(() => {
+      if (snapshotRequestsInFlight.get(requestKey) === request) {
+        snapshotRequestsInFlight.delete(requestKey);
+      }
+    });
+
+    snapshotRequestsInFlight.set(requestKey, request);
+
+    return request;
+  }
 
   return {
     getBootstrap: async () => resolveBootstrap(repository),
@@ -231,17 +292,9 @@ export function createRimunHostService(
         rimunRpcSchemas.bun.requests.getModSourceSnapshot.params,
         payload,
       );
-      const profile = await resolveStoredProfile(
-        repository,
-        input.profileId,
-        toReadablePath,
-      );
 
       return rimunRpcSchemas.bun.requests.getModSourceSnapshot.response.parse(
-        await readModSourceSnapshot(resolvePreferredSelection(repository), {
-          activePackageIdsOverride: profile.activePackageIds,
-          toReadablePath,
-        }),
+        await getModSourceSnapshotSingleFlight(input.profileId),
       );
     },
     getSettings: async () =>

@@ -112,7 +112,9 @@ export function useHomePageController() {
   >("all");
   const [isProfilePanelOpen, setIsProfilePanelOpen] = useState(false);
   const [isFilterPanelOpen, setIsFilterPanelOpen] = useState(false);
+  const [isRescanInFlight, setIsRescanInFlight] = useState(false);
   const lastHydratedProfileIdRef = useRef<string | null>(null);
+  const rescanRequestRef = useRef<Promise<void> | null>(null);
 
   const createProfileMutation = useMutation({
     mutationFn: async (input: { name: string; sourceProfileId: string }) => {
@@ -499,8 +501,21 @@ export function useHomePageController() {
     deleteProfileMutation.isPending ||
     saveProfileMutation.isPending ||
     applyActivePackageIdsMutation.isPending;
-  const isRescanning = modSourceSnapshotQuery.isFetching;
+  const isRescanning = isRescanInFlight || modSourceSnapshotQuery.isFetching;
   const analysis = isDirty ? null : computedAnalysis;
+
+  useEffect(() => {
+    if (
+      !selectedModId ||
+      !selectedMod ||
+      selectedMod.id === selectedModId ||
+      preparedMods.some((mod) => mod.id === selectedModId)
+    ) {
+      return;
+    }
+
+    setSelectedModId(selectedMod.id);
+  }, [preparedMods, selectedMod, selectedModId]);
 
   useEffect(() => {
     if (!analysis || applyActivePackageIdsMutation.isPending || isDirty) {
@@ -746,23 +761,40 @@ export function useHomePageController() {
       return;
     }
 
-    try {
-      setFeedback(null);
-      await modSourceSnapshotQuery.refetch();
-
-      setFeedback({
-        tone: "success",
-        message: "Mod library rescanned from the current configured roots.",
-      });
-    } catch (error) {
-      setFeedback({
-        tone: "error",
-        message:
-          error instanceof Error
-            ? error.message
-            : "Failed to rescan mod roots.",
-      });
+    if (rescanRequestRef.current) {
+      return rescanRequestRef.current;
     }
+
+    const rescanRequest = (async () => {
+      try {
+        setIsRescanInFlight(true);
+        setFeedback(null);
+        await modSourceSnapshotQuery.refetch({
+          cancelRefetch: false,
+          throwOnError: true,
+        });
+
+        setFeedback({
+          tone: "success",
+          message: "Mod library rescanned from the current configured roots.",
+        });
+      } catch (error) {
+        setFeedback({
+          tone: "error",
+          message:
+            error instanceof Error
+              ? error.message
+              : "Failed to rescan mod roots.",
+        });
+      } finally {
+        rescanRequestRef.current = null;
+        setIsRescanInFlight(false);
+      }
+    })();
+
+    rescanRequestRef.current = rescanRequest;
+
+    return rescanRequest;
   }
 
   async function handleEnableMissingDependencies() {

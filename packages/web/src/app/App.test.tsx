@@ -5,6 +5,110 @@ import type { DetectPathsInput } from "@rimun/shared";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+function createRescannedSnapshot() {
+  return {
+    environment: {
+      platform: "linux" as const,
+      isWsl: true,
+      wslDistro: "Ubuntu",
+    },
+    selection: {
+      channel: "steam" as const,
+      installationPath:
+        "C:\\Program Files (x86)\\Steam\\steamapps\\common\\RimWorld",
+      workshopPath:
+        "C:\\Program Files (x86)\\Steam\\steamapps\\workshop\\content\\294100",
+      configPath:
+        "C:\\Users\\player\\AppData\\LocalLow\\Ludeon Studios\\RimWorld by Ludeon Studios\\Config",
+    },
+    scannedAt: "2026-03-13T00:45:00.000Z",
+    scannedRoots: {
+      installationModsPath:
+        "C:\\Program Files (x86)\\Steam\\steamapps\\common\\RimWorld\\Mods",
+      workshopPath:
+        "C:\\Program Files (x86)\\Steam\\steamapps\\workshop\\content\\294100",
+      modsConfigPath:
+        "C:\\Users\\player\\AppData\\LocalLow\\Ludeon Studios\\RimWorld by Ludeon Studios\\Config\\ModsConfig.xml",
+    },
+    activePackageIds: ["ludeon.rimworld", "unlimitedhugs.hugslib"],
+    entries: [
+      {
+        entryName: "Core",
+        source: "installation" as const,
+        modWindowsPath:
+          "C:\\Program Files (x86)\\Steam\\steamapps\\common\\RimWorld\\Mods\\Core",
+        modReadablePath:
+          "/mnt/c/Program Files (x86)/Steam/steamapps/common/RimWorld/Mods/Core",
+        manifestPath:
+          "C:\\Program Files (x86)\\Steam\\steamapps\\common\\RimWorld\\Mods\\Core\\About\\About.xml",
+        hasAboutXml: true,
+        aboutXmlText: `
+          <ModMetaData>
+            <name>Core</name>
+            <packageId>ludeon.rimworld</packageId>
+            <author>Ludeon Studios</author>
+            <description>Core game systems.</description>
+          </ModMetaData>
+        `,
+        notes: [],
+      },
+      {
+        entryName: "818773962",
+        source: "workshop" as const,
+        modWindowsPath:
+          "C:\\Program Files (x86)\\Steam\\steamapps\\workshop\\content\\294100\\818773962",
+        modReadablePath:
+          "/mnt/c/Program Files (x86)/Steam/steamapps/workshop/content/294100/818773962",
+        manifestPath:
+          "C:\\Program Files (x86)\\Steam\\steamapps\\workshop\\content\\294100\\818773962\\About\\About.xml",
+        hasAboutXml: true,
+        aboutXmlText: `
+          <ModMetaData>
+            <name>HugsLib</name>
+            <packageId>unlimitedhugs.hugslib</packageId>
+            <author>UnlimitedHugs</author>
+            <description>Library helpers for many community mods.</description>
+          </ModMetaData>
+        `,
+        notes: [],
+      },
+      {
+        entryName: "123456789",
+        source: "workshop" as const,
+        modWindowsPath:
+          "C:\\Program Files (x86)\\Steam\\steamapps\\workshop\\content\\294100\\123456789",
+        modReadablePath:
+          "/mnt/c/Program Files (x86)/Steam/steamapps/workshop/content/294100/123456789",
+        manifestPath:
+          "C:\\Program Files (x86)\\Steam\\steamapps\\workshop\\content\\294100\\123456789\\About\\About.xml",
+        hasAboutXml: true,
+        aboutXmlText: `
+          <ModMetaData>
+            <name>HugsLib Addon</name>
+            <packageId>example.hugslibaddon</packageId>
+            <author>Orion</author>
+            <description>Extra HugsLib integration utilities.</description>
+          </ModMetaData>
+        `,
+        notes: [],
+      },
+    ],
+    errors: [],
+    requiresConfiguration: false,
+  };
+}
+
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((nextResolve, nextReject) => {
+    resolve = nextResolve;
+    reject = nextReject;
+  });
+
+  return { promise, reject, resolve };
+}
+
 function renderApp(
   options: {
     hostApi?: ReturnType<typeof createTestHostApi>;
@@ -355,5 +459,90 @@ describe("App", () => {
     expect(await screen.findByRole("status")).toHaveTextContent(
       "Settings saved.",
     );
+  });
+
+  it("keeps the UI interactive during rescan and preserves search, selection, and feedback", async () => {
+    const deferredRescan =
+      createDeferred<ReturnType<typeof createRescannedSnapshot>>();
+    let snapshotRequests = 0;
+    const initialHostApi = createTestHostApi();
+    const hostApi = createTestHostApi({
+      onGetModSourceSnapshot: async ({ profileId }) => {
+        snapshotRequests += 1;
+
+        if (snapshotRequests === 1) {
+          return initialHostApi.getModSourceSnapshot({ profileId });
+        }
+
+        return deferredRescan.promise;
+      },
+    });
+
+    renderApp({ hostApi });
+
+    expect(
+      await screen.findByRole("heading", { name: /Mod Library/i }),
+    ).toBeInTheDocument();
+
+    const searchInput = screen.getByPlaceholderText(
+      /Search by name, author, or package id/i,
+    );
+
+    await userEvent.clear(searchInput);
+    await userEvent.type(searchInput, "hug");
+
+    await userEvent.click(
+      screen.getByText("HugsLib").closest("button") as HTMLButtonElement,
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("heading", { name: /^HugsLib$/i }),
+      ).toBeInTheDocument();
+    });
+
+    const lastScanLabel = screen.getByText(/Last Scan:/i).textContent;
+    const rescanButton = screen.getByRole("button", { name: /Rescan/i });
+
+    await userEvent.click(rescanButton);
+
+    await waitFor(() => {
+      expect(rescanButton).toBeDisabled();
+      expect(rescanButton.querySelector("svg.animate-spin")).not.toBeNull();
+      expect(screen.queryByText(/Loading Profile/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Persisting Data/i)).not.toBeInTheDocument();
+      expect(
+        screen.queryByText(/Synchronizing Order/i),
+      ).not.toBeInTheDocument();
+      expect(screen.queryByText(/Generating Profile/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Removing Record/i)).not.toBeInTheDocument();
+      expect(
+        screen.queryByText(/Analyzing Dependencies/i),
+      ).not.toBeInTheDocument();
+    });
+
+    await userEvent.type(searchInput, "slib");
+    expect(searchInput).toHaveValue("hugslib");
+    expect(
+      screen.getByRole("heading", { name: /^HugsLib$/i }),
+    ).toBeInTheDocument();
+
+    deferredRescan.resolve(createRescannedSnapshot());
+
+    await waitFor(() => {
+      expect(rescanButton).toBeEnabled();
+      expect(searchInput).toHaveValue("hugslib");
+      expect(
+        screen.getByRole("heading", { name: /^HugsLib$/i }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText(
+          /Mod library rescanned from the current configured roots\./i,
+        ),
+      ).toBeInTheDocument();
+      expect(screen.getByText(/Last Scan:/i).textContent).not.toBe(
+        lastScanLabel,
+      );
+    });
   });
 });

@@ -232,6 +232,9 @@ type Overrides = Partial<{
   onApplyActivePackageIds: (
     input: ApplyActivePackageIdsInput,
   ) => SaveProfileResult | Promise<SaveProfileResult>;
+  onGetModSourceSnapshot: (input: { profileId: string }) =>
+    | ModSourceSnapshot
+    | Promise<ModSourceSnapshot>;
 }>;
 
 export function createTestHostApi(overrides: Overrides = {}): RimunHostApi {
@@ -355,8 +358,15 @@ export function createTestHostApi(overrides: Overrides = {}): RimunHostApi {
       profileCatalogState.currentProfileId = input.profileId;
       return createCatalog();
     },
-    getModSourceSnapshot: async ({ profileId }) =>
-      clone(modSourceSnapshotsByProfile[profileId] ?? createSnapshot([])),
+    getModSourceSnapshot: async ({ profileId }) => {
+      if (overrides.onGetModSourceSnapshot) {
+        return clone(await overrides.onGetModSourceSnapshot({ profileId }));
+      }
+
+      return clone(
+        modSourceSnapshotsByProfile[profileId] ?? createSnapshot([]),
+      );
+    },
     getSettings: async () => clone(overrides.settings ?? defaultSettings),
     saveSettings: async (input) => {
       if (overrides.onSave) {
