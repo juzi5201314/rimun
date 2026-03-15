@@ -1,4 +1,5 @@
 import { HostApiProvider } from "@/shared/host/HostApiProvider";
+import { I18nProvider } from "@/shared/i18n";
 import type { RimunHostApi } from "@rimun/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { PropsWithChildren } from "react";
@@ -24,7 +25,9 @@ export function AppProviders({
 
   return (
     <QueryClientProvider client={queryClient}>
-      <HostApiProvider hostApi={hostApi}>{children}</HostApiProvider>
+      <HostApiProvider hostApi={hostApi}>
+        <I18nProvider>{children}</I18nProvider>
+      </HostApiProvider>
     </QueryClientProvider>
   );
 }
