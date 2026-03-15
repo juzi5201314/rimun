@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { readdir } from "node:fs/promises";
+import { readdir, stat } from "node:fs/promises";
 import { availableParallelism } from "node:os";
 import { join, win32 } from "node:path";
 import {
@@ -27,13 +27,21 @@ type ScanTask = {
   source: ModSource;
 };
 
+type WorkerScanTask = ScanTask & {
+  aboutCacheKey: string | null;
+  aboutReadablePath: string;
+  aboutWindowsPath: string;
+};
+
 type ScannedModFragment = ModSourceSnapshotEntry & {
+  aboutCacheKey?: string | null;
+  aboutReadablePath?: string | null;
   entryName: string;
 };
 
 type ScanChunkRequest = {
   chunkId: number;
-  tasks: ScanTask[];
+  tasks: WorkerScanTask[];
 };
 
 type ScanChunkResponse = {
@@ -47,6 +55,9 @@ type ScanChunkResponse = {
 };
 
 type WorkerScanMetrics = {
+  cacheHitCount: number;
+  cacheLookupMs: number;
+  cacheMissCount: number;
   parseMs: number;
   readMs: number;
   startupMs: number;
@@ -56,7 +67,7 @@ type ScanModLibraryOptions = {
   activePackageIdsOverride?: string[];
   environment?: ExecutionEnvironment;
   runWorkerChunks?: (
-    chunks: ScanTask[][],
+    chunks: WorkerScanTask[][],
     poolSize: number,
   ) => Promise<{
     fragments: ScannedModFragment[];
@@ -78,9 +89,14 @@ type WriteActiveModsOptions = {
 };
 
 const SCAN_CHUNK_SIZE = 24;
+export const MAX_MOD_SCAN_WORKERS = 8;
+const MAX_MOD_SCAN_CACHE_LOOKUP_CONCURRENCY = 16;
 
 type ModScanProfile = {
   buildResultMs: number;
+  cacheHitCount: number;
+  cacheLookupMs: number;
+  cacheMissCount: number;
   configMs: number;
   workerOverheadMs: number;
   workerParseMs: number;
@@ -89,6 +105,39 @@ type ModScanProfile = {
   rootEnumMs: number;
   totalMs: number;
   workerMs: number;
+};
+
+type AboutXmlCacheEntry = {
+  cacheKey: string;
+  fragment: ScannedModFragment;
+};
+
+type CachedScanResolution = {
+  cachedFragments: ScannedModFragment[];
+  metrics: Pick<
+    WorkerScanMetrics,
+    "cacheHitCount" | "cacheLookupMs" | "cacheMissCount"
+  >;
+  workerTasks: WorkerScanTask[];
+};
+
+type ModScanPerfStats = {
+  aboutCacheHits: number;
+  aboutCacheMisses: number;
+  lastPoolSize: number;
+  maxWorkerCount: number;
+  workerInstancesCreated: number;
+  workerSourceBuilds: number;
+};
+
+const aboutXmlCache = new Map<string, AboutXmlCacheEntry>();
+const modScanPerfStats: ModScanPerfStats = {
+  aboutCacheHits: 0,
+  aboutCacheMisses: 0,
+  lastPoolSize: 0,
+  maxWorkerCount: 0,
+  workerInstancesCreated: 0,
+  workerSourceBuilds: 0,
 };
 
 function createAppError(
@@ -289,8 +338,8 @@ function toErrorMessage(error: unknown) {
   return String(error);
 }
 
-function chunkTasks(tasks: ScanTask[]) {
-  const chunks: ScanTask[][] = [];
+function chunkTasks<TTask>(tasks: TTask[]) {
+  const chunks: TTask[][] = [];
 
   for (let index = 0; index < tasks.length; index += SCAN_CHUNK_SIZE) {
     chunks.push(tasks.slice(index, index + SCAN_CHUNK_SIZE));
@@ -299,11 +348,84 @@ function chunkTasks(tasks: ScanTask[]) {
   return chunks;
 }
 
+function cloneScannedModFragment(
+  fragment: ScannedModFragment,
+): ScannedModFragment {
+  return {
+    ...fragment,
+    notes: [...fragment.notes],
+  };
+}
+
+function createAboutXmlCacheKey(args: { mtimeMs: number; size: number }) {
+  return `${args.mtimeMs}:${args.size}`;
+}
+
+function createMissingAboutFragment(task: WorkerScanTask): ScannedModFragment {
+  return {
+    aboutCacheKey: task.aboutCacheKey,
+    aboutReadablePath: task.aboutReadablePath,
+    entryName: task.entryName,
+    hasAboutXml: false,
+    manifestPath: null,
+    aboutXmlText: null,
+    modReadablePath: task.modReadablePath,
+    modWindowsPath: task.modWindowsPath,
+    notes: ["About/About.xml was not found."],
+    source: task.source,
+  } satisfies ScannedModFragment;
+}
+
 function getWorkerPoolSize(environment: ExecutionEnvironment) {
   const _environment = environment;
   void _environment;
 
-  return Math.max(2, availableParallelism());
+  return Math.max(
+    2,
+    Math.min(MAX_MOD_SCAN_WORKERS, Math.ceil(availableParallelism() / 2)),
+  );
+}
+
+function getAboutXmlCacheLookupConcurrency(environment: ExecutionEnvironment) {
+  const _environment = environment;
+  void _environment;
+
+  return Math.max(
+    2,
+    Math.min(MAX_MOD_SCAN_CACHE_LOOKUP_CONCURRENCY, availableParallelism() * 2),
+  );
+}
+
+async function mapWithConcurrencyLimit<TItem, TResult>(
+  items: TItem[],
+  limit: number,
+  mapper: (item: TItem, index: number) => Promise<TResult>,
+) {
+  if (items.length === 0) {
+    return [] as TResult[];
+  }
+
+  const results = new Array<TResult>(items.length);
+  let nextIndex = 0;
+  const workerCount = Math.min(limit, items.length);
+
+  await Promise.all(
+    Array.from({ length: workerCount }, async () => {
+      while (nextIndex < items.length) {
+        const currentIndex = nextIndex;
+        nextIndex += 1;
+        const item = items[currentIndex];
+
+        if (item === undefined) {
+          return;
+        }
+
+        results[currentIndex] = await mapper(item, currentIndex);
+      }
+    }),
+  );
+
+  return results;
 }
 
 function formatDurationMs(value: number) {
@@ -327,22 +449,30 @@ function logModScanProfile(args: {
     `[mod-scan] config=${formatDurationMs(profile.configMs)} roots=${formatDurationMs(profile.rootEnumMs)} workers=${formatDurationMs(profile.workerMs)} build=${formatDurationMs(profile.buildResultMs)}`,
   );
   console.log(
+    `[mod-scan-cache] lookup=${formatDurationMs(profile.cacheLookupMs)} hits=${profile.cacheHitCount} misses=${profile.cacheMissCount}`,
+  );
+  console.log(
     `[mod-scan-worker] startup=${formatDurationMs(profile.workerStartupMs)} read=${formatDurationMs(profile.workerReadMs)} parse=${formatDurationMs(profile.workerParseMs)} overhead=${formatDurationMs(profile.workerOverheadMs)}`,
   );
 }
 
-async function scanModTask(task: ScanTask) {
-  const aboutReadablePath = join(task.modReadablePath, "About", "About.xml");
-  const aboutWindowsPath = win32.join(
-    task.modWindowsPath,
-    "About",
-    "About.xml",
-  );
+async function scanModTask(task: ScanTask | WorkerScanTask) {
+  const aboutReadablePath =
+    "aboutReadablePath" in task
+      ? task.aboutReadablePath
+      : join(task.modReadablePath, "About", "About.xml");
+  const aboutWindowsPath =
+    "aboutWindowsPath" in task
+      ? task.aboutWindowsPath
+      : win32.join(task.modWindowsPath, "About", "About.xml");
+  const aboutCacheKey = "aboutCacheKey" in task ? task.aboutCacheKey : null;
 
   try {
     const aboutXmlText = await readXmlFile(aboutReadablePath);
 
     return {
+      aboutCacheKey,
+      aboutReadablePath,
       entryName: task.entryName,
       hasAboutXml: true,
       manifestPath: aboutWindowsPath,
@@ -355,6 +485,8 @@ async function scanModTask(task: ScanTask) {
   } catch (error) {
     if (isMissingFileError(error)) {
       return {
+        aboutCacheKey,
+        aboutReadablePath,
         entryName: task.entryName,
         hasAboutXml: false,
         manifestPath: null,
@@ -367,6 +499,8 @@ async function scanModTask(task: ScanTask) {
     }
 
     return {
+      aboutCacheKey,
+      aboutReadablePath,
       entryName: task.entryName,
       hasAboutXml: true,
       manifestPath: aboutWindowsPath,
@@ -381,6 +515,154 @@ async function scanModTask(task: ScanTask) {
 
 async function scanModTasksInProcess(tasks: ScanTask[]) {
   return Promise.all(tasks.map((task) => scanModTask(task)));
+}
+
+async function resolveCachedScanFragments(
+  tasks: ScanTask[],
+  environment: ExecutionEnvironment,
+): Promise<CachedScanResolution> {
+  const lookupStart = performance.now();
+  const lookupConcurrency = Math.min(
+    getAboutXmlCacheLookupConcurrency(environment),
+    tasks.length,
+  );
+  const cachedFragments: ScannedModFragment[] = [];
+  const workerTasks: WorkerScanTask[] = [];
+  let cacheHitCount = 0;
+  let cacheMissCount = 0;
+
+  const results = await mapWithConcurrencyLimit(
+    tasks,
+    Math.max(1, lookupConcurrency),
+    async (task) => {
+      const aboutReadablePath = join(
+        task.modReadablePath,
+        "About",
+        "About.xml",
+      );
+      const aboutWindowsPath = win32.join(
+        task.modWindowsPath,
+        "About",
+        "About.xml",
+      );
+
+      try {
+        const aboutStats = await stat(aboutReadablePath);
+        const cacheKey = createAboutXmlCacheKey({
+          mtimeMs: aboutStats.mtimeMs,
+          size: aboutStats.size,
+        });
+        const cached = aboutXmlCache.get(aboutReadablePath);
+
+        if (cached?.cacheKey === cacheKey) {
+          return {
+            cacheHit: true,
+            fragment: cloneScannedModFragment(cached.fragment),
+            workerTask: null,
+          } as const;
+        }
+
+        return {
+          cacheHit: false,
+          fragment: null,
+          workerTask: {
+            ...task,
+            aboutCacheKey: cacheKey,
+            aboutReadablePath,
+            aboutWindowsPath,
+          } satisfies WorkerScanTask,
+        } as const;
+      } catch (error) {
+        if (isMissingFileError(error)) {
+          const cacheKey = "missing";
+          const cached = aboutXmlCache.get(aboutReadablePath);
+
+          if (cached?.cacheKey === cacheKey) {
+            return {
+              cacheHit: true,
+              fragment: cloneScannedModFragment(cached.fragment),
+              workerTask: null,
+            } as const;
+          }
+
+          const fragment = createMissingAboutFragment({
+            ...task,
+            aboutCacheKey: cacheKey,
+            aboutReadablePath,
+            aboutWindowsPath,
+          });
+
+          aboutXmlCache.set(aboutReadablePath, {
+            cacheKey,
+            fragment: cloneScannedModFragment(fragment),
+          });
+
+          return {
+            cacheHit: false,
+            fragment,
+            workerTask: null,
+          } as const;
+        }
+
+        return {
+          cacheHit: false,
+          fragment: null,
+          workerTask: {
+            ...task,
+            aboutCacheKey: null,
+            aboutReadablePath,
+            aboutWindowsPath,
+          } satisfies WorkerScanTask,
+        } as const;
+      }
+    },
+  );
+
+  for (const result of results) {
+    if (result.cacheHit) {
+      cacheHitCount += 1;
+    } else {
+      cacheMissCount += 1;
+    }
+
+    if (result.fragment) {
+      cachedFragments.push(result.fragment);
+    }
+
+    if (result.workerTask) {
+      workerTasks.push(result.workerTask);
+    }
+  }
+
+  modScanPerfStats.aboutCacheHits += cacheHitCount;
+  modScanPerfStats.aboutCacheMisses += cacheMissCount;
+
+  return {
+    cachedFragments,
+    metrics: {
+      cacheHitCount,
+      cacheLookupMs: performance.now() - lookupStart,
+      cacheMissCount,
+    },
+    workerTasks,
+  };
+}
+
+function updateAboutXmlCache(fragments: ScannedModFragment[]) {
+  for (const fragment of fragments) {
+    if (
+      !fragment.aboutReadablePath ||
+      !fragment.aboutCacheKey ||
+      fragment.aboutXmlText === null
+    ) {
+      continue;
+    }
+
+    aboutXmlCache.set(fragment.aboutReadablePath, {
+      cacheKey: fragment.aboutCacheKey,
+      fragment: cloneScannedModFragment(fragment),
+    });
+  }
 }
 
 async function listRootScanTasks(
@@ -534,8 +816,8 @@ function buildWorkerSource() {
     }
 
     async function scanTask(task) {
-      const aboutReadablePath = join(task.modReadablePath, "About", "About.xml");
-      const aboutWindowsPath = win32.join(task.modWindowsPath, "About", "About.xml");
+      const aboutReadablePath = task.aboutReadablePath ?? join(task.modReadablePath, "About", "About.xml");
+      const aboutWindowsPath = task.aboutWindowsPath ?? win32.join(task.modWindowsPath, "About", "About.xml");
       const readStart = performance.now();
 
       try {
@@ -543,6 +825,8 @@ function buildWorkerSource() {
         const readMs = performance.now() - readStart;
 
         return {
+          aboutCacheKey: task.aboutCacheKey ?? null,
+          aboutReadablePath,
           entryName: task.entryName,
           hasAboutXml: true,
           manifestPath: aboutWindowsPath,
@@ -558,6 +842,8 @@ function buildWorkerSource() {
 
         if (isMissingFileError(error)) {
           return {
+            aboutCacheKey: task.aboutCacheKey ?? null,
+            aboutReadablePath,
             entryName: task.entryName,
             hasAboutXml: false,
             manifestPath: null,
@@ -571,6 +857,8 @@ function buildWorkerSource() {
         }
 
         return {
+          aboutCacheKey: task.aboutCacheKey ?? null,
+          aboutReadablePath,
           entryName: task.entryName,
           hasAboutXml: true,
           manifestPath: aboutWindowsPath,
@@ -622,11 +910,222 @@ function buildWorkerSource() {
   `;
 }
 
-async function runWorkerChunksWithPool(chunks: ScanTask[][], poolSize: number) {
+class ReusableModScanWorkerPool {
+  private queuedRun: Promise<void> = Promise.resolve();
+  private workerSourceUrl: string | null = null;
+  private workers: Worker[] = [];
+
+  reset() {
+    for (const worker of this.workers) {
+      worker.terminate();
+    }
+
+    this.workers = [];
+
+    if (this.workerSourceUrl) {
+      URL.revokeObjectURL(this.workerSourceUrl);
+      this.workerSourceUrl = null;
+    }
+  }
+
+  async runChunks(chunks: WorkerScanTask[][], poolSize: number) {
+    const execute = async () => this.runChunksNow(chunks, poolSize);
+    const result = this.queuedRun.then(execute, execute);
+
+    this.queuedRun = result.then(
+      () => undefined,
+      () => undefined,
+    );
+
+    return result;
+  }
+
+  private ensureWorkerSourceUrl() {
+    if (this.workerSourceUrl) {
+      return this.workerSourceUrl;
+    }
+
+    this.workerSourceUrl = URL.createObjectURL(
+      new Blob([buildWorkerSource()], {
+        type: "application/typescript",
+      }),
+    );
+    modScanPerfStats.workerSourceBuilds += 1;
+    return this.workerSourceUrl;
+  }
+
+  private ensureWorkers(workerCount: number) {
+    const workerSourceUrl = this.ensureWorkerSourceUrl();
+
+    while (this.workers.length < workerCount) {
+      this.workers.push(new Worker(workerSourceUrl));
+      modScanPerfStats.workerInstancesCreated += 1;
+      modScanPerfStats.maxWorkerCount = Math.max(
+        modScanPerfStats.maxWorkerCount,
+        this.workers.length,
+      );
+    }
+
+    return this.workers.slice(0, workerCount);
+  }
+
+  private async runChunksNow(chunks: WorkerScanTask[][], poolSize: number) {
+    if (chunks.length === 0) {
+      modScanPerfStats.lastPoolSize = 0;
+
+      return {
+        fragments: [],
+        metrics: {
+          cacheHitCount: 0,
+          cacheLookupMs: 0,
+          cacheMissCount: 0,
+          parseMs: 0,
+          readMs: 0,
+          startupMs: 0,
+        },
+      };
+    }
+
+    const startupStart = performance.now();
+    const workerCount = Math.min(poolSize, chunks.length);
+    const workers = this.ensureWorkers(workerCount);
+    const startupMs = performance.now() - startupStart;
+    modScanPerfStats.lastPoolSize = workerCount;
+
+    return new Promise<{
+      fragments: ScannedModFragment[];
+      metrics: WorkerScanMetrics;
+    }>((resolve, reject) => {
+      const results = new Array<ScannedModFragment[]>(chunks.length);
+      let readMs = 0;
+      let parseMs = 0;
+      let completedChunks = 0;
+      let idleWorkers = 0;
+      let nextChunkIndex = 0;
+      let settled = false;
+
+      const clearHandlers = () => {
+        for (const worker of workers) {
+          worker.onmessage = null;
+          worker.onerror = null;
+        }
+      };
+
+      const resolveIfDone = () => {
+        if (
+          settled ||
+          completedChunks !== chunks.length ||
+          idleWorkers !== workers.length
+        ) {
+          return;
+        }
+
+        settled = true;
+        clearHandlers();
+        resolve({
+          fragments: results.flat(),
+          metrics: {
+            cacheHitCount: 0,
+            cacheLookupMs: 0,
+            cacheMissCount: 0,
+            parseMs,
+            readMs,
+            startupMs,
+          },
+        });
+      };
+
+      const fail = (message: string) => {
+        if (settled) {
+          return;
+        }
+
+        settled = true;
+        clearHandlers();
+        this.reset();
+        reject(new Error(message));
+      };
+
+      const assignNextChunk = (worker: Worker) => {
+        if (settled) {
+          return;
+        }
+
+        const chunkId = nextChunkIndex;
+        const tasks = chunks[chunkId];
+
+        if (!tasks) {
+          idleWorkers += 1;
+          resolveIfDone();
+          return;
+        }
+
+        nextChunkIndex += 1;
+        worker.postMessage({
+          chunkId,
+          tasks,
+        } satisfies ScanChunkRequest);
+      };
+
+      for (const worker of workers) {
+        worker.onmessage = (event: MessageEvent<ScanChunkResponse>) => {
+          const response = event.data;
+
+          if (response.error) {
+            fail(`Worker chunk ${response.chunkId} failed: ${response.error}`);
+            return;
+          }
+
+          results[response.chunkId] = response.fragments;
+          readMs += response.metrics.readMs;
+          parseMs += response.metrics.parseMs;
+          completedChunks += 1;
+          assignNextChunk(worker);
+          resolveIfDone();
+        };
+
+        worker.onerror = (event) => {
+          fail(event.message || "Worker crashed during mod scan.");
+        };
+
+        assignNextChunk(worker);
+      }
+    });
+  }
+}
+
+const reusableModScanWorkerPool = new ReusableModScanWorkerPool();
+
+export function getModScanPerfStatsForTests() {
+  return {
+    ...modScanPerfStats,
+  };
+}
+
+export function resetModScanPerfStateForTests() {
+  aboutXmlCache.clear();
+  reusableModScanWorkerPool.reset();
+  modScanPerfStats.aboutCacheHits = 0;
+  modScanPerfStats.aboutCacheMisses = 0;
+  modScanPerfStats.lastPoolSize = 0;
+  modScanPerfStats.maxWorkerCount = 0;
+  modScanPerfStats.workerInstancesCreated = 0;
+  modScanPerfStats.workerSourceBuilds = 0;
+}
+
+async function runWorkerChunksWithPool(
+  chunks: WorkerScanTask[][],
+  poolSize: number,
+) {
   if (chunks.length === 0) {
+    modScanPerfStats.lastPoolSize = 0;
+
     return {
       fragments: [],
       metrics: {
+        cacheHitCount: 0,
+        cacheLookupMs: 0,
+        cacheMissCount: 0,
         parseMs: 0,
         readMs: 0,
         startupMs: 0,
@@ -634,116 +1133,7 @@ async function runWorkerChunksWithPool(chunks: ScanTask[][], poolSize: number) {
     };
   }
 
-  const startupStart = performance.now();
-  const workerUrl = URL.createObjectURL(
-    new Blob([buildWorkerSource()], {
-      type: "application/typescript",
-    }),
-  );
-  const workerCount = Math.min(poolSize, chunks.length);
-  const startupMs = performance.now() - startupStart;
-
-  return new Promise<{
-    fragments: ScannedModFragment[];
-    metrics: WorkerScanMetrics;
-  }>((resolve, reject) => {
-    const results = new Array<ScannedModFragment[]>(chunks.length);
-    let readMs = 0;
-    let parseMs = 0;
-    const workers = Array.from(
-      { length: workerCount },
-      () => new Worker(workerUrl),
-    );
-    let activeWorkers = workers.length;
-    let completedChunks = 0;
-    let nextChunkIndex = 0;
-    let settled = false;
-
-    const cleanup = () => {
-      URL.revokeObjectURL(workerUrl);
-
-      for (const worker of workers) {
-        worker.terminate();
-      }
-    };
-
-    const resolveIfDone = () => {
-      if (completedChunks !== chunks.length || settled) {
-        return;
-      }
-
-      settled = true;
-      cleanup();
-      resolve({
-        fragments: results.flat(),
-        metrics: {
-          parseMs,
-          readMs,
-          startupMs,
-        },
-      });
-    };
-
-    const fail = (message: string) => {
-      if (settled) {
-        return;
-      }
-
-      settled = true;
-      cleanup();
-      reject(new Error(message));
-    };
-
-    const assignNextChunk = (worker: Worker) => {
-      if (settled) {
-        return;
-      }
-
-      const chunkId = nextChunkIndex;
-      const tasks = chunks[chunkId];
-
-      if (!tasks) {
-        activeWorkers -= 1;
-
-        if (activeWorkers === 0) {
-          resolveIfDone();
-        }
-
-        return;
-      }
-
-      nextChunkIndex += 1;
-      const request: ScanChunkRequest = {
-        chunkId,
-        tasks,
-      };
-      worker.postMessage(request);
-    };
-
-    for (const worker of workers) {
-      worker.onmessage = (event: MessageEvent<ScanChunkResponse>) => {
-        const response = event.data;
-
-        if (response.error) {
-          fail(`Worker chunk ${response.chunkId} failed: ${response.error}`);
-          return;
-        }
-
-        results[response.chunkId] = response.fragments;
-        readMs += response.metrics.readMs;
-        parseMs += response.metrics.parseMs;
-        completedChunks += 1;
-        assignNextChunk(worker);
-        resolveIfDone();
-      };
-
-      worker.onerror = (event) => {
-        fail(event.message || "Worker crashed during mod scan.");
-      };
-
-      assignNextChunk(worker);
-    }
-  });
+  return reusableModScanWorkerPool.runChunks(chunks, poolSize);
 }
 
 async function scanModFragments(
@@ -751,7 +1141,7 @@ async function scanModFragments(
   environment: ExecutionEnvironment,
   errors: AppError[],
   runWorkerChunks: (
-    chunks: ScanTask[][],
+    chunks: WorkerScanTask[][],
     poolSize: number,
   ) => Promise<{
     fragments: ScannedModFragment[];
@@ -762,6 +1152,9 @@ async function scanModFragments(
     return {
       fragments: [],
       metrics: {
+        cacheHitCount: 0,
+        cacheLookupMs: 0,
+        cacheMissCount: 0,
         parseMs: 0,
         readMs: 0,
         startupMs: 0,
@@ -769,10 +1162,30 @@ async function scanModFragments(
     };
   }
 
-  const chunks = chunkTasks(tasks);
+  const {
+    cachedFragments,
+    metrics: cacheMetrics,
+    workerTasks,
+  } = await resolveCachedScanFragments(tasks, environment);
+  const chunks = chunkTasks(workerTasks);
 
   try {
-    return await runWorkerChunks(chunks, getWorkerPoolSize(environment));
+    const { fragments: workerFragments, metrics } = await runWorkerChunks(
+      chunks,
+      getWorkerPoolSize(environment),
+    );
+
+    updateAboutXmlCache(workerFragments);
+
+    return {
+      fragments: [...cachedFragments, ...workerFragments],
+      metrics: {
+        ...metrics,
+        cacheHitCount: cacheMetrics.cacheHitCount,
+        cacheLookupMs: cacheMetrics.cacheLookupMs,
+        cacheMissCount: cacheMetrics.cacheMissCount,
+      },
+    };
   } catch (error) {
     errors.push(
       createAppError(
@@ -783,9 +1196,15 @@ async function scanModFragments(
       ),
     );
 
+    const workerFragments = await scanModTasksInProcess(workerTasks);
+    updateAboutXmlCache(workerFragments);
+
     return {
-      fragments: await scanModTasksInProcess(tasks),
+      fragments: [...cachedFragments, ...workerFragments],
       metrics: {
+        cacheHitCount: cacheMetrics.cacheHitCount,
+        cacheLookupMs: cacheMetrics.cacheLookupMs,
+        cacheMissCount: cacheMetrics.cacheMissCount,
         parseMs: 0,
         readMs: 0,
         startupMs: 0,
@@ -912,6 +1331,9 @@ export async function readModSourceSnapshot(
     poolSize,
     profile: {
       buildResultMs,
+      cacheHitCount: metrics.cacheHitCount,
+      cacheLookupMs: metrics.cacheLookupMs,
+      cacheMissCount: metrics.cacheMissCount,
       configMs,
       rootEnumMs,
       totalMs,
