@@ -10,7 +10,6 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import { useMemo, useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -189,27 +188,15 @@ function createSyntheticItem(index: number): HomePageModListItem {
 }
 
 function createInitialColumns() {
-  const items = Array.from({ length: ITEM_COUNT }, (_, index) =>
-    createSyntheticItem(index),
-  );
-
   return {
-    active: items.slice(ITEM_COUNT / 2),
-    inactive: items.slice(0, ITEM_COUNT / 2),
+    active: SYNTHETIC_ITEMS.slice(ITEM_COUNT / 2),
+    inactive: SYNTHETIC_ITEMS.slice(0, ITEM_COUNT / 2),
   };
 }
 
-function normalizeColumnItems(
-  items: HomePageModListItem[],
-  columnId: ModColumnId,
-) {
-  return items.map((item, index) => ({
-    ...item,
-    columnId,
-    enabled: columnId === "active",
-    orderLabel: columnId === "active" ? index + 1 : null,
-  }));
-}
+const SYNTHETIC_ITEMS = Array.from({ length: ITEM_COUNT }, (_, index) =>
+  createSyntheticItem(index),
+);
 
 function isVisibleMod(
   item: HomePageModListItem,
@@ -274,6 +261,26 @@ async function expectRenderedRowsWithinCap(
   });
 }
 
+async function expectRenderedColumnsWithinCap(
+  checks: Array<{ columnId: ModColumnId; phase: string }>,
+) {
+  await waitFor(() => {
+    for (const { columnId, phase } of checks) {
+      const rendered = within(getColumn(columnId)).queryAllByTestId(
+        "mod-library-row",
+      ).length;
+
+      expect(rendered).toBeGreaterThan(0);
+
+      if (rendered > DOM_CAP) {
+        throw new Error(
+          `VAL-PERF-001 ${phase}: items=${ITEM_COUNT} column=${columnId} rendered=${rendered} cap=${DOM_CAP}`,
+        );
+      }
+    }
+  });
+}
+
 function ModLibraryPerfHarness() {
   const [columns, setColumns] = useState(createInitialColumns);
   const [searchQuery, setSearchQuery] = useState("");
@@ -302,11 +309,23 @@ function ModLibraryPerfHarness() {
           />
         </label>
         <div>
-          <button type="button" onClick={() => setSourceFilter("all")}>
-            All sources
+          <button
+            type="button"
+            onClick={() => {
+              setSearchQuery("");
+              setSourceFilter("all");
+            }}
+          >
+            Clear filters
           </button>
-          <button type="button" onClick={() => setSourceFilter("local")}>
-            Local only
+          <button
+            type="button"
+            onClick={() => {
+              setSearchQuery("3");
+              setSourceFilter("local");
+            }}
+          >
+            Apply local search filters
           </button>
           <button type="button" onClick={() => setSourceFilter("workshop")}>
             Workshop only
@@ -334,15 +353,19 @@ function ModLibraryPerfHarness() {
                     ACTIVE_INSERT_BEFORE_PACKAGE_ID,
                 );
 
-                nextActive.splice(
-                  targetIndex >= 0 ? targetIndex : 0,
-                  0,
-                  movingItem,
-                );
+                const nextIndex = targetIndex >= 0 ? targetIndex : 0;
+                const nextMovingItem = {
+                  ...movingItem,
+                  columnId: "active" as const,
+                  enabled: true,
+                  orderLabel: nextIndex + 1,
+                };
+
+                nextActive.splice(nextIndex, 0, nextMovingItem);
 
                 return {
-                  active: normalizeColumnItems(nextActive, "active"),
-                  inactive: normalizeColumnItems(nextInactive, "inactive"),
+                  active: nextActive,
+                  inactive: nextInactive,
                 };
               });
             }}
@@ -381,62 +404,83 @@ function ModLibraryPerfHarness() {
 }
 
 describe("ModLibraryColumn perf guardrails", () => {
-  it("VAL-PERF-001 keeps rendered DOM rows bounded for items=2000 across scroll, filter toggles, and cross-column move", async () => {
+  it("VAL-PERF-001 keeps rendered DOM rows bounded for items=2000 at rest and after scrolling", async () => {
     const view = render(<ModLibraryPerfHarness />);
 
     try {
-      await expectRenderedRowsWithinCap("inactive", "at-rest inactive");
-      await expectRenderedRowsWithinCap("active", "at-rest active");
+      await expectRenderedColumnsWithinCap([
+        { columnId: "inactive", phase: "at-rest inactive" },
+        { columnId: "active", phase: "at-rest active" },
+      ]);
 
       const activeScroll = getColumnScroll("active");
       activeScroll.scrollTop = 74 * 900;
       fireEvent.scroll(activeScroll);
 
       await expectRenderedRowsWithinCap("active", "after-scroll");
+    } finally {
+      await teardownPerfHarness(view.unmount);
+    }
+  });
 
-      await userEvent.click(
-        screen.getByRole("button", { name: /Local only/i }),
+  it("VAL-PERF-001 keeps rendered DOM rows bounded for items=2000 after toggling filters", async () => {
+    const view = render(<ModLibraryPerfHarness />);
+
+    try {
+      await expectRenderedColumnsWithinCap([
+        { columnId: "inactive", phase: "before-filters inactive" },
+        { columnId: "active", phase: "before-filters active" },
+      ]);
+
+      const activeScroll = getColumnScroll("active");
+      const inactiveScroll = getColumnScroll("inactive");
+
+      fireEvent.click(
+        screen.getByRole("button", { name: /Apply local search filters/i }),
       );
 
       activeScroll.scrollTop = 0;
       fireEvent.scroll(activeScroll);
-      const inactiveScroll = getColumnScroll("inactive");
       inactiveScroll.scrollTop = 0;
       fireEvent.scroll(inactiveScroll);
 
-      await expectRenderedRowsWithinCap(
-        "inactive",
-        "after-source-local inactive",
-      );
-      await expectRenderedRowsWithinCap("active", "after-source-local active");
+      await expectRenderedColumnsWithinCap([
+        {
+          columnId: "inactive",
+          phase: "after-source-and-search-filters inactive",
+        },
+        {
+          columnId: "active",
+          phase: "after-source-and-search-filters active",
+        },
+      ]);
 
-      fireEvent.change(screen.getByRole("textbox", { name: /Search mods/i }), {
-        target: { value: "0" },
-      });
-
-      await expectRenderedRowsWithinCap("inactive", "after-search inactive");
-      await expectRenderedRowsWithinCap("active", "after-search active");
-
-      fireEvent.change(screen.getByRole("textbox", { name: /Search mods/i }), {
-        target: { value: "" },
-      });
-      await userEvent.click(
-        screen.getByRole("button", { name: /All sources/i }),
-      );
+      fireEvent.click(screen.getByRole("button", { name: /Clear filters/i }));
 
       activeScroll.scrollTop = 0;
       fireEvent.scroll(activeScroll);
+      inactiveScroll.scrollTop = 0;
+      fireEvent.scroll(inactiveScroll);
 
-      await expectRenderedRowsWithinCap(
-        "inactive",
-        "after-clearing-filters inactive",
-      );
-      await expectRenderedRowsWithinCap(
-        "active",
-        "after-clearing-filters active",
-      );
+      await expectRenderedColumnsWithinCap([
+        { columnId: "inactive", phase: "after-clearing-filters inactive" },
+        { columnId: "active", phase: "after-clearing-filters active" },
+      ]);
+    } finally {
+      await teardownPerfHarness(view.unmount);
+    }
+  });
 
-      await userEvent.click(
+  it("VAL-PERF-001 keeps rendered DOM rows bounded for items=2000 after a cross-column move", async () => {
+    const view = render(<ModLibraryPerfHarness />);
+
+    try {
+      await expectRenderedColumnsWithinCap([
+        { columnId: "inactive", phase: "before-cross-column-move inactive" },
+        { columnId: "active", phase: "before-cross-column-move active" },
+      ]);
+
+      fireEvent.click(
         screen.getByRole("button", { name: /Move inactive mod to active/i }),
       );
 
@@ -444,14 +488,13 @@ describe("ModLibraryColumn perf guardrails", () => {
         within(getColumn("active")).getByText("Mod 0500");
       });
 
-      await expectRenderedRowsWithinCap(
-        "inactive",
-        "after-cross-column-move inactive",
-      );
-      await expectRenderedRowsWithinCap(
-        "active",
-        "after-cross-column-move active",
-      );
+      await expectRenderedColumnsWithinCap([
+        {
+          columnId: "inactive",
+          phase: "after-cross-column-move inactive",
+        },
+        { columnId: "active", phase: "after-cross-column-move active" },
+      ]);
     } finally {
       await teardownPerfHarness(view.unmount);
     }
