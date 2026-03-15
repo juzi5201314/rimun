@@ -1,57 +1,35 @@
-# Electrobun Hello World
+# @rimun/desktop
 
-A simple Electrobun app to get you started with the framework.
+Desktop host package for Rimun. It runs the Electrobun shell, the Bun host APIs used by the Mod Library, and the local scan/config persistence logic for RimWorld mods.
 
-## What You'll See
+## Common Commands
 
-This hello world app demonstrates:
-- **Native Window**: A cross-platform desktop window
-- **Web-based UI**: Modern HTML, CSS, and JavaScript interface
-- **Simple Architecture**: Clean separation between Bun process and UI
+From the repository root:
 
-## Getting Started
-
-1. Install dependencies:
-   ```bash
-   bun install
-   ```
-
-2. Run in development mode:
-   ```bash
-   bun run dev
-   ```
-
-3. Build for production:
-   ```bash
-   bun run build
-   ```
-
-## Project Structure
-
-```
-src/
-├── bun/
-│   └── index.ts      # Main process - creates and manages windows
-└── mainview/
-    ├── index.html    # Your app's UI
-    ├── index.css     # Styles
-    └── index.ts      # View logic
+```bash
+bun run dev
+bun run dev:web
+bun run build
+bun run test
 ```
 
-## Next Steps
+From `packages/desktop`:
 
-Ready to build something more complex? Check out:
+```bash
+bun run dev
+bun run dev:host
+bun run build
+bun run test
+```
 
-- **[Documentation](https://docs.electrobun.dev)** - Learn about all Electrobun features
-- **[Examples](https://github.com/blackboardsh/electrobun/tree/main/playground)** - See advanced features like RPC, menus, and system tray
-- **[GitHub](https://github.com/blackboardsh/electrobun)** - Star the repo and join the community
+## What Lives Here
 
-### Add More Features
+- `src/bun/` — host services, mod scanning, path handling, persistence, and dev host entrypoints
+- `src/mainview/` — desktop shell view assets used by Electrobun
+- `scripts/` — helpers for local desktop and CDP-enabled development
 
-Want to extend this app? Try adding:
-- RPC communication between Bun and webview
-- Native menus and system tray
-- File dialogs and system integration
-- Multiple windows and views
+## Notes
 
-Happy building! 🚀
+- Rescan logic is read-only with respect to `ModsConfig.xml`.
+- Scan-performance optimizations rely on in-memory caching only; no persistent scan-cache files are introduced.
+- `bun run dev:web` is the preferred browser-accessible validation surface when full desktop UI automation is not required.
