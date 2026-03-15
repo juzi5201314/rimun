@@ -1,0 +1,15 @@
+{
+  "featureId": "mod-library-perf-guardrail-timeout-fix",
+  "reviewedAt": "2026-03-15T15:26:30+08:00",
+  "commitId": "5834d7e8f73e6b3d6a778fcdb8a65e0ab496df53",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The change stays tightly scoped to the perf guardrail harness: it precomputes the 2000-item synthetic fixtures once, replaces slower user-event-driven filter setup with deterministic button actions, and splits the previous timeout-prone monolithic VAL-PERF-001 assertion into three smaller cases that still cover scroll, filter, and cross-column move behavior. The production ModLibraryColumn code is untouched, while the preserved assertions still fail loudly if rendered row counts exceed the DOM cap in any of the exercised phases.",
+    "issues": []
+  },
+  "sharedStateObservations": [],
+  "addressesFailureFrom": null,
+  "summary": "Pass. The timeout fix preserves the original virtualization regression coverage while making the guardrail deterministic enough to stay comfortably under Vitest's per-test timeout in isolated, package, and root test runs."
+}

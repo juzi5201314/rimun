@@ -1,0 +1,40 @@
+{
+  "milestone": "desktop-rescan-2s",
+  "round": 1,
+  "status": "pass",
+  "validatorsRun": {
+    "test": {
+      "passed": true,
+      "command": "bun run test",
+      "exitCode": 0
+    },
+    "typecheck": {
+      "passed": true,
+      "command": "bun run typecheck",
+      "exitCode": 0
+    },
+    "lint": {
+      "passed": true,
+      "command": "bun run lint",
+      "exitCode": 0
+    }
+  },
+  "reviewsSummary": {
+    "total": 2,
+    "passed": 2,
+    "failed": 0,
+    "failedFeatures": []
+  },
+  "blockingIssues": [],
+  "appliedUpdates": [],
+  "suggestedGuidanceUpdates": [
+    {
+      "target": "custom droid configuration",
+      "suggestion": "Update the `worker` and `scrutiny-feature-reviewer` droids (or the inherited model mapping they use) to reference a valid model identifier instead of `custom:GPT-5.4`.",
+      "evidence": "This scrutiny run attempted to launch review subagents for both completed milestone features via `Task`, and both the intended `scrutiny-feature-reviewer` droid and the `worker` fallback exited immediately with `Invalid model: custom:GPT-5.4`. Validators passed and local code review still passed, but the intended review-subagent path remains broken until that model mapping is corrected.",
+      "isSystemic": true
+    }
+  ],
+  "rejectedObservations": [],
+  "previousRound": null
+}
