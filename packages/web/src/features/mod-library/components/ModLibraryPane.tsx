@@ -19,6 +19,7 @@ import {
   Sparkles,
   Trash2,
 } from "lucide-react";
+import { useEffect, useRef } from "react";
 
 function ToolbarChip({
   className,
@@ -55,14 +56,70 @@ export function ModLibraryPane({
   const visibleCount =
     controller.visibleActiveMods.length + controller.visibleInactiveMods.length;
 
-  if (!controller.modLibrary) {
-    return null;
-  }
+  const saveShortcutState = useRef<{
+    modLibraryReady: boolean;
+    isDirty: boolean;
+    isBusy: boolean;
+    hasCurrentProfile: boolean;
+    handleSaveProfile: () => Promise<void>;
+  }>({
+    modLibraryReady: false,
+    isDirty: false,
+    isBusy: false,
+    hasCurrentProfile: false,
+    handleSaveProfile: async () => {},
+  });
+
+  saveShortcutState.current.modLibraryReady = Boolean(controller.modLibrary);
+  saveShortcutState.current.isDirty = controller.isDirty;
+  saveShortcutState.current.isBusy = controller.isBusy;
+  saveShortcutState.current.hasCurrentProfile = Boolean(controller.currentProfile);
+  saveShortcutState.current.handleSaveProfile = controller.handleSaveProfile;
 
   const hasHardOrderViolation =
     controller.analysis?.diagnostics.some(
       (diagnostic) => diagnostic.code === "hard_order_violation",
     ) ?? false;
+
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      const state = saveShortcutState.current;
+
+      if (!state.modLibraryReady) {
+        return;
+      }
+
+      if (event.key.toLowerCase() !== "s") {
+        return;
+      }
+
+      if (!event.ctrlKey && !event.metaKey) {
+        return;
+      }
+
+      if (event.altKey || event.shiftKey) {
+        return;
+      }
+
+      event.preventDefault();
+
+      if (!state.isDirty || state.isBusy || !state.hasCurrentProfile) {
+        return;
+      }
+
+      void state.handleSaveProfile();
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, []);
+
+  if (!controller.modLibrary) {
+    return null;
+  }
 
   return (
     <section className="flex min-h-0 min-w-0 flex-1 flex-col border-r border-border/60 bg-background/20">
@@ -88,13 +145,28 @@ export function ModLibraryPane({
               value={String(controller.modLibrary.mods.length)}
             />
             {controller.isDirty ? (
-              <Badge
-                variant="outline"
-                className="h-7 border-amber-500/40 bg-amber-500/10 text-amber-700"
-                title={t("mod_library.unsaved_changes")}
-              >
-                {t("mod_library.unsaved_changes")}
-              </Badge>
+              <div className="inline-flex items-center gap-2">
+                <Badge
+                  variant="outline"
+                  className="h-7 border-amber-500/40 bg-amber-500/10 text-amber-700"
+                  title={t("mod_library.unsaved_changes")}
+                >
+                  {t("mod_library.unsaved_changes")}
+                </Badge>
+                <Button
+                  size="sm"
+                  className="h-7 gap-2 px-3 text-xs"
+                  disabled={
+                    controller.isBusy ||
+                    !controller.currentProfile ||
+                    !controller.isDirty
+                  }
+                  onClick={() => void controller.handleSaveProfile()}
+                >
+                  <Save className="h-3.5 w-3.5" />
+                  {t("mod_library.save_profile")}
+                </Button>
+              </div>
             ) : null}
           </div>
 
@@ -198,19 +270,6 @@ export function ModLibraryPane({
                     >
                       <Trash2 className="h-4 w-4" />
                       {t("mod_library.delete_profile")}
-                    </Button>
-                    <Button
-                      size="sm"
-                      className="h-8 gap-2 px-3"
-                      disabled={
-                        controller.isBusy ||
-                        !controller.currentProfile ||
-                        !controller.isDirty
-                      }
-                      onClick={() => void controller.handleSaveProfile()}
-                    >
-                      <Save className="h-4 w-4" />
-                      {t("mod_library.save_profile")}
                     </Button>
                   </div>
                 </div>

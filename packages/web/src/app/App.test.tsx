@@ -1,7 +1,7 @@
 import { App } from "@/app/App";
 import { createAppRouter } from "@/app/router";
 import { createTestHostApi } from "@/shared/testing/createTestHostApi.node";
-import type { DetectPathsInput } from "@rimun/shared";
+import type { DetectPathsInput, SaveProfileInput } from "@rimun/shared";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
@@ -338,6 +338,46 @@ describe("App", () => {
         screen.getByRole("textbox", { name: /Profile Name/i }),
       ).toHaveValue("Default Loadout");
     });
+  });
+
+  it("saves the current profile via Ctrl+S when the draft is dirty", async () => {
+    const hostApi = createTestHostApi();
+    const savedInputs: SaveProfileInput[] = [];
+
+    const originalSaveProfile = hostApi.saveProfile.bind(hostApi);
+    hostApi.saveProfile = async (input) => {
+      savedInputs.push(input);
+      return originalSaveProfile(input);
+    };
+
+    renderApp({ hostApi });
+
+    expect(
+      await screen.findByRole("heading", { name: /Mod Library/i }),
+    ).toBeInTheDocument();
+
+    await expandActiveProfilePanel();
+
+    await userEvent.type(
+      screen.getByRole("textbox", { name: /Profile Name/i }),
+      " Draft",
+    );
+
+    expect(await screen.findByTitle(/Unsaved Changes/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Save$/i })).toBeInTheDocument();
+
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "s",
+        ctrlKey: true,
+      }),
+    );
+
+    await waitFor(() => {
+      expect(savedInputs).toHaveLength(1);
+    });
+
+    expect(savedInputs[0]?.applyToGame).toBe(true);
   });
 
   it("creates a new profile from the current saved snapshot", async () => {
