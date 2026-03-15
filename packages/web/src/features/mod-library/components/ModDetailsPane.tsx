@@ -2,6 +2,7 @@ import type { HomePageController } from "@/features/mod-library/hooks/useHomePag
 import { Badge } from "@/shared/components/ui/badge";
 import { useI18n } from "@/shared/i18n";
 import { cn } from "@/shared/lib/utils";
+import type { ModOrderEdge } from "@rimun/shared";
 import {
   ChevronDown,
   ChevronRight,
@@ -14,6 +15,24 @@ import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 
 type DetailSectionId = "description" | "orderHints" | "analysis" | "paths";
+type DetailSectionTone = "default" | "danger";
+
+type SelectedOrderViolation = {
+  direction: "before" | "after";
+  kind:
+    | "official_anchor"
+    | "dependency"
+    | "load_after"
+    | "load_before"
+    | "force_load_after"
+    | "force_load_before";
+  relatedModName: string;
+};
+
+type TranslateFn = (
+  key: string,
+  params?: Record<string, string | number>,
+) => string;
 
 function renderDescriptionBlocks(
   description: string | null,
@@ -74,33 +93,256 @@ function renderPackageList(items: string[], noneText: string) {
   );
 }
 
+function buildPackageIdDisplayNameMap(controller: HomePageController) {
+  const displayNameByPackageId = new Map<string, string>();
+
+  for (const mod of controller.modLibrary?.mods ?? []) {
+    const packageId = mod.dependencyMetadata.packageIdNormalized;
+
+    if (!packageId || displayNameByPackageId.has(packageId)) {
+      continue;
+    }
+
+    displayNameByPackageId.set(packageId, mod.name);
+  }
+
+  return displayNameByPackageId;
+}
+
+function buildSelectedOrderViolations(input: {
+  orderViolations: ModOrderEdge[];
+  selectedPackageId: string | null;
+  packageIdDisplayNameMap: Map<string, string>;
+}) {
+  if (!input.selectedPackageId) {
+    return [];
+  }
+  const seenKeys = new Set<string>();
+  const violations: SelectedOrderViolation[] = [];
+
+  for (const edge of input.orderViolations) {
+    if (
+      edge.fromPackageId !== input.selectedPackageId &&
+      edge.toPackageId !== input.selectedPackageId
+    ) {
+      continue;
+    }
+
+    const direction =
+      edge.fromPackageId === input.selectedPackageId ? "before" : "after";
+    const relatedPackageId =
+      direction === "before" ? edge.toPackageId : edge.fromPackageId;
+    const dedupeKey = `${direction}:${edge.kind}:${relatedPackageId}`;
+
+    if (seenKeys.has(dedupeKey)) {
+      continue;
+    }
+
+    seenKeys.add(dedupeKey);
+    violations.push({
+      direction,
+      kind: edge.kind,
+      relatedModName:
+        input.packageIdDisplayNameMap.get(relatedPackageId) ?? relatedPackageId,
+    });
+  }
+
+  return violations;
+}
+
+function getOrderViolationMoveKey(
+  direction: SelectedOrderViolation["direction"],
+) {
+  return direction === "before"
+    ? "mod_details.order_violation_move_before"
+    : "mod_details.order_violation_move_after";
+}
+
+function getOrderViolationReasonKey(kind: SelectedOrderViolation["kind"]) {
+  switch (kind) {
+    case "dependency":
+      return "mod_details.order_violation_reason_dependency";
+    case "load_after":
+      return "mod_details.order_violation_reason_load_after";
+    case "force_load_after":
+      return "mod_details.order_violation_reason_force_load_after";
+    case "load_before":
+      return "mod_details.order_violation_reason_load_before";
+    case "force_load_before":
+      return "mod_details.order_violation_reason_force_load_before";
+    default:
+      return "mod_details.order_violation_reason_official_anchor";
+  }
+}
+
+function getOrderViolationSummaryKey(
+  direction: SelectedOrderViolation["direction"],
+) {
+  return direction === "before"
+    ? "mod_details.order_violation_summary_before"
+    : "mod_details.order_violation_summary_after";
+}
+
+function getOrderViolationReasonParams(input: {
+  selectedModName: string;
+  violation: SelectedOrderViolation;
+}) {
+  if (
+    input.violation.kind === "dependency" ||
+    input.violation.kind === "load_after" ||
+    input.violation.kind === "force_load_after"
+  ) {
+    return input.violation.direction === "before"
+      ? {
+          subject: input.violation.relatedModName,
+          target: input.selectedModName,
+        }
+      : {
+          subject: input.selectedModName,
+          target: input.violation.relatedModName,
+        };
+  }
+
+  return input.violation.direction === "before"
+    ? {
+        subject: input.selectedModName,
+        target: input.violation.relatedModName,
+      }
+    : {
+        subject: input.violation.relatedModName,
+        target: input.selectedModName,
+      };
+}
+
+function buildExplanationViolations(input: {
+  analysis: HomePageController["analysis"];
+  selectedPackageId: string | null;
+  packageIdDisplayNameMap: Map<string, string>;
+}) {
+  if (!input.analysis) {
+    return [];
+  }
+
+  return buildSelectedOrderViolations({
+    orderViolations: input.analysis.edges,
+    selectedPackageId: input.selectedPackageId,
+    packageIdDisplayNameMap: input.packageIdDisplayNameMap,
+  });
+}
+
+function formatSelectedOrderViolation(input: {
+  t: TranslateFn;
+  selectedModName: string;
+  violation: SelectedOrderViolation;
+}) {
+  return [
+    input.t(getOrderViolationSummaryKey(input.violation.direction), {
+      subject: input.selectedModName,
+      target: input.violation.relatedModName,
+    }),
+    input.t(
+      getOrderViolationReasonKey(input.violation.kind),
+      getOrderViolationReasonParams({
+        selectedModName: input.selectedModName,
+        violation: input.violation,
+      }),
+    ),
+  ].join(" ");
+}
+
+function formatHardOrderDiagnostic(input: {
+  edge: ModOrderEdge;
+  packageIdDisplayNameMap: Map<string, string>;
+  t: TranslateFn;
+}) {
+  const fromName =
+    input.packageIdDisplayNameMap.get(input.edge.fromPackageId) ??
+    input.edge.fromPackageId;
+  const toName =
+    input.packageIdDisplayNameMap.get(input.edge.toPackageId) ??
+    input.edge.toPackageId;
+  const summary = input.t("mod_details.order_violation_summary_before", {
+    subject: fromName,
+    target: toName,
+  });
+
+  if (input.edge.kind === "official_anchor") {
+    return [
+      summary,
+      input.t("mod_details.order_violation_reason_official_anchor"),
+    ].join(" ");
+  }
+
+  const reasonParams =
+    input.edge.kind === "dependency" ||
+    input.edge.kind === "load_after" ||
+    input.edge.kind === "force_load_after"
+      ? { subject: toName, target: fromName }
+      : { subject: fromName, target: toName };
+
+  return [
+    summary,
+    input.t(getOrderViolationReasonKey(input.edge.kind), reasonParams),
+  ].join(" ");
+}
+
 function DetailSection({
   title,
   description,
+  tone = "default",
   open,
   onToggle,
   children,
 }: {
   title: string;
   description: string;
+  tone?: DetailSectionTone;
   open: boolean;
   onToggle: () => void;
   children: ReactNode;
 }) {
   return (
-    <section className="rounded-2xl border border-border/60 bg-background/80 shadow-sm">
+    <section
+      className={cn(
+        "rounded-2xl border bg-background/80 shadow-sm",
+        tone === "danger"
+          ? "border-destructive/30 bg-destructive/[0.03]"
+          : "border-border/60",
+      )}
+    >
       <button
         type="button"
         className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left"
         onClick={onToggle}
       >
         <div className="space-y-1">
-          <p className="text-sm font-semibold text-foreground">{title}</p>
-          <p className="text-xs leading-relaxed text-muted-foreground">
+          <p
+            className={cn(
+              "text-sm font-semibold",
+              tone === "danger" ? "text-destructive" : "text-foreground",
+            )}
+          >
+            {title}
+          </p>
+          <p
+            className={cn(
+              "text-xs leading-relaxed",
+              tone === "danger"
+                ? "text-destructive/80"
+                : "text-muted-foreground",
+            )}
+          >
             {description}
           </p>
         </div>
-        <span className="shrink-0 rounded-full border border-border/60 bg-background/90 p-1 text-muted-foreground">
+        <span
+          className={cn(
+            "shrink-0 rounded-full border bg-background/90 p-1",
+            tone === "danger"
+              ? "border-destructive/20 text-destructive"
+              : "border-border/60 text-muted-foreground",
+          )}
+        >
           {open ? (
             <ChevronDown className="h-4 w-4" />
           ) : (
@@ -155,6 +397,37 @@ export function ModDetailsPane({
     controller.analysis?.diagnostics.filter(
       (diagnostic) => diagnostic.code === "hard_order_violation",
     ) ?? [];
+  const selectedPackageId =
+    controller.selectedMod?.dependencyMetadata.packageIdNormalized ?? null;
+  const packageIdDisplayNameMap = buildPackageIdDisplayNameMap(controller);
+  const selectedOrderViolations = buildSelectedOrderViolations({
+    orderViolations: controller.currentOrderViolations,
+    selectedPackageId,
+    packageIdDisplayNameMap,
+  });
+  const hardOrderDiagnosticMessages = hardOrderDiagnostics.map((diagnostic) => {
+    const edge = controller.analysis?.edges.find(
+      (candidate) =>
+        candidate.fromPackageId === diagnostic.packageIds[0] &&
+        candidate.toPackageId === diagnostic.packageIds[1],
+    );
+
+    return {
+      key: `${diagnostic.code}:${diagnostic.packageIds.join(":")}:${diagnostic.message}`,
+      message: edge
+        ? formatHardOrderDiagnostic({
+            edge,
+            packageIdDisplayNameMap,
+            t,
+          })
+        : diagnostic.message,
+    };
+  });
+  const selectedExplanationViolations = buildExplanationViolations({
+    analysis: controller.analysis,
+    selectedPackageId,
+    packageIdDisplayNameMap,
+  });
   const resolvedVersion =
     controller.selectedMod?.version ?? t("mod_details.unknown_version");
 
@@ -267,12 +540,8 @@ export function ModDetailsPane({
                     {t("mod_details.load_order_errors")}
                   </p>
                   <ul className="mt-4 list-disc space-y-2 pl-5 text-sm leading-relaxed text-destructive/90">
-                    {hardOrderDiagnostics.map((diagnostic) => (
-                      <li
-                        key={`${diagnostic.code}:${diagnostic.packageIds.join(":")}:${diagnostic.message}`}
-                      >
-                        {diagnostic.message}
-                      </li>
+                    {hardOrderDiagnosticMessages.map((diagnostic) => (
+                      <li key={diagnostic.key}>{diagnostic.message}</li>
                     ))}
                   </ul>
                 </div>
@@ -326,6 +595,7 @@ export function ModDetailsPane({
               <DetailSection
                 title={t("mod_details.section_order_hints_title")}
                 description={t("mod_details.section_order_hints_description")}
+                tone={selectedOrderViolations.length > 0 ? "danger" : "default"}
                 open={openSections.orderHints}
                 onToggle={() =>
                   setOpenSections((current) => ({
@@ -335,6 +605,45 @@ export function ModDetailsPane({
                 }
               >
                 <div className="grid gap-3">
+                  {selectedOrderViolations.length > 0 ? (
+                    <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-4">
+                      <p className="flex items-center gap-2 text-sm font-semibold text-destructive">
+                        <span className="h-2 w-2 rounded-full bg-destructive" />
+                        {t("mod_details.selected_order_conflicts_title", {
+                          count: String(selectedOrderViolations.length),
+                        })}
+                      </p>
+                      <ul className="mt-3 flex flex-col gap-3 text-sm text-destructive/90">
+                        {selectedOrderViolations.map((violation) => {
+                          const relationMessage = t(
+                            getOrderViolationMoveKey(violation.direction),
+                            {
+                              target: violation.relatedModName,
+                            },
+                          );
+                          const reasonMessage = t(
+                            getOrderViolationReasonKey(violation.kind),
+                            getOrderViolationReasonParams({
+                              selectedModName: controller.selectedMod.name,
+                              violation,
+                            }),
+                          );
+
+                          return (
+                            <li
+                              key={`${violation.direction}:${violation.kind}:${violation.relatedModName}`}
+                              className="rounded-xl border border-destructive/20 bg-background/80 px-3 py-3"
+                            >
+                              <p className="font-medium">{relationMessage}</p>
+                              <p className="mt-1 text-xs leading-relaxed text-destructive/80">
+                                {reasonMessage}
+                              </p>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </div>
+                  ) : null}
                   {[
                     {
                       label: t("mod_details.absolute_dependencies"),
@@ -378,7 +687,7 @@ export function ModDetailsPane({
                 </div>
               </DetailSection>
 
-              {controller.selectedExplanation?.reasons.length ? (
+              {selectedExplanationViolations.length ? (
                 <DetailSection
                   title={t("mod_details.section_analysis_title")}
                   description={t("mod_details.section_analysis_description")}
@@ -391,16 +700,23 @@ export function ModDetailsPane({
                   }
                 >
                   <ul className="space-y-3 text-sm leading-relaxed text-foreground/85 select-text">
-                    {controller.selectedExplanation.reasons.map(
-                      (reason, index) => (
-                        <li key={reason} className="flex gap-3">
-                          <span className="font-semibold text-primary">
-                            {index + 1}.
-                          </span>
-                          <span>{reason}</span>
-                        </li>
-                      ),
-                    )}
+                    {selectedExplanationViolations.map((violation, index) => (
+                      <li
+                        key={`${violation.direction}:${violation.kind}:${violation.relatedModName}`}
+                        className="flex gap-3"
+                      >
+                        <span className="font-semibold text-primary">
+                          {index + 1}.
+                        </span>
+                        <span>
+                          {formatSelectedOrderViolation({
+                            t,
+                            selectedModName: controller.selectedMod.name,
+                            violation,
+                          })}
+                        </span>
+                      </li>
+                    ))}
                   </ul>
                 </DetailSection>
               ) : null}

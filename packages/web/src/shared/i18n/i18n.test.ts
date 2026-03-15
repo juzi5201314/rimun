@@ -1,4 +1,3 @@
-import { describe, expect, it, vi } from "vitest";
 import {
   DEFAULT_LOCALE,
   detectSystemLocale,
@@ -6,7 +5,11 @@ import {
   toHtmlLangAttribute,
   writeStoredLocale,
 } from "@/shared/i18n/locale";
+import enUsRaw from "@/shared/i18n/locales/en-us.toml?raw";
+import zhCnRaw from "@/shared/i18n/locales/zh-cn.toml?raw";
 import { translate } from "@/shared/i18n/translate";
+import * as toml from "@iarna/toml";
+import { describe, expect, it, vi } from "vitest";
 
 describe("i18n translate", () => {
   it("falls back to default locale when entry is missing", () => {
@@ -48,6 +51,37 @@ describe("i18n translate", () => {
 
     expect(translate(dictionaries, "zh-cn", "missing.key")).toBe("missing.key");
   });
+
+  it("includes the mod order error translations in both locales", () => {
+    const dictionaries = {
+      "en-us": toml.parse(enUsRaw) as Record<string, unknown>,
+      "zh-cn": toml.parse(zhCnRaw) as Record<string, unknown>,
+    } as const;
+    const keys = [
+      "mod_details.selected_order_conflicts_title",
+      "mod_details.order_violation_move_before",
+      "mod_details.order_violation_move_after",
+      "mod_details.order_violation_summary_before",
+      "mod_details.order_violation_summary_after",
+      "mod_details.order_violation_reason_dependency",
+      "mod_details.order_violation_reason_load_after",
+      "mod_details.order_violation_reason_force_load_after",
+      "mod_details.order_violation_reason_load_before",
+      "mod_details.order_violation_reason_force_load_before",
+      "mod_details.order_violation_reason_official_anchor",
+      "mod_library_dialogs.apply_sort_skipped_error_feedback",
+    ];
+    const params = {
+      count: 1,
+      subject: "Harmony",
+      target: "Core",
+    };
+
+    for (const key of keys) {
+      expect(translate(dictionaries, "en-us", key, params)).not.toBe(key);
+      expect(translate(dictionaries, "zh-cn", key, params)).not.toBe(key);
+    }
+  });
 });
 
 describe("i18n locale selection", () => {
@@ -77,4 +111,3 @@ describe("i18n locale selection", () => {
     expect(toHtmlLangAttribute("zh-cn")).toBe("zh-CN");
   });
 });
-
