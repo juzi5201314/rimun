@@ -1,0 +1,62 @@
+{
+  "milestone": "web-mod-library-60fps",
+  "round": 1,
+  "status": "fail",
+  "assertionsSummary": {
+    "total": 31,
+    "passed": 30,
+    "failed": 1,
+    "blocked": 0
+  },
+  "passedAssertions": [
+    "VAL-WEB-MODLIB-001",
+    "VAL-WEB-MODLIB-002",
+    "VAL-WEB-MODLIB-003",
+    "VAL-WEB-MODLIB-004",
+    "VAL-WEB-MODLIB-005",
+    "VAL-WEB-MODLIB-006",
+    "VAL-WEB-MODLIB-007",
+    "VAL-WEB-MODLIB-008",
+    "VAL-WEB-MODLIB-009",
+    "VAL-WEB-MODLIB-010",
+    "VAL-WEB-MODLIB-011",
+    "VAL-WEB-MODLIB-012",
+    "VAL-WEB-MODLIB-013",
+    "VAL-WEB-MODLIB-014",
+    "VAL-WEB-MODLIB-015",
+    "VAL-WEB-MODLIB-016",
+    "VAL-WEB-MODLIB-017",
+    "VAL-WEB-MODLIB-018",
+    "VAL-WEB-MODLIB-019",
+    "VAL-WEB-MODLIB-020",
+    "VAL-WEB-MODLIB-021",
+    "VAL-WEB-PERF-001",
+    "VAL-WEB-PERF-002",
+    "VAL-WEB-PERF-003",
+    "VAL-CROSS-001",
+    "VAL-CROSS-002",
+    "VAL-CROSS-003",
+    "VAL-CROSS-005",
+    "VAL-CROSS-008",
+    "VAL-CROSS-009"
+  ],
+  "failedAssertions": [
+    {
+      "id": "VAL-CROSS-004",
+      "reason": "Profile switching clears the active search/filter context instead of recomputing results under the current search/filter state."
+    }
+  ],
+  "blockedAssertions": [],
+  "appliedUpdates": [
+    {
+      "target": "user-testing.md",
+      "description": "Added browser-validation notes about falling back to direct execution when Task-based flow validators fail to launch and about left-side targeting for fixture Active → Inactive drops.",
+      "source": "flow-report"
+    }
+  ],
+  "previousRound": null,
+  "notes": [
+    "The dedicated Task subagent launcher failed before producing any output in this environment, so the validator executed the browser flows directly in the parent worker session.",
+    "All other web-mod-library-60fps assertions passed; only VAL-CROSS-004 remains failing."
+  ]
+}

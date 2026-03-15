@@ -1,0 +1,36 @@
+{
+  "groupId": "browser-cross-004-rerun",
+  "testedAt": "2026-03-15T13:36:56+08:00",
+  "surface": "browser web UI",
+  "testingTool": "agent-browser",
+  "assertionResults": [
+    {
+      "id": "VAL-CROSS-004",
+      "status": "pass",
+      "reason": "With the Workshop source filter and search term 'hug' active, switching from Default to Builder preserved both controls and recomputed the visible rows for the Builder dataset: HugsLib moved to the Inactive column, the Active column showed an empty-state message, and no console errors were observed.",
+      "evidenceFiles": [
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/web-mod-library-60fps/browser-cross-004-rerun/VAL-CROSS-004-before-switch.png",
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/web-mod-library-60fps/browser-cross-004-rerun/after-switch-modal.png",
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/web-mod-library-60fps/browser-cross-004-rerun/VAL-CROSS-004-after-switch.png"
+      ]
+    }
+  ],
+  "interactiveChecks": [
+    {
+      "action": "Opened the fixture demo, expanded the profile and filter panels, set Source to Workshop, and entered the search term 'hug' while the Default profile was selected.",
+      "observed": "The filtered Default-profile view showed only HugsLib in the Active column, with the search input containing 'hug' and the Workshop filter highlighted."
+    },
+    {
+      "action": "Switched the profile selector from Default to Builder while keeping the existing search/filter context, then dismissed the Builder dependency prompt with 'Keep Current State'.",
+      "observed": "The search input still contained 'hug', the Workshop filter remained selected, the Builder dataset recomputed under that filter so HugsLib appeared in the Inactive column, the Active column showed 'No visible mods', and browser errors remained empty."
+    }
+  ],
+  "frictions": [
+    {
+      "type": "tooling",
+      "description": "The Task-based user-testing-flow-validator launcher still fails in this environment because it resolves to an invalid custom model name; the parent validator executed the browser flow directly instead."
+    }
+  ],
+  "blockers": [],
+  "toolsUsed": ["agent-browser", "Execute", "ApplyPatch"]
+}

@@ -1,51 +1,15 @@
 {
   "milestone": "web-mod-library-60fps",
-  "round": 1,
-  "status": "fail",
+  "round": 2,
+  "status": "pass",
   "assertionsSummary": {
-    "total": 31,
-    "passed": 30,
-    "failed": 1,
+    "total": 1,
+    "passed": 1,
+    "failed": 0,
     "blocked": 0
   },
-  "passedAssertions": [
-    "VAL-WEB-MODLIB-001",
-    "VAL-WEB-MODLIB-002",
-    "VAL-WEB-MODLIB-003",
-    "VAL-WEB-MODLIB-004",
-    "VAL-WEB-MODLIB-005",
-    "VAL-WEB-MODLIB-006",
-    "VAL-WEB-MODLIB-007",
-    "VAL-WEB-MODLIB-008",
-    "VAL-WEB-MODLIB-009",
-    "VAL-WEB-MODLIB-010",
-    "VAL-WEB-MODLIB-011",
-    "VAL-WEB-MODLIB-012",
-    "VAL-WEB-MODLIB-013",
-    "VAL-WEB-MODLIB-014",
-    "VAL-WEB-MODLIB-015",
-    "VAL-WEB-MODLIB-016",
-    "VAL-WEB-MODLIB-017",
-    "VAL-WEB-MODLIB-018",
-    "VAL-WEB-MODLIB-019",
-    "VAL-WEB-MODLIB-020",
-    "VAL-WEB-MODLIB-021",
-    "VAL-WEB-PERF-001",
-    "VAL-WEB-PERF-002",
-    "VAL-WEB-PERF-003",
-    "VAL-CROSS-001",
-    "VAL-CROSS-002",
-    "VAL-CROSS-003",
-    "VAL-CROSS-005",
-    "VAL-CROSS-008",
-    "VAL-CROSS-009"
-  ],
-  "failedAssertions": [
-    {
-      "id": "VAL-CROSS-004",
-      "reason": "Profile switching clears the active search/filter context instead of recomputing results under the current search/filter state."
-    }
-  ],
+  "passedAssertions": ["VAL-CROSS-004"],
+  "failedAssertions": [],
   "blockedAssertions": [],
   "appliedUpdates": [
     {
@@ -54,9 +18,10 @@
       "source": "flow-report"
     }
   ],
-  "previousRound": null,
+  "previousRound": ".factory/validation/web-mod-library-60fps/user-testing/synthesis.round-1.json",
   "notes": [
-    "The dedicated Task subagent launcher failed before producing any output in this environment, so the validator executed the browser flows directly in the parent worker session.",
-    "All other web-mod-library-60fps assertions passed; only VAL-CROSS-004 remains failing."
+    "This rerun tested only the previously failed assertion VAL-CROSS-004 after the profile-switch filter-context fix landed.",
+    "The dedicated Task subagent launcher still failed in this environment because it resolved to an invalid custom model name, so the validator executed the browser flow directly in the parent worker session.",
+    "VAL-CROSS-004 now passes: profile switching preserved the active Workshop + 'hug' filter context and recomputed the visible results for the Builder dataset without console errors."
   ]
 }
