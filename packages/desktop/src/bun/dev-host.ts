@@ -73,6 +73,8 @@ Bun.serve({
         switch (requestMethod) {
           case "getBootstrap":
             return hostService.getBootstrap();
+          case "getI18nDictionaries":
+            return hostService.getI18nDictionaries();
           case "getProfileCatalog":
             return hostService.getProfileCatalog();
           case "createProfile":

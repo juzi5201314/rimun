@@ -349,6 +349,7 @@ describe("rpc schema map", () => {
       "deleteProfile",
       "detectPaths",
       "getBootstrap",
+      "getI18nDictionaries",
       "getLlmSettings",
       "getModSourceSnapshot",
       "getProfileCatalog",

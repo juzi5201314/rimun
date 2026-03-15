@@ -14,6 +14,7 @@ export function createMainWindowRpc(
     handlers: {
       requests: {
         getBootstrap: () => hostService.getBootstrap(),
+        getI18nDictionaries: () => hostService.getI18nDictionaries(),
         getProfileCatalog: () => hostService.getProfileCatalog(),
         createProfile: (payload) => hostService.createProfile(payload),
         renameProfile: (payload) => hostService.renameProfile(payload),

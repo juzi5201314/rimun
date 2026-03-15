@@ -150,14 +150,6 @@ function extractTagText(xml: string, tagName: string) {
   return match ? normalizeText(match[1] ?? "") || null : null;
 }
 
-function extractTagMultilineText(xml: string, tagName: string) {
-  const match = new RegExp(`<${tagName}>([\\s\\S]*?)</${tagName}>`, "i").exec(
-    xml,
-  );
-
-  return match ? normalizeMultilineText(match[1] ?? "") || null : null;
-}
-
 function extractTagList(xml: string, tagName: string) {
   const match = new RegExp(`<${tagName}>([\\s\\S]*?)</${tagName}>`, "i").exec(
     xml,

@@ -30,6 +30,7 @@ async function callHost<T>(method: string, payload: unknown): Promise<T> {
 export function createHttpHostApi(): RimunHostApi {
   return {
     getBootstrap: () => callHost("getBootstrap", {}),
+    getI18nDictionaries: () => callHost("getI18nDictionaries", {}),
     getProfileCatalog: () => callHost("getProfileCatalog", {}),
     createProfile: (input) => callHost("createProfile", input),
     renameProfile: (input) => callHost("renameProfile", input),

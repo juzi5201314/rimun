@@ -423,6 +423,22 @@ export const applyActivePackageIdsInputSchema = z.object({
 
 export const applyActivePackageIdsResultSchema = modProfileSummarySchema;
 
+const i18nDictionaryNodeSchema: z.ZodType<unknown> = z.lazy(() =>
+  z.union([
+    z.string(),
+    z.record(z.string(), i18nDictionaryNodeSchema),
+  ]),
+);
+
+export const i18nDictionarySchema = z.record(z.string(), i18nDictionaryNodeSchema);
+
+export const i18nDictionariesSchema = z
+  .object({
+    "en-us": i18nDictionarySchema,
+    "zh-cn": i18nDictionarySchema,
+  })
+  .strict();
+
 export type EmptyParams = z.infer<typeof emptyParamsSchema>;
 export type ProfileId = z.infer<typeof profileIdSchema>;
 export type ProfileName = z.infer<typeof profileNameSchema>;
@@ -502,3 +518,4 @@ export type ApplyActivePackageIdsInput = z.infer<
 export type ApplyActivePackageIdsResult = z.infer<
   typeof applyActivePackageIdsResultSchema
 >;
+export type I18nDictionariesPayload = z.infer<typeof i18nDictionariesSchema>;

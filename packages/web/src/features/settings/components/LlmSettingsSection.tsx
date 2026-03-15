@@ -80,10 +80,7 @@ function createDraftId() {
   return `draft-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-function createDefaultProvider(
-  index: number,
-  name: string,
-): LlmProviderConfig {
+function createDefaultProvider(name: string): LlmProviderConfig {
   return {
     id: createDraftId(),
     name,
@@ -95,7 +92,7 @@ function createDefaultProvider(
   };
 }
 
-function createDefaultModel(index: number, label: string): LlmModelConfig {
+function createDefaultModel(label: string): LlmModelConfig {
   return {
     id: createDraftId(),
     modelId: "",
@@ -531,7 +528,6 @@ export function LlmSettingsSection() {
     setFeedback(null);
     setDraft((currentDraft) => {
       const nextProvider = createDefaultProvider(
-        currentDraft.providers.length + 1,
         t("llm_settings.provider_default_name", {
           index: currentDraft.providers.length + 1,
         }),
@@ -575,7 +571,6 @@ export function LlmSettingsSection() {
       models: [
         ...provider.models,
         createDefaultModel(
-          provider.models.length + 1,
           t("llm_settings.model_default_label", {
             index: provider.models.length + 1,
           }),

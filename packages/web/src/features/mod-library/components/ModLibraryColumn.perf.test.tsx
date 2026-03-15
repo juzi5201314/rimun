@@ -1,7 +1,9 @@
 import { ModLibraryColumn } from "@/features/mod-library/components/ModLibraryColumn";
 import type { HomePageModListItem } from "@/features/mod-library/hooks/useHomePageController";
 import type { ModColumnId } from "@/features/mod-library/lib/mod-list-order";
+import { HostApiProvider } from "@/shared/host/HostApiProvider";
 import { I18nProvider } from "@/shared/i18n";
+import { createTestHostApi } from "@/shared/testing/createTestHostApi.node";
 import { DndContext } from "@dnd-kit/core";
 import {
   cleanup,
@@ -406,10 +408,13 @@ function ModLibraryPerfHarness() {
 
 describe("ModLibraryColumn perf guardrails", () => {
   it("VAL-PERF-001 keeps rendered DOM rows bounded for items=2000 at rest and after scrolling", async () => {
+    const hostApi = createTestHostApi();
     const view = render(
-      <I18nProvider>
-        <ModLibraryPerfHarness />
-      </I18nProvider>,
+      <HostApiProvider hostApi={hostApi}>
+        <I18nProvider>
+          <ModLibraryPerfHarness />
+        </I18nProvider>
+      </HostApiProvider>,
     );
 
     try {
@@ -429,10 +434,13 @@ describe("ModLibraryColumn perf guardrails", () => {
   });
 
   it("VAL-PERF-001 keeps rendered DOM rows bounded for items=2000 after toggling filters", async () => {
+    const hostApi = createTestHostApi();
     const view = render(
-      <I18nProvider>
-        <ModLibraryPerfHarness />
-      </I18nProvider>,
+      <HostApiProvider hostApi={hostApi}>
+        <I18nProvider>
+          <ModLibraryPerfHarness />
+        </I18nProvider>
+      </HostApiProvider>,
     );
 
     try {
@@ -481,10 +489,13 @@ describe("ModLibraryColumn perf guardrails", () => {
   });
 
   it("VAL-PERF-001 keeps rendered DOM rows bounded for items=2000 after a cross-column move", async () => {
+    const hostApi = createTestHostApi();
     const view = render(
-      <I18nProvider>
-        <ModLibraryPerfHarness />
-      </I18nProvider>,
+      <HostApiProvider hostApi={hostApi}>
+        <I18nProvider>
+          <ModLibraryPerfHarness />
+        </I18nProvider>
+      </HostApiProvider>,
     );
 
     try {

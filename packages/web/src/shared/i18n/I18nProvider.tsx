@@ -1,5 +1,4 @@
-import enUsRaw from "@/shared/i18n/locales/en-us.toml?raw";
-import zhCnRaw from "@/shared/i18n/locales/zh-cn.toml?raw";
+import { useHostApi } from "@/shared/host/HostApiProvider";
 import {
   DEFAULT_LOCALE,
   type UiLocale,
@@ -9,7 +8,6 @@ import {
   writeStoredLocale,
 } from "@/shared/i18n/locale";
 import { translate } from "@/shared/i18n/translate";
-import * as toml from "@iarna/toml";
 import {
   type PropsWithChildren,
   createContext,
@@ -28,26 +26,22 @@ type I18nContextValue = {
 
 const I18nContext = createContext<I18nContextValue | null>(null);
 
-function parseTomlDictionary(payload: string) {
-  const parsed = toml.parse(payload);
+type TranslationDictionary = Record<string, unknown>;
 
-  if (!parsed || typeof parsed !== "object") {
-    return {};
-  }
-
-  return parsed as Record<string, unknown>;
-}
-
-const DICTIONARIES = {
-  "en-us": parseTomlDictionary(enUsRaw),
-  "zh-cn": parseTomlDictionary(zhCnRaw),
-} satisfies Record<UiLocale, Record<string, unknown>>;
+const EMPTY_DICTIONARIES: Record<UiLocale, TranslationDictionary> = {
+  "en-us": {},
+  "zh-cn": {},
+};
 
 export function I18nProvider({ children }: PropsWithChildren) {
+  const getHostApi = useHostApi();
   const storedLocale = readStoredLocale();
   const systemLocale = detectSystemLocale();
   const initialLocale = storedLocale ?? systemLocale ?? DEFAULT_LOCALE;
   const [locale, setLocale] = useState<UiLocale>(initialLocale);
+  const [dictionaries, setDictionaries] = useState<
+    Record<UiLocale, TranslationDictionary> | null
+  >(null);
 
   useEffect(() => {
     if (!storedLocale) {
@@ -56,14 +50,50 @@ export function I18nProvider({ children }: PropsWithChildren) {
   }, [initialLocale, storedLocale]);
 
   useEffect(() => {
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const hostApi = await getHostApi();
+        const next = await hostApi.getI18nDictionaries();
+
+        if (cancelled) {
+          return;
+        }
+
+        setDictionaries(next);
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+
+        if (import.meta.env.DEV) {
+          // biome-ignore lint/suspicious/noConsole: dev-only load failure hint
+          console.warn(
+            "[i18n] Failed to load dictionaries from host; falling back to keys.",
+            error,
+          );
+        }
+
+        setDictionaries(EMPTY_DICTIONARIES);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [getHostApi]);
+
+  useEffect(() => {
     writeStoredLocale(locale);
     document.documentElement.lang = toHtmlLangAttribute(locale);
   }, [locale]);
 
   const t = useCallback(
-    (key: string, params?: Record<string, unknown>) =>
-      translate(DICTIONARIES, locale, key, params),
-    [locale],
+    (key: string, params?: Record<string, unknown>) => {
+      return dictionaries ? translate(dictionaries, locale, key, params) : key;
+    },
+    [dictionaries, locale],
   );
 
   const value = useMemo<I18nContextValue>(
@@ -74,6 +104,10 @@ export function I18nProvider({ children }: PropsWithChildren) {
     }),
     [locale, t],
   );
+
+  if (!dictionaries) {
+    return null;
+  }
 
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 }

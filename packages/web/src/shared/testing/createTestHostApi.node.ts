@@ -1,3 +1,5 @@
+import enUsRaw from "@/shared/i18n/locales/en-us.toml?raw";
+import zhCnRaw from "@/shared/i18n/locales/zh-cn.toml?raw";
 import type {
   AppSettings,
   ApplyActivePackageIdsInput,
@@ -21,6 +23,17 @@ import type {
   ValidatePathInput,
   ValidatePathResult,
 } from "@rimun/shared";
+import * as toml from "@iarna/toml";
+
+function parseTomlDictionary(payload: string) {
+  const parsed = toml.parse(payload);
+
+  if (!parsed || typeof parsed !== "object") {
+    return {};
+  }
+
+  return parsed as Record<string, unknown>;
+}
 
 const defaultSettings: AppSettings = {
   channel: "steam",
@@ -105,8 +118,8 @@ const defaultBootstrap: BootstrapPayload = {
 };
 
 const defaultI18nDictionaries: I18nDictionariesPayload = {
-  "en-us": {},
-  "zh-cn": {},
+  "en-us": parseTomlDictionary(enUsRaw),
+  "zh-cn": parseTomlDictionary(zhCnRaw),
 };
 
 const defaultLlmSettings: LlmSettings = {

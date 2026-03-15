@@ -20,6 +20,7 @@ import type {
   ValidatePathResult,
 } from "@rimun/shared";
 import { rimunRpcSchemas } from "@rimun/shared";
+import { loadI18nDictionaries } from "./i18n/dictionaries";
 import { searchModelMetadata } from "./llm/models-dev";
 import {
   createReadablePathResolver,
@@ -181,6 +182,7 @@ export function createRimunHostService(
 
   return {
     getBootstrap: async () => resolveBootstrap(repository),
+    getI18nDictionaries: async () => loadI18nDictionaries(),
     getProfileCatalog: async () =>
       rimunRpcSchemas.bun.requests.getProfileCatalog.response.parse(
         await ensureProfileCatalog(repository, toReadablePath),

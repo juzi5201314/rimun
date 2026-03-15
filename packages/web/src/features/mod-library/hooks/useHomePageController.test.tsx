@@ -1,5 +1,5 @@
 import { AppProviders } from "@/app/AppProviders";
-import { createTestHostApi } from "@/shared/testing/createTestHostApi";
+import { createTestHostApi } from "@/shared/testing/createTestHostApi.node";
 import type { ModSourceSnapshot } from "@rimun/shared";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { PropsWithChildren } from "react";

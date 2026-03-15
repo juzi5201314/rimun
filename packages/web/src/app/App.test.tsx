@@ -1,6 +1,6 @@
 import { App } from "@/app/App";
 import { createAppRouter } from "@/app/router";
-import { createTestHostApi } from "@/shared/testing/createTestHostApi";
+import { createTestHostApi } from "@/shared/testing/createTestHostApi.node";
 import type { DetectPathsInput } from "@rimun/shared";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";

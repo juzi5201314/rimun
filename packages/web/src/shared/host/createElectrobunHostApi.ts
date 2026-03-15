@@ -80,6 +80,12 @@ export async function createElectrobunHostApi(): Promise<RimunHostApi> {
   const electroview = new Electroview({ rpc });
   const typedRpc = electroview.rpc;
 
+  if (!("bunSocket" in (electroview as unknown as object))) {
+    throw new Error(
+      "Electrobun bunSocket is not available in this renderer context.",
+    );
+  }
+
   if (!typedRpc) {
     throw new Error(
       "Electrobun RPC bridge is not available in this renderer context.",
@@ -96,6 +102,8 @@ export async function createElectrobunHostApi(): Promise<RimunHostApi> {
   return {
     getBootstrap: async () =>
       callWithReadySocket(() => typedRpc.request.getBootstrap({})),
+    getI18nDictionaries: async () =>
+      callWithReadySocket(() => typedRpc.request.getI18nDictionaries({})),
     getProfileCatalog: async () =>
       callWithReadySocket(() => typedRpc.request.getProfileCatalog({})),
     createProfile: async (input) =>

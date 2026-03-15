@@ -1,6 +1,6 @@
 import "./globals.css";
 import { App } from "@/app/App";
-import { createTestHostApi } from "@/shared/testing/createTestHostApi";
+import type { RimunHostApi } from "@rimun/shared";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
@@ -9,6 +9,8 @@ const container = document.getElementById("root");
 if (!container) {
   throw new Error("Missing root container");
 }
+
+const rootContainer: HTMLElement = container;
 
 function resolveDevelopmentHostApi() {
   if (!import.meta.env.DEV) {
@@ -24,7 +26,9 @@ function resolveDevelopmentHostApi() {
     return undefined;
   }
 
-  return createTestHostApi();
+  return import("@/shared/testing/createTestHostApi").then(
+    ({ createTestHostApi }) => createTestHostApi(),
+  );
 }
 
 async function installDevelopmentHelpers() {
@@ -39,10 +43,18 @@ async function installDevelopmentHelpers() {
   installRimunPerfCapture(window);
 }
 
-void installDevelopmentHelpers();
+async function bootstrap() {
+  const maybeHostApi = resolveDevelopmentHostApi();
+  const hostApi: RimunHostApi | undefined =
+    maybeHostApi instanceof Promise ? await maybeHostApi : maybeHostApi;
 
-createRoot(container).render(
-  <StrictMode>
-    <App hostApi={resolveDevelopmentHostApi()} />
-  </StrictMode>,
-);
+  await installDevelopmentHelpers();
+
+  createRoot(rootContainer).render(
+    <StrictMode>
+      <App hostApi={hostApi} />
+    </StrictMode>,
+  );
+}
+
+void bootstrap();

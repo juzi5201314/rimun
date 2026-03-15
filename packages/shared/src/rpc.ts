@@ -8,6 +8,7 @@ import type {
   DetectPathsInput,
   DetectPathsResult,
   EmptyParams,
+  I18nDictionariesPayload,
   LlmSettings,
   ModSourceSnapshot,
   ProfileCatalogResult,
@@ -34,6 +35,7 @@ import {
   detectPathsInputSchema,
   detectPathsResultSchema,
   emptyParamsSchema,
+  i18nDictionariesSchema,
   llmSettingsSchema,
   modSourceSnapshotSchema,
   profileCatalogResultSchema,
@@ -70,6 +72,7 @@ export type RpcSchema<
 
 export type RimunHostRequests = {
   getBootstrap: RpcRequestDefinition<EmptyParams, BootstrapPayload>;
+  getI18nDictionaries: RpcRequestDefinition<EmptyParams, I18nDictionariesPayload>;
   getProfileCatalog: RpcRequestDefinition<EmptyParams, ProfileCatalogResult>;
   createProfile: RpcRequestDefinition<CreateProfileInput, ProfileCatalogResult>;
   renameProfile: RpcRequestDefinition<RenameProfileInput, ProfileCatalogResult>;
@@ -107,6 +110,7 @@ export type RimunRpc = RimunHostContract;
 
 export type RimunHostApi = {
   getBootstrap(): Promise<BootstrapPayload>;
+  getI18nDictionaries(): Promise<I18nDictionariesPayload>;
   getProfileCatalog(): Promise<ProfileCatalogResult>;
   createProfile(input: CreateProfileInput): Promise<ProfileCatalogResult>;
   renameProfile(input: RenameProfileInput): Promise<ProfileCatalogResult>;
@@ -134,6 +138,10 @@ export const rimunRpcSchemas = {
       getBootstrap: {
         params: emptyParamsSchema,
         response: bootstrapPayloadSchema,
+      },
+      getI18nDictionaries: {
+        params: emptyParamsSchema,
+        response: i18nDictionariesSchema,
       },
       getProfileCatalog: {
         params: emptyParamsSchema,
