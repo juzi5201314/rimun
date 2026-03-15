@@ -110,12 +110,15 @@ export const ModLibraryColumn = memo(function ModLibraryColumn({
   const scrollElementRef = useRef<HTMLDivElement | null>(null);
   const rowVirtualizer = useVirtualizer({
     count: items.length,
-    estimateSize: () => 74,
+    estimateSize: () => 86,
     getScrollElement: () => scrollElementRef.current,
     initialRect: {
       height: 720,
       width: 0,
     },
+    getItemKey: (index) => items[index]?.id ?? index,
+    measureElement: (element) =>
+      element?.getBoundingClientRect().height ?? 86,
     overscan: 8,
   });
   const virtualRows = rowVirtualizer.getVirtualItems();
@@ -168,6 +171,8 @@ export const ModLibraryColumn = memo(function ModLibraryColumn({
                     dropIndicator={dropIndicator}
                     isSelected={selectedModId === item.id}
                     item={item}
+                    measureElement={rowVirtualizer.measureElement}
+                    virtualIndex={virtualRow.index}
                     onSelect={onSelectMod}
                   />
                 </div>

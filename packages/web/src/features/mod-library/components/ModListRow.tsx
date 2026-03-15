@@ -13,7 +13,14 @@ import {
   Package,
   ShieldCheck,
 } from "lucide-react";
-import { type ReactNode, type RefObject, memo, useEffect, useRef } from "react";
+import {
+  type ReactNode,
+  type RefObject,
+  memo,
+  useCallback,
+  useEffect,
+  useRef,
+} from "react";
 
 export type DropIndicator = {
   packageId: string | null;
@@ -26,7 +33,9 @@ export type ModListRowProps = {
   dropIndicator: DropIndicator;
   isSelected: boolean;
   item: HomePageModListItem;
+  measureElement?: (element: HTMLDivElement | null) => void;
   onSelect: (modId: string) => void;
+  virtualIndex?: number;
 };
 
 function getRowDropPlacement(
@@ -61,6 +70,7 @@ export function areModListRowPropsEqual(
     previous.item === next.item &&
     previous.isSelected === next.isSelected &&
     previous.onSelect === next.onSelect &&
+    previous.virtualIndex === next.virtualIndex &&
     getRowDropPlacement(previous.dropIndicator, previous.item) ===
       getRowDropPlacement(next.dropIndicator, next.item) &&
     isRowDragged(previous.activeDragPackageId, previous.item) ===
@@ -124,7 +134,7 @@ function ModListRowDragHandle({
   if (!item.isDraggable) {
     return (
       <div
-        className="flex h-8 w-8 items-center justify-center rounded-xl border border-border/50 bg-muted/20 text-muted-foreground/55"
+        className="flex size-8 items-center justify-center rounded-xl border border-border/50 bg-muted/20 text-muted-foreground/55"
         title={item.dragDisabledReason ?? "This mod cannot be dragged."}
       >
         {item.isOfficial ? (
@@ -142,7 +152,7 @@ function ModListRowDragHandle({
     <button
       type="button"
       aria-label={`Drag ${item.name}`}
-      className="flex h-8 w-8 items-center justify-center rounded-xl border border-border/60 bg-background/90 text-muted-foreground transition-colors hover:border-primary/30 hover:bg-primary/5 hover:text-primary"
+      className="flex size-8 items-center justify-center rounded-xl border border-border/60 bg-background/90 text-muted-foreground transition-colors hover:border-primary/30 hover:bg-primary/5 hover:text-primary"
       {...attributes}
       {...listeners}
       onClick={(event) => event.stopPropagation()}
@@ -168,6 +178,16 @@ function SourceBadge({ source }: { source: HomePageModListItem["source"] }) {
   );
 }
 
+function buildMetaSummary(item: HomePageModListItem) {
+  const parts = [];
+
+  if (item.version) {
+    parts.push(`v${item.version}`);
+  }
+
+  return parts.join(" · ");
+}
+
 export const ModListRowCard = memo(function ModListRowCard({
   dragHandle,
   isDragging,
@@ -185,10 +205,12 @@ export const ModListRowCard = memo(function ModListRowCard({
   showDropAfter: boolean;
   showDropBefore: boolean;
 }) {
+  const metaSummary = buildMetaSummary(item);
+
   return (
     <div
       className={cn(
-        "relative rounded-2xl border bg-background/85 p-2 shadow-sm transition-colors",
+        "relative rounded-2xl border bg-background/85 px-2.5 py-2 shadow-sm transition-colors",
         isSelected
           ? "border-primary/40 bg-primary/10 ring-1 ring-inset ring-primary/20"
           : "border-border/50 hover:border-primary/20 hover:bg-primary/5",
@@ -202,24 +224,24 @@ export const ModListRowCard = memo(function ModListRowCard({
         <div className="absolute inset-x-3 bottom-0 z-20 h-[3px] translate-y-1/2 rounded-full bg-primary shadow-[0_0_0_1px_rgba(0,0,0,0.04)]" />
       ) : null}
 
-      <div className="flex min-h-14 items-start gap-2">
-        <div className="pt-1">{dragHandle}</div>
+      <div className="grid min-h-[72px] grid-cols-[auto_minmax(0,1fr)] gap-x-3">
+        <div className="flex items-center">{dragHandle}</div>
 
         <button
           type="button"
-          className="min-w-0 flex-1 text-left"
+          className="flex min-w-0 flex-col justify-center gap-1 text-left"
           onClick={onSelect}
         >
-          <div className="flex items-center gap-2">
+          <div className="flex min-w-0 items-center gap-2">
             {item.orderLabel !== null ? (
-              <div className="flex h-6 min-w-6 items-center justify-center rounded-full bg-primary/10 px-1.5 text-[11px] font-black text-primary">
+              <div className="flex h-6 min-w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 px-1.5 text-[11px] font-black text-primary">
                 {item.orderLabel}
               </div>
             ) : null}
 
             <span
               className={cn(
-                "truncate text-sm font-semibold tracking-tight",
+                "min-w-0 flex-1 truncate text-sm font-semibold tracking-tight",
                 item.enabled ? "text-foreground" : "text-foreground/90",
               )}
               title={item.name}
@@ -247,17 +269,17 @@ export const ModListRowCard = memo(function ModListRowCard({
             </div>
           </div>
 
-          <div className="mt-1 truncate font-mono text-[11px] text-muted-foreground/85">
+          <div className="truncate font-mono text-[11px] text-muted-foreground/85">
             {item.packageId ?? item.windowsPath}
           </div>
 
-          <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+          <div className="flex min-w-0 items-center gap-2 overflow-hidden text-[11px] text-muted-foreground">
             <SourceBadge source={item.source} />
-            {item.version ? (
-              <span className="font-mono">v{item.version}</span>
+            {metaSummary ? (
+              <span className="truncate font-mono">{metaSummary}</span>
             ) : null}
             {item.dragDisabledReason ? (
-              <span className="inline-flex items-center gap-1 text-amber-700">
+              <span className="inline-flex shrink-0 items-center gap-1 text-amber-700">
                 <AlertTriangle className="h-3 w-3" />
                 Locked
               </span>
@@ -274,9 +296,18 @@ export const ModListRow = memo(function ModListRow({
   dropIndicator,
   isSelected,
   item,
+  measureElement,
   onSelect,
+  virtualIndex,
 }: ModListRowProps) {
   const rowElementRef = useRef<HTMLDivElement | null>(null);
+  const setRowElementRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      rowElementRef.current = node;
+      measureElement?.(node);
+    },
+    [measureElement],
+  );
   const dropPlacement = getRowDropPlacement(dropIndicator, item);
   const showDropBefore = dropPlacement === "before";
   const showDropAfter = dropPlacement === "after";
@@ -284,8 +315,9 @@ export const ModListRow = memo(function ModListRow({
 
   return (
     <div
-      ref={rowElementRef}
+      ref={setRowElementRef}
       data-testid="mod-library-row"
+      data-index={virtualIndex}
       data-column-id={item.columnId}
       data-mod-id={item.id}
       data-package-id={item.packageIdNormalized ?? undefined}

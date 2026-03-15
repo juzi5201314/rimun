@@ -20,18 +20,25 @@ import {
 } from "lucide-react";
 
 function ToolbarChip({
+  className,
   label,
   value,
 }: {
+  className?: string;
   label: string;
   value: string;
 }) {
   return (
-    <div className="rounded-full border border-border/60 bg-background/80 px-3 py-1">
+    <div
+      className={cn(
+        "inline-flex h-7 items-center rounded-full border border-border/60 bg-background/80 px-2.5 text-[11px]",
+        className,
+      )}
+    >
       <span className="text-[11px] font-medium text-muted-foreground">
         {label}
       </span>
-      <span className="ml-1.5 text-[11px] font-semibold text-foreground">
+      <span className="ml-1 text-[11px] font-semibold text-foreground">
         {value}
       </span>
     </div>
@@ -54,8 +61,8 @@ export function ModLibraryPane({
     <section className="flex min-h-0 min-w-0 flex-1 flex-col border-r border-border/60 bg-background/20">
       <h2 className="sr-only">Mod Library</h2>
 
-      <header className="shrink-0 border-b border-border/60 bg-card/40 px-6 py-4">
-        <div className="flex flex-col gap-4">
+      <header className="shrink-0 border-b border-border/60 bg-card/40 px-5 py-3">
+        <div className="flex flex-col gap-3">
           <div className="flex flex-wrap items-center gap-2">
             <ToolbarChip
               label="Active"
@@ -73,7 +80,7 @@ export function ModLibraryPane({
             {controller.isDirty ? (
               <Badge
                 variant="outline"
-                className="border-amber-500/40 bg-amber-500/10 text-amber-700"
+                className="h-7 border-amber-500/40 bg-amber-500/10 text-amber-700"
                 title="Unsaved Changes"
               >
                 Unsaved changes
@@ -81,28 +88,26 @@ export function ModLibraryPane({
             ) : null}
           </div>
 
-          <div className="rounded-xl border border-border/60 bg-background/85 px-4 py-3 shadow-sm">
+          <div className="rounded-xl border border-border/60 bg-background/85 px-3 py-2.5 shadow-sm">
             <button
               type="button"
               aria-expanded={controller.isProfilePanelOpen}
               aria-label="Toggle Active Profile Panel"
-              className="flex w-full items-center justify-between gap-4 text-left"
+              className="flex w-full items-center justify-between gap-3 text-left"
               onClick={() =>
                 controller.setIsProfilePanelOpen((current) => !current)
               }
             >
-              <div className="space-y-1">
+              <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
                 <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
                   Active Profile
                 </p>
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-                  <span className="font-semibold text-foreground">
-                    {controller.currentProfile?.name ?? "No profile selected"}
-                  </span>
-                  <span className="text-muted-foreground">
-                    Active column order is the exact RimWorld load order.
-                  </span>
-                </div>
+                <span className="truncate text-sm font-semibold text-foreground">
+                  {controller.currentProfile?.name ?? "No profile selected"}
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  Active column order is the exact RimWorld load order.
+                </span>
               </div>
 
               <span className="shrink-0 rounded-full border border-border/60 bg-background/90 p-1 text-muted-foreground">
@@ -116,14 +121,14 @@ export function ModLibraryPane({
 
             {controller.isProfilePanelOpen ? (
               <>
-                <div className="mt-3 flex flex-wrap items-end gap-3 border-t border-border/50 pt-3">
-                  <label className="min-w-[150px] flex-1 space-y-1.5">
+                <div className="mt-2 flex flex-wrap items-end gap-2 border-t border-border/50 pt-2">
+                  <label className="min-w-[150px] flex-1">
                     <span className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
                       Profile Selection
                     </span>
                     <select
                       aria-label="Profile Selection"
-                      className="h-9 w-full rounded-lg border border-border/60 bg-background px-3 text-sm font-medium text-foreground outline-none"
+                      className="mt-1 h-8 w-full rounded-lg border border-border/60 bg-background px-3 text-sm font-medium text-foreground outline-none"
                       disabled={
                         controller.isBusy || !controller.currentProfileId
                       }
@@ -142,7 +147,7 @@ export function ModLibraryPane({
                     </select>
                   </label>
 
-                  <div className="min-w-[200px] flex-[1.4] space-y-1.5">
+                  <div className="min-w-[200px] flex-[1.4]">
                     <label
                       htmlFor="profile-name-input"
                       className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground"
@@ -152,7 +157,7 @@ export function ModLibraryPane({
                     <Input
                       id="profile-name-input"
                       aria-label="Profile Name"
-                      className="h-9 border-border/60 bg-background text-sm font-medium"
+                      className="mt-1 h-8 border-border/60 bg-background text-sm font-medium"
                       disabled={controller.isBusy || !controller.currentProfile}
                       value={controller.draftProfileName}
                       onChange={(event) => {
@@ -166,7 +171,7 @@ export function ModLibraryPane({
                     <Button
                       variant="outline"
                       size="sm"
-                      className="h-9 gap-2 px-3"
+                      className="h-8 gap-2 px-3"
                       title="New Profile"
                       onClick={controller.handleOpenCreateProfileDialog}
                     >
@@ -176,7 +181,7 @@ export function ModLibraryPane({
                     <Button
                       variant="outline"
                       size="sm"
-                      className="h-9 gap-2 px-3"
+                      className="h-8 gap-2 px-3"
                       title="Delete Profile"
                       onClick={controller.handleOpenDeleteProfileDialog}
                     >
@@ -185,7 +190,7 @@ export function ModLibraryPane({
                     </Button>
                     <Button
                       size="sm"
-                      className="h-9 gap-2 px-3"
+                      className="h-8 gap-2 px-3"
                       disabled={
                         controller.isBusy ||
                         !controller.currentProfile ||
@@ -199,28 +204,28 @@ export function ModLibraryPane({
                   </div>
                 </div>
 
-                <div className="mt-3 rounded-lg border border-border/50 bg-background/70 px-3 py-3">
+                <div className="mt-2 rounded-lg border border-border/50 bg-background/70 px-3 py-2.5">
                   <button
                     type="button"
                     aria-expanded={controller.isFilterPanelOpen}
                     aria-label="Toggle Filters Panel"
-                    className="flex w-full items-center justify-between gap-4 text-left"
+                    className="flex w-full items-center justify-between gap-3 text-left"
                     onClick={() =>
                       controller.setIsFilterPanelOpen((current) => !current)
                     }
                   >
-                    <div className="space-y-1">
+                    <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
                       <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
                         Filters
                       </p>
-                      <p className="text-xs text-muted-foreground sm:text-sm">
-                        Source:{" "}
-                        <span className="font-medium capitalize text-foreground">
-                          {controller.sourceFilter === "all"
-                            ? "all sources"
-                            : controller.sourceFilter}
-                        </span>
-                      </p>
+                      <span className="text-xs text-muted-foreground">
+                        Source:
+                      </span>
+                      <span className="text-xs font-medium capitalize text-foreground">
+                        {controller.sourceFilter === "all"
+                          ? "all sources"
+                          : controller.sourceFilter}
+                      </span>
                     </div>
 
                     <span className="shrink-0 rounded-full border border-border/60 bg-background/90 p-1 text-muted-foreground">
@@ -233,51 +238,46 @@ export function ModLibraryPane({
                   </button>
 
                   {controller.isFilterPanelOpen ? (
-                    <div className="mt-3 border-t border-border/50 pt-3">
-                      <div className="space-y-2">
-                        <p className="text-xs font-medium text-muted-foreground">
-                          Source
-                        </p>
-                        <div className="flex flex-wrap gap-2">
-                          <Button
-                            variant={
-                              controller.sourceFilter === "all"
-                                ? "secondary"
-                                : "outline"
-                            }
-                            size="sm"
-                            className="h-9 px-4"
-                            onClick={() => controller.setSourceFilter("all")}
-                          >
-                            All Sources
-                          </Button>
-                          <Button
-                            variant={
-                              controller.sourceFilter === "local"
-                                ? "secondary"
-                                : "outline"
-                            }
-                            size="sm"
-                            className="h-9 px-4"
-                            onClick={() => controller.setSourceFilter("local")}
-                          >
-                            Local
-                          </Button>
-                          <Button
-                            variant={
-                              controller.sourceFilter === "workshop"
-                                ? "secondary"
-                                : "outline"
-                            }
-                            size="sm"
-                            className="h-9 px-4"
-                            onClick={() =>
-                              controller.setSourceFilter("workshop")
-                            }
-                          >
-                            Workshop
-                          </Button>
-                        </div>
+                    <div className="mt-2 border-t border-border/50 pt-2">
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          variant={
+                            controller.sourceFilter === "all"
+                              ? "secondary"
+                              : "outline"
+                          }
+                          size="sm"
+                          className="h-8 px-3 text-xs"
+                          onClick={() => controller.setSourceFilter("all")}
+                        >
+                          All Sources
+                        </Button>
+                        <Button
+                          variant={
+                            controller.sourceFilter === "local"
+                              ? "secondary"
+                              : "outline"
+                          }
+                          size="sm"
+                          className="h-8 px-3 text-xs"
+                          onClick={() => controller.setSourceFilter("local")}
+                        >
+                          Local
+                        </Button>
+                        <Button
+                          variant={
+                            controller.sourceFilter === "workshop"
+                              ? "secondary"
+                              : "outline"
+                          }
+                          size="sm"
+                          className="h-8 px-3 text-xs"
+                          onClick={() =>
+                            controller.setSourceFilter("workshop")
+                          }
+                        >
+                          Workshop
+                        </Button>
                       </div>
                     </div>
                   ) : null}
@@ -289,7 +289,7 @@ export function ModLibraryPane({
           {controller.feedback ? (
             <div
               className={cn(
-                "flex items-center gap-3 rounded-2xl border px-4 py-3 text-sm",
+                "flex items-center gap-2 rounded-2xl border px-3 py-2 text-sm",
                 controller.feedback.tone === "success"
                   ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700"
                   : controller.feedback.tone === "warning"
@@ -314,8 +314,8 @@ export function ModLibraryPane({
       </header>
 
       {controller.analysis || controller.isDirty ? (
-        <div className="shrink-0 border-b border-border/60 bg-background/50 px-6 py-3">
-          <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="shrink-0 border-b border-border/60 bg-background/50 px-5 py-2.5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2 overflow-hidden">
               {controller.isDirty ? (
                 <Badge
@@ -390,13 +390,13 @@ export function ModLibraryPane({
         </div>
       ) : null}
 
-      <div className="shrink-0 border-b border-border/60 bg-background/95 px-6 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/85">
+      <div className="shrink-0 border-b border-border/60 bg-background/95 px-5 py-2.5 backdrop-blur supports-[backdrop-filter]:bg-background/85">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="relative min-w-[260px] flex-1">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/70" />
             <Input
               placeholder="Search by name, author, or package id"
-              className="h-10 w-full border-border/60 bg-background pl-9 text-sm"
+              className="h-9 w-full border-border/60 bg-background pl-9 text-sm"
               value={controller.searchQuery}
               onChange={(event) =>
                 controller.setSearchQuery(event.target.value)
@@ -406,7 +406,7 @@ export function ModLibraryPane({
           <Button
             variant="outline"
             size="sm"
-            className="h-10 gap-2 px-4 text-sm"
+            className="h-9 gap-2 px-3 text-sm"
             disabled={
               controller.isBusy ||
               controller.isRescanning ||
@@ -425,16 +425,16 @@ export function ModLibraryPane({
         </div>
       </div>
 
-      <div className="shrink-0 border-b border-border/40 bg-background/90 px-6 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/80">
-        <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-          <div className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-background/80 px-3 py-1.5">
+      <div className="shrink-0 border-b border-border/40 bg-background/90 px-5 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+        <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+          <div className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-background/80 px-2.5 py-1">
             <GripVertical className="h-3.5 w-3.5" />
             Drag between columns to enable or disable mods
           </div>
-          <div className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-background/80 px-3 py-1.5">
+          <div className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-background/80 px-2.5 py-1">
             Active column order is the exact saved load order
           </div>
-          <div className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-background/80 px-3 py-1.5">
+          <div className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-background/80 px-2.5 py-1">
             Inactive order is session-only
           </div>
         </div>
@@ -442,7 +442,7 @@ export function ModLibraryPane({
 
       <ModLibraryDragSurface controller={controller} />
 
-      <footer className="flex shrink-0 flex-wrap justify-between gap-3 border-t border-border/60 bg-card/20 px-6 py-3">
+      <footer className="flex shrink-0 flex-wrap justify-between gap-3 border-t border-border/60 bg-card/20 px-5 py-2">
         <div className="flex items-center gap-4 text-xs text-muted-foreground">
           <div className="flex items-center gap-1.5">
             <div className="h-1 w-1 rounded-full bg-emerald-500" />
