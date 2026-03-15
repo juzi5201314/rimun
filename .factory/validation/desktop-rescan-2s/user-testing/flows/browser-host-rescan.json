@@ -1,0 +1,160 @@
+{
+  "groupId": "browser-host-rescan",
+  "testedAt": "2026-03-15T07:49:10.067149+00:00",
+  "surface": "browser web UI",
+  "testingTool": "agent-browser",
+  "assertionResults": [
+    {
+      "id": "VAL-HOST-001",
+      "status": "pass",
+      "reason": "The live host-backed Rescan button flipped from enabled to disabled with a spinner during the request, then re-enabled after completion.",
+      "evidenceFiles": [
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/desktop-rescan-2s/browser-host-rescan/rescan-before.png",
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/desktop-rescan-2s/browser-host-rescan/rescan-during.png",
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/desktop-rescan-2s/browser-host-rescan/rescan-after.png",
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/desktop-rescan-2s/browser-host-rescan/rescan-state-events.json"
+      ]
+    },
+    {
+      "id": "VAL-HOST-002",
+      "status": "pass",
+      "reason": "During the live rescan, no full-screen blocking overlay states appeared; the recorded body-state observer kept Loading Profile, Persisting Data, Synchronizing Order, Generating Profile, Removing Record, and Analyzing Dependencies all false while the spinner was visible.",
+      "evidenceFiles": [
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/desktop-rescan-2s/browser-host-rescan/rescan-during.png",
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/desktop-rescan-2s/browser-host-rescan/rescan-state-events.json"
+      ]
+    },
+    {
+      "id": "VAL-HOST-003",
+      "status": "pass",
+      "reason": "While the live rescan spinner was active, the search box still accepted keystrokes, changing from 'hug' to 'slibhug' before the request completed, demonstrating the UI remained interactive.",
+      "evidenceFiles": [
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/desktop-rescan-2s/browser-host-rescan/rescan-state-events.json",
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/desktop-rescan-2s/browser-host-rescan/rescan-during.png",
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/desktop-rescan-2s/browser-host-rescan/rescan-after.png"
+      ]
+    },
+    {
+      "id": "VAL-HOST-004",
+      "status": "pass",
+      "reason": "A filtered HugsLib rescan updated the footer timestamp from 3:36:38 PM before the click to 3:37:52 PM after completion.",
+      "evidenceFiles": [
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/desktop-rescan-2s/browser-host-rescan/selection-before-rescan.png",
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/desktop-rescan-2s/browser-host-rescan/selection-rescan-after.png"
+      ]
+    },
+    {
+      "id": "VAL-HOST-005",
+      "status": "pass",
+      "reason": "After each successful live rescan, the page showed the success feedback message 'Mod library rescanned from the current configured roots.'",
+      "evidenceFiles": [
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/desktop-rescan-2s/browser-host-rescan/rescan-after.png",
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/desktop-rescan-2s/browser-host-rescan/selection-rescan-after.png"
+      ]
+    },
+    {
+      "id": "VAL-HOST-006",
+      "status": "pass",
+      "reason": "Creating a temporary unsaved profile-name draft surfaced the Unsaved changes badge and disabled the Rescan button, preventing the refetch while dirty state existed.",
+      "evidenceFiles": [
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/desktop-rescan-2s/browser-host-rescan/dirty-guard-profile-name.png"
+      ]
+    },
+    {
+      "id": "VAL-HOST-008",
+      "status": "pass",
+      "reason": "With the Workshop filter, search term 'hug', and HugsLib selected, a live rescan preserved both the search value and the HugsLib details selection across completion.",
+      "evidenceFiles": [
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/desktop-rescan-2s/browser-host-rescan/selection-before-rescan.png",
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/desktop-rescan-2s/browser-host-rescan/selection-rescan-during.png",
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/desktop-rescan-2s/browser-host-rescan/selection-rescan-after.png",
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/desktop-rescan-2s/browser-host-rescan/selection-rescan-events.json"
+      ]
+    },
+    {
+      "id": "VAL-CROSS-006",
+      "status": "pass",
+      "reason": "With the Workshop source filter and 'hug' search active, the live rescan preserved both controls and refreshed the filtered view plus Last Scan timestamp without clearing the filter context.",
+      "evidenceFiles": [
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/desktop-rescan-2s/browser-host-rescan/selection-before-rescan.png",
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/desktop-rescan-2s/browser-host-rescan/selection-rescan-after.png"
+      ]
+    },
+    {
+      "id": "VAL-CROSS-007",
+      "status": "pass",
+      "reason": "The machine exposed only the default live profile, so the rescan branch was exercised: because HugsLib still existed after the live rescan, the details pane remained on HugsLib instead of going stale.",
+      "evidenceFiles": [
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/desktop-rescan-2s/browser-host-rescan/selection-before-rescan.png",
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/desktop-rescan-2s/browser-host-rescan/selection-rescan-after.png",
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/desktop-rescan-2s/browser-host-rescan/selection-rescan-events.json"
+      ]
+    },
+    {
+      "id": "VAL-HOST-PERF-002",
+      "status": "blocked",
+      "reason": "The available real filesystem dataset on this machine contains 650 mods (49 active, 573 inactive, 650 total visible), not a near-2000-mod library. The live UI stayed responsive and the direct host scan evidence recorded a warm rescan around 698.8ms, but the contract explicitly requires near-2000 real-filesystem evidence, so this assertion cannot be passed here.",
+      "evidenceFiles": [
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/desktop-rescan-2s/browser-host-rescan/initial-page.png",
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/desktop-rescan-2s/browser-host-rescan/rescan-during.png",
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/desktop-rescan-2s/browser-host-rescan/rescan-after.png",
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/desktop-rescan-2s/host-contract-cli/real-dataset-rescan.txt"
+      ]
+    }
+  ],
+  "interactiveChecks": [
+    {
+      "action": "Opened the live host-backed Mod Library at http://127.0.0.1:5175/, confirmed the toolbar/footer counts, and captured the initial dataset size.",
+      "observed": "The local machine exposed a real filesystem dataset with 650 mods total (49 active, 573 inactive) and a single Default profile."
+    },
+    {
+      "action": "Filtered the live dataset to Workshop + 'hug', clicked HugsLib, then triggered Rescan while recording DOM state changes and screenshots.",
+      "observed": "The Rescan button disabled with a spinner, no global blocking overlay appeared, the success banner showed after completion, Last Scan advanced to 3:37:52 PM, and the details pane stayed on HugsLib."
+    },
+    {
+      "action": "Triggered another live rescan while typing into the search box during the in-flight window.",
+      "observed": "The search field accepted additional keystrokes before the spinner cleared, proving the UI remained interactive during the scan."
+    },
+    {
+      "action": "Edited the profile name to an unsaved draft without clicking Save.",
+      "observed": "The page showed the Unsaved changes badge plus 'Analysis Paused (Unsaved Draft)', and the Rescan button became disabled."
+    }
+  ],
+  "frictions": [
+    {
+      "type": "subagent-launch",
+      "description": "Task-based flow-validator launch failed immediately because this environment rejects the configured model name custom:GPT-5.4. The parent validator ran the browser flow directly."
+    },
+    {
+      "type": "service-reuse",
+      "description": "Ports 3071 and 5175 were already occupied by healthy dev services. The validator reused those services instead of killing them."
+    },
+    {
+      "type": "environment-scope",
+      "description": "Only one real live profile was available on this machine, so VAL-CROSS-007 was exercised through the rescan branch rather than a profile-switch branch."
+    }
+  ],
+  "blockers": [
+    {
+      "type": "dataset-size",
+      "description": "VAL-HOST-PERF-002 requires near-2000-mod real-filesystem evidence, but the available live dataset contains 650 mods only."
+    }
+  ],
+  "toolsUsed": [
+    "agent-browser",
+    "Execute",
+    "ApplyPatch"
+  ],
+  "evidenceFiles": [
+    "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/desktop-rescan-2s/browser-host-rescan/initial-page.png",
+    "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/desktop-rescan-2s/browser-host-rescan/rescan-before.png",
+    "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/desktop-rescan-2s/browser-host-rescan/rescan-during.png",
+    "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/desktop-rescan-2s/browser-host-rescan/rescan-after.png",
+    "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/desktop-rescan-2s/browser-host-rescan/selection-before-rescan.png",
+    "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/desktop-rescan-2s/browser-host-rescan/selection-rescan-during.png",
+    "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/desktop-rescan-2s/browser-host-rescan/selection-rescan-after.png",
+    "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/desktop-rescan-2s/browser-host-rescan/dirty-guard-profile-name.png",
+    "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/desktop-rescan-2s/browser-host-rescan/rescan-state-events.json",
+    "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/desktop-rescan-2s/browser-host-rescan/selection-rescan-events.json"
+  ]
+}

@@ -1,0 +1,83 @@
+{
+  "groupId": "host-contract-cli",
+  "testedAt": "2026-03-15T07:49:10.068278+00:00",
+  "surface": "targeted host contract tests",
+  "testingTool": "Execute",
+  "assertionResults": [
+    {
+      "id": "VAL-HOST-007",
+      "status": "pass",
+      "reason": "Targeted web and desktop tests both verified single-flight rescan behavior: the controller coalesced overlapping rescans, and the host service reused a single in-flight snapshot request per profile snapshot.",
+      "evidenceFiles": [
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/desktop-rescan-2s/host-contract-cli/web-rescan-tests.txt",
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/desktop-rescan-2s/host-contract-cli/host-service-tests.txt"
+      ]
+    },
+    {
+      "id": "VAL-HOST-SAFETY-001",
+      "status": "pass",
+      "reason": "The desktop host safety test proved two rescans left ModsConfig.xml contents and mtime unchanged in a sandboxed config root.",
+      "evidenceFiles": [
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/desktop-rescan-2s/host-contract-cli/host-service-tests.txt"
+      ]
+    },
+    {
+      "id": "VAL-HOST-SAFETY-002",
+      "status": "pass",
+      "reason": "The desktop host safety test proved two rescans created no persistent scan-cache artifacts beyond allowlisted SQLite files in the app-data directory.",
+      "evidenceFiles": [
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/desktop-rescan-2s/host-contract-cli/host-service-tests.txt"
+      ]
+    },
+    {
+      "id": "VAL-HOST-PERF-001",
+      "status": "pass",
+      "reason": "The targeted perf test printed 'VAL-HOST-PERF-001 items=2000 warmRescanMs=57.4' and passed, confirming the synthetic 2000-item warm rescan stayed well under the 2000ms threshold.",
+      "evidenceFiles": [
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/desktop-rescan-2s/host-contract-cli/mods-perf-tests.txt"
+      ]
+    }
+  ],
+  "commandsRun": [
+    {
+      "command": "bun run --cwd /home/soeur/project/rimun/packages/web test -- --reporter=verbose src/app/App.test.tsx src/features/mod-library/hooks/useHomePageController.test.tsx",
+      "exitCode": 0,
+      "observation": "Vitest passed 10/10 tests, including 'coalesces overlapping rescans into a single host snapshot request', 'preserves active search and source filters when switching profiles', and 'keeps the UI interactive during rescan and preserves search, selection, and feedback'.",
+      "evidenceFile": "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/desktop-rescan-2s/host-contract-cli/web-rescan-tests.txt"
+    },
+    {
+      "command": "bun run --cwd /home/soeur/project/rimun/packages/desktop test src/bun/host-service.test.ts",
+      "exitCode": 0,
+      "observation": "bun test passed 3/3 tests, including 'reuses a single in-flight mod source snapshot request per profile snapshot', 'does not modify ModsConfig.xml when rescanning the library', and 'does not create persistent scan cache artifacts under the app data directory'.",
+      "evidenceFile": "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/desktop-rescan-2s/host-contract-cli/host-service-tests.txt"
+    },
+    {
+      "command": "bun run --cwd /home/soeur/project/rimun/packages/desktop test src/bun/mods.perf.test.ts",
+      "exitCode": 0,
+      "observation": "bun test passed 2/2 tests and printed 'VAL-HOST-PERF-001 items=2000 warmRescanMs=57.4 cacheHits=2000 cacheMisses=2000 pool=0'.",
+      "evidenceFile": "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/desktop-rescan-2s/host-contract-cli/mods-perf-tests.txt"
+    },
+    {
+      "command": "bun --cwd /home/soeur/project/rimun --eval '<real dataset snapshot timing script>'",
+      "exitCode": 0,
+      "observation": "The live settings resolved to E:\\SteamLibrary\\steamapps\\common\\RimWorld plus workshop/config roots, scanned 650 real mods, and logged a warm rescan around 698.8ms with [mod-scan] timing breakdowns.",
+      "evidenceFile": "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/desktop-rescan-2s/host-contract-cli/real-dataset-rescan.txt"
+    }
+  ],
+  "frictions": [
+    {
+      "type": "subagent-launch",
+      "description": "Task-based flow-validator launch failed immediately because this environment rejects the configured model name custom:GPT-5.4. The parent validator ran the targeted commands directly."
+    }
+  ],
+  "blockers": [],
+  "toolsUsed": [
+    "Execute"
+  ],
+  "evidenceFiles": [
+    "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/desktop-rescan-2s/host-contract-cli/web-rescan-tests.txt",
+    "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/desktop-rescan-2s/host-contract-cli/host-service-tests.txt",
+    "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/desktop-rescan-2s/host-contract-cli/mods-perf-tests.txt",
+    "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/desktop-rescan-2s/host-contract-cli/real-dataset-rescan.txt"
+  ]
+}

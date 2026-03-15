@@ -14,6 +14,8 @@ Validation surface discovery, setup notes, and resource classification.
 - Preferred validation dataset: fixture demo mode for stable mock content and deterministic screenshots
 - Required routes: `/` and `/settings`
 - Required evidence: screenshots to `/tmp`, plus console error review
+- For `desktop-rescan-2s`, switch from `/?fixture=demo` to the live host-backed root `http://127.0.0.1:5175/` so Rescan hits the real Bun host. Record the actual visible dataset size from the toolbar/footer and capture real rescan timing from host-side `[mod-scan]` logs.
+- When validating `VAL-HOST-006` on the live dataset, prefer creating a temporary unsaved profile-name draft in the profile panel to trigger the dirty guard. This avoids clicking Save or mutating the real RimWorld config while still exercising the disabled-Rescan state.
 
 - Surface: terminal-based perf guardrail validation
 - Tool: shell commands from repo root (use `tuistory` only if interactive terminal capture is needed)
@@ -34,6 +36,8 @@ Validation surface discovery, setup notes, and resource classification.
 - Stay inside `/home/soeur/project/rimun` and the assigned evidence/output paths only.
 - Use the dev services from `.factory/services.yaml`: Bun host on `http://127.0.0.1:3071` and Vite on `http://127.0.0.1:5175`.
 - Prefer `http://127.0.0.1:5175/?fixture=demo` for deterministic drag/drop, filter, profile-switch, and route-blocker assertions. Switch to the host-backed root URL only if a flow specifically requires live backend behavior that the fixture cannot cover.
+- For live Rescan assertions, keep the session on `http://127.0.0.1:5175/`, not fixture mode. Capture one filtered/selected rescan flow (search + source filter + selected mod) to verify spinner/disabled state, preserved controls, updated `Last Scan`, success feedback, and selection persistence.
+- If ports `3071` or `5175` are already occupied but the healthchecks pass, reuse the existing healthy services instead of killing them. Record that reuse in the flow report as setup friction rather than treating it as a blocker.
 - Use a dedicated `agent-browser` session for this validator; do not reuse another validator's browser state.
 - Avoid actions that would write back to a real RimWorld installation or config. In particular, do not click save/apply actions unless the assigned assertion explicitly requires it.
 - For `VAL-WEB-PERF-001/002/003`, use `window.__rimunPerfCapture.start(label)` before the drag stress interaction and `window.__rimunPerfCapture.stop()` immediately after, then save the returned JSON in the flow report.
