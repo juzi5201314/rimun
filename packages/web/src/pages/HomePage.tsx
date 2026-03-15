@@ -9,6 +9,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/shared/components/ui/card";
+import { useI18n } from "@/shared/i18n";
 import { AlertTriangle, FolderSearch, HardDrive } from "lucide-react";
 import type { MouseEvent as ReactMouseEvent } from "react";
 import { useState } from "react";
@@ -16,6 +17,7 @@ import { Link, useBeforeUnload, useBlocker } from "react-router-dom";
 
 export function HomePage() {
   const controller = useHomePageController();
+  const { t } = useI18n();
   const [asideWidth, setAsideWidth] = useState(38);
   const routeBlocker = useBlocker(controller.isDirty);
 
@@ -55,7 +57,7 @@ export function HomePage() {
     return (
       <div className="flex h-full items-center justify-center bg-background/40">
         <p className="rw-text animate-pulse font-black uppercase tracking-widest text-primary">
-          Loading Profiles...
+          {t("common.loading_profiles")}
         </p>
       </div>
     );
@@ -68,10 +70,10 @@ export function HomePage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-destructive">
               <AlertTriangle className="h-5 w-5" />
-              Failed To Load Profiles
+              {t("home.failed_load_profiles_title")}
             </CardTitle>
             <CardDescription>
-              The desktop backend did not return the available mod profiles.
+              {t("home.failed_load_profiles_description")}
             </CardDescription>
           </CardHeader>
         </Card>
@@ -86,10 +88,10 @@ export function HomePage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-destructive">
               <AlertTriangle className="h-5 w-5" />
-              Failed To Load Mod Library
+              {t("home.failed_load_mod_library_title")}
             </CardTitle>
             <CardDescription>
-              The desktop backend did not return a mod scan result.
+              {t("home.failed_load_mod_library_description")}
             </CardDescription>
           </CardHeader>
         </Card>
@@ -108,11 +110,10 @@ export function HomePage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-3 text-2xl">
               <HardDrive className="h-6 w-6 text-primary" />
-              Mod Library Needs Configuration
+              {t("home.needs_configuration_title")}
             </CardTitle>
             <CardDescription>
-              A RimWorld installation path must be saved before the backend can
-              scan local or workshop mods.
+              {t("home.needs_configuration_description")}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -138,7 +139,7 @@ export function HomePage() {
             <Link to="/settings">
               <Button className="gap-2">
                 <FolderSearch className="h-4 w-4" />
-                Open Core Config
+                {t("home.open_core_config")}
               </Button>
             </Link>
           </CardContent>

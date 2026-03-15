@@ -1,4 +1,5 @@
 import { Button } from "@/shared/components/ui/button";
+import { useI18n } from "@/shared/i18n";
 import { cn } from "@/shared/lib/utils";
 import type { ReactNode } from "react";
 import { useEffect } from "react";
@@ -30,13 +31,16 @@ export function AlertDialog({
   description,
   confirmLabel,
   confirmDisabled = false,
-  cancelLabel = "Cancel",
+  cancelLabel,
   tone = "default",
   busy = false,
   onConfirm,
   onCancel,
   children,
 }: AlertDialogProps) {
+  const { t } = useI18n();
+  const resolvedCancelLabel = cancelLabel ?? t("common.cancel");
+
   useEffect(() => {
     if (!open) {
       return;
@@ -68,7 +72,7 @@ export function AlertDialog({
       <button
         type="button"
         className="absolute inset-0"
-        aria-label="Close dialog backdrop"
+        aria-label={t("dialog.close_backdrop")}
         onClick={() => {
           if (!busy) {
             onCancel();
@@ -85,7 +89,7 @@ export function AlertDialog({
       >
         <div className="shrink-0 space-y-3 border-b border-border/60 px-6 py-5">
           <p className="text-[10px] font-black uppercase tracking-[0.3em] text-primary">
-            Action Required
+            {t("dialog.action_required")}
           </p>
           <h3
             id="alert-dialog-title"
@@ -109,7 +113,7 @@ export function AlertDialog({
             onClick={onCancel}
             disabled={busy}
           >
-            {cancelLabel}
+            {resolvedCancelLabel}
           </Button>
           <Button
             type="button"

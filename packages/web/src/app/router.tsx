@@ -1,6 +1,7 @@
 import { HomePage } from "@/pages/HomePage";
 import { SettingsPage } from "@/pages/SettingsPage";
 import { cn } from "@/shared/lib/utils";
+import { useI18n } from "@/shared/i18n";
 import {
   ChevronLeft,
   ChevronRight,
@@ -52,6 +53,7 @@ function SidebarLink({
 
 function RootLayout() {
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const { t } = useI18n();
 
   return (
     <div className="flex h-screen w-full overflow-hidden bg-background text-foreground font-sans">
@@ -64,7 +66,9 @@ function RootLayout() {
         <button
           type="button"
           onClick={() => setIsCollapsed(!isCollapsed)}
-          aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+          aria-label={
+            isCollapsed ? t("app.sidebar_expand") : t("app.sidebar_collapse")
+          }
           className="absolute right-0 top-10 z-30 flex h-8 w-8 translate-x-1/2 items-center justify-center rounded-full border border-border bg-background text-muted-foreground shadow-sm transition-colors hover:text-foreground"
         >
           {isCollapsed ? (
@@ -92,7 +96,7 @@ function RootLayout() {
             <div className="flex items-center gap-2 mt-1">
               <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
               <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
-                System Active
+                {t("app.system_active")}
               </p>
             </div>
           )}
@@ -102,13 +106,13 @@ function RootLayout() {
           <SidebarLink
             to="/"
             icon={List}
-            label="Mod Library"
+            label={t("nav.mod_library")}
             collapsed={isCollapsed}
           />
           <SidebarLink
             to="/settings"
             icon={Settings}
-            label="Settings"
+            label={t("nav.settings")}
             collapsed={isCollapsed}
           />
         </nav>
@@ -119,13 +123,19 @@ function RootLayout() {
             isCollapsed ? "items-center p-4" : "p-5",
           )}
         >
-          <div className="flex items-center gap-2" title="Dev Console">
+          <div
+            className="flex items-center gap-2"
+            title={t("app.dev_console")}
+          >
             <Terminal className="w-3.5 h-3.5 shrink-0" />
-            {!isCollapsed && <span>Dev Console</span>}
+            {!isCollapsed && <span>{t("app.dev_console")}</span>}
           </div>
-          <div className="flex items-center gap-2" title="Integrity Verified">
+          <div
+            className="flex items-center gap-2"
+            title={t("app.verified")}
+          >
             <Shield className="w-3.5 h-3.5 text-primary/40 shrink-0" />
-            {!isCollapsed && <span>Verified</span>}
+            {!isCollapsed && <span>{t("app.verified")}</span>}
           </div>
         </div>
       </aside>
