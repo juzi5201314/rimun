@@ -9,6 +9,7 @@ import {
 import { useModSourceSnapshotQuery } from "@/features/mod-source/hooks/useModSourceSnapshotQuery";
 import { useDelayedBusy } from "@/shared/hooks/useDelayedBusy";
 import { useHostApi } from "@/shared/host/HostApiProvider";
+import { useI18n } from "@/shared/i18n";
 import { queryKeys } from "@/shared/lib/queryKeys";
 import {
   analyzeModOrder,
@@ -71,6 +72,7 @@ function isVisibleMod(
 }
 
 export function useHomePageController() {
+  const { t } = useI18n();
   const queryClient = useQueryClient();
   const getHostApi = useHostApi();
   const profileCatalogQuery = useQuery({
@@ -331,9 +333,9 @@ export function useHomePageController() {
       return {
         ...mod,
         dragDisabledReason: !packageIdNormalized
-          ? "Missing packageId"
+          ? t("home_controller.missing_package_id")
           : !isUniquePackageId
-            ? "Duplicate packageId"
+            ? t("home_controller.duplicate_package_id")
             : null,
         enabled,
         isDraggable: Boolean(packageIdNormalized && isUniquePackageId),
@@ -343,7 +345,7 @@ export function useHomePageController() {
           .toLowerCase(),
       };
     });
-  }, [draftActivePackageIds, modLibrary, packageIdCounts]);
+  }, [draftActivePackageIds, modLibrary, packageIdCounts, t]);
   const activeIndexByPackageId = useMemo(() => {
     const nextMap = new Map<string, number>();
 
@@ -585,7 +587,7 @@ export function useHomePageController() {
     feedbackMessage: string;
   }) {
     if (!currentProfileId || !currentProfile) {
-      throw new Error("No profile is selected.");
+      throw new Error(t("home_controller.no_profile_selected"));
     }
 
     const nextName = draftProfileName.trim() || currentProfile.name;
@@ -608,7 +610,7 @@ export function useHomePageController() {
     try {
       await persistDraft({
         applyToGame: true,
-        feedbackMessage: "Profile saved and applied to RimWorld.",
+        feedbackMessage: t("home_controller.profile_saved_applied"),
       });
     } catch (error) {
       setFeedback({
@@ -616,7 +618,7 @@ export function useHomePageController() {
         message:
           error instanceof Error
             ? error.message
-            : "Failed to save the profile.",
+            : t("home_controller.failed_save_profile"),
       });
     }
   }
@@ -630,7 +632,7 @@ export function useHomePageController() {
       if (isDirty) {
         await persistDraft({
           applyToGame: true,
-          feedbackMessage: "Saved current profile before switching.",
+          feedbackMessage: t("home_controller.saved_before_switching"),
         });
       }
 
@@ -644,8 +646,8 @@ export function useHomePageController() {
       setFeedback({
         tone: "success",
         message: switchedProfile
-          ? `Switched to ${switchedProfile.name}.`
-          : "Switched profile.",
+          ? t("home_controller.switched_to", { name: switchedProfile.name })
+          : t("home_controller.switched_profile"),
       });
     } catch (error) {
       setFeedback({
@@ -653,7 +655,7 @@ export function useHomePageController() {
         message:
           error instanceof Error
             ? error.message
-            : "Failed to switch mod profile.",
+            : t("home_controller.failed_switch_profile"),
       });
     }
   }
@@ -673,7 +675,7 @@ export function useHomePageController() {
       if (isDirty) {
         await persistDraft({
           applyToGame: true,
-          feedbackMessage: "Saved current profile before creating a new one.",
+          feedbackMessage: t("home_controller.saved_before_creating"),
         });
       }
 
@@ -684,7 +686,7 @@ export function useHomePageController() {
       const createdProfile = catalog.profiles.at(-1);
 
       if (!createdProfile) {
-        throw new Error("The new profile could not be resolved.");
+        throw new Error(t("home_controller.new_profile_unresolved"));
       }
 
       await switchProfileMutation.mutateAsync({
@@ -694,7 +696,9 @@ export function useHomePageController() {
       setNewProfileName("");
       setFeedback({
         tone: "success",
-        message: `Created and switched to ${createdProfile.name}.`,
+        message: t("home_controller.created_switched_to", {
+          name: createdProfile.name,
+        }),
       });
     } catch (error) {
       setFeedback({
@@ -702,7 +706,7 @@ export function useHomePageController() {
         message:
           error instanceof Error
             ? error.message
-            : "Failed to create a new profile.",
+            : t("home_controller.failed_create_profile"),
       });
     }
   }
@@ -725,8 +729,11 @@ export function useHomePageController() {
       setFeedback({
         tone: "success",
         message: nextProfile
-          ? `Deleted ${currentProfile.name}. Active profile is now ${nextProfile.name}.`
-          : `Deleted ${currentProfile.name}.`,
+          ? t("home_controller.deleted_profile_active_now", {
+              deleted: currentProfile.name,
+              active: nextProfile.name,
+            })
+          : t("home_controller.deleted_profile", { name: currentProfile.name }),
       });
     } catch (error) {
       setFeedback({
@@ -734,7 +741,7 @@ export function useHomePageController() {
         message:
           error instanceof Error
             ? error.message
-            : "Failed to delete the profile.",
+            : t("home_controller.failed_delete_profile"),
       });
     }
   }
@@ -744,7 +751,7 @@ export function useHomePageController() {
       return;
     }
 
-    setNewProfileName(`Copy of ${currentProfile.name}`);
+    setNewProfileName(t("home_controller.copy_of", { name: currentProfile.name }));
     setIsCreateProfileDialogOpen(true);
   }
 
@@ -776,7 +783,7 @@ export function useHomePageController() {
 
         setFeedback({
           tone: "success",
-          message: "Mod library rescanned from the current configured roots.",
+          message: t("home_controller.rescanned_success"),
         });
       } catch (error) {
         setFeedback({
@@ -784,7 +791,7 @@ export function useHomePageController() {
           message:
             error instanceof Error
               ? error.message
-              : "Failed to rescan mod roots.",
+              : t("home_controller.failed_rescan"),
         });
       } finally {
         rescanRequestRef.current = null;
@@ -819,7 +826,9 @@ export function useHomePageController() {
       setDismissedDependencyAnalysisAt(new Date().toISOString());
       setFeedback({
         tone: "success",
-        message: `Enabled ${nextActivePackageIds.length - previousActiveCount} missing dependency mods.`,
+        message: t("home_controller.enabled_missing_deps", {
+          count: nextActivePackageIds.length - previousActiveCount,
+        }),
       });
     } catch (error) {
       setFeedback({
@@ -827,7 +836,7 @@ export function useHomePageController() {
         message:
           error instanceof Error
             ? error.message
-            : "Failed to enable missing dependencies.",
+            : t("home_controller.failed_enable_deps"),
       });
     }
   }
@@ -852,13 +861,15 @@ export function useHomePageController() {
       setDismissedSortAnalysisAt(new Date().toISOString());
       setFeedback({
         tone: "success",
-        message: "Applied the recommended active mod order.",
+        message: t("home_controller.applied_recommended_order"),
       });
     } catch (error) {
       setFeedback({
         tone: "error",
         message:
-          error instanceof Error ? error.message : "Failed to apply mod order.",
+          error instanceof Error
+            ? error.message
+            : t("home_controller.failed_apply_mod_order"),
       });
     }
   }

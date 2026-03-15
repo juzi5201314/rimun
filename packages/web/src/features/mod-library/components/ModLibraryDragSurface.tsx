@@ -11,6 +11,7 @@ import type {
   DropPlacement,
   ModColumnId,
 } from "@/features/mod-library/lib/mod-list-order";
+import { useI18n } from "@/shared/i18n";
 import {
   DndContext,
   type DragOverEvent,
@@ -99,6 +100,7 @@ export function ModLibraryDragSurface({
 }: {
   controller: HomePageController;
 }) {
+  const { t } = useI18n();
   const [activeDrag, setActiveDrag] = useState<ActiveDragState>(null);
   const [dropIndicator, setDropIndicator] = useState<ColumnDropIndicator>(null);
   const sensors = useSensors(
@@ -193,22 +195,22 @@ export function ModLibraryDragSurface({
           <ModLibraryColumn
             activeDragPackageId={inactiveColumnDragState.activeDragPackageId}
             columnId="inactive"
-            description="Installed but not active. Drag within this column to stage a temporary order for this session."
+            description={t("mod_library_columns.inactive_description")}
             dropIndicator={inactiveColumnDragState.dropIndicator}
             items={controller.visibleInactiveMods}
             selectedModId={controller.selectedMod?.id ?? null}
-            title="Inactive Mods"
+            title={t("mod_library_columns.inactive_title")}
             totalCount={controller.inactiveMods.length}
             onSelectMod={controller.setSelectedModId}
           />
           <ModLibraryColumn
             activeDragPackageId={activeColumnDragState.activeDragPackageId}
             columnId="active"
-            description="Exact RimWorld load order. Top to bottom is the sequence that will be saved."
+            description={t("mod_library_columns.active_description")}
             dropIndicator={activeColumnDragState.dropIndicator}
             items={controller.visibleActiveMods}
             selectedModId={controller.selectedMod?.id ?? null}
-            title="Active Mods"
+            title={t("mod_library_columns.active_title")}
             totalCount={controller.activeMods.length}
             onSelectMod={controller.setSelectedModId}
           />

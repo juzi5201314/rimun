@@ -1,6 +1,7 @@
 import type { HomePageController } from "@/features/mod-library/hooks/useHomePageController";
 import { AlertDialog } from "@/shared/components/ui/alert-dialog";
 import { Input } from "@/shared/components/ui/input";
+import { useI18n } from "@/shared/i18n";
 import { Sparkles } from "lucide-react";
 import type { Blocker } from "react-router-dom";
 
@@ -11,32 +12,30 @@ export function HomePageDialogs({
   controller: HomePageController;
   routeBlocker: Blocker;
 }) {
+  const { t } = useI18n();
+
   return (
     <>
       <AlertDialog
         open={routeBlocker.state === "blocked"}
-        title="Discard Unsaved Profile Changes?"
-        description="You have unsaved profile edits. Leaving this page now will discard the current draft."
-        confirmLabel="Discard Changes"
-        cancelLabel="Stay Here"
+        title={t("mod_library_dialogs.discard_title")}
+        description={t("mod_library_dialogs.discard_description")}
+        confirmLabel={t("mod_library_dialogs.discard_confirm")}
+        cancelLabel={t("mod_library_dialogs.discard_cancel")}
         tone="warning"
         onConfirm={() => routeBlocker.proceed?.()}
         onCancel={() => routeBlocker.reset?.()}
       >
         <div className="space-y-3 text-sm text-muted-foreground">
-          <p>
-            Save the profile first if you want to keep the current active mod
-            list, ordering, and profile name edits.
-          </p>
+          <p>{t("mod_library_dialogs.discard_body")}</p>
         </div>
       </AlertDialog>
 
       <AlertDialog
         open={controller.isCreateProfileDialogOpen}
-        title="Create New Profile"
-        description="Create a new profile from the current saved snapshot."
-        confirmLabel="Create Profile"
-        cancelLabel="Cancel"
+        title={t("mod_library_dialogs.create_title")}
+        description={t("mod_library_dialogs.create_description")}
+        confirmLabel={t("mod_library_dialogs.create_confirm")}
         tone="default"
         busy={
           controller.createProfileMutation.isPending ||
@@ -63,7 +62,7 @@ export function HomePageDialogs({
             htmlFor="new-profile-name"
             className="text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground"
           >
-            Profile Name
+            {t("mod_library_dialogs.profile_name_label")}
           </label>
           <Input
             id="new-profile-name"
@@ -72,7 +71,7 @@ export function HomePageDialogs({
             onChange={(event) =>
               controller.setNewProfileName(event.target.value)
             }
-            placeholder="Combat Run"
+            placeholder={t("mod_library_dialogs.create_placeholder")}
             onKeyDown={(event) => {
               if (event.key === "Enter" && controller.newProfileName.trim()) {
                 event.preventDefault();
@@ -82,12 +81,11 @@ export function HomePageDialogs({
           />
           {controller.isDirty ? (
             <p className="text-sm text-amber-700">
-              The current draft will be saved before the new profile is cloned.
+              {t("mod_library_dialogs.create_dirty_warning")}
             </p>
           ) : (
             <p className="text-sm text-muted-foreground">
-              The new profile starts from the currently saved mod set and load
-              order.
+              {t("mod_library_dialogs.create_clean_hint")}
             </p>
           )}
         </div>
@@ -95,10 +93,10 @@ export function HomePageDialogs({
 
       <AlertDialog
         open={controller.isDeleteProfileDialogOpen}
-        title="Delete Selected Profile?"
-        description="Delete the selected profile and switch to the backend-provided fallback profile."
-        confirmLabel="Delete Profile"
-        cancelLabel="Keep Profile"
+        title={t("mod_library_dialogs.delete_title")}
+        description={t("mod_library_dialogs.delete_description")}
+        confirmLabel={t("mod_library_dialogs.delete_confirm")}
+        cancelLabel={t("mod_library_dialogs.delete_cancel")}
         tone="danger"
         busy={controller.deleteProfileMutation.isPending}
         onConfirm={() => void controller.handleDeleteProfile()}
@@ -113,18 +111,18 @@ export function HomePageDialogs({
         <div className="space-y-3 text-sm">
           <p>
             <span className="font-bold text-foreground">
-              {controller.currentProfile?.name ?? "Current profile"}
+              {controller.currentProfile?.name ??
+                t("mod_library_dialogs.current_profile_fallback")}
             </span>{" "}
-            will be removed from the catalog.
+            {t("mod_library_dialogs.delete_will_be_removed_suffix")}
           </p>
           {controller.isDirty ? (
             <p className="font-bold text-destructive">
-              Unsaved changes in this profile will be discarded.
+              {t("mod_library_dialogs.delete_dirty_warning")}
             </p>
           ) : (
             <p className="text-muted-foreground">
-              The active profile will switch to the repository fallback after
-              deletion.
+              {t("mod_library_dialogs.delete_clean_hint")}
             </p>
           )}
         </div>
@@ -132,38 +130,39 @@ export function HomePageDialogs({
 
       <AlertDialog
         open={controller.isDependencyDialogOpen}
-        title="Enable Missing Dependencies?"
-        description="Some active mods are missing required dependencies that are already installed in your library."
-        confirmLabel="Enable Dependencies"
-        cancelLabel="Keep Current State"
+        title={t("mod_library_dialogs.enable_deps_title")}
+        description={t("mod_library_dialogs.enable_deps_description")}
+        confirmLabel={t("mod_library_dialogs.enable_deps_confirm")}
+        cancelLabel={t("mod_library_dialogs.enable_deps_cancel")}
         tone="warning"
         busy={controller.applyActivePackageIdsMutation.isPending}
         onConfirm={() => void controller.handleEnableMissingDependencies()}
         onCancel={() => {
           controller.setIsDependencyDialogOpen(false);
           if (controller.analysis) {
-            controller.setDismissedDependencyAnalysisAt(
+          controller.setDismissedDependencyAnalysisAt(
               controller.analysis.analyzedAt,
             );
           }
           controller.setFeedback({
             tone: "warning",
-            message:
-              "Skipped automatic dependency activation. The current active list may remain incomplete.",
+            message: t("mod_library_dialogs.enable_deps_skipped_feedback"),
           });
         }}
       >
         <div className="space-y-4">
           <div className="rounded-lg border border-border/60 bg-background/70 p-4">
             <p className="text-xs font-black uppercase tracking-[0.2em] text-muted-foreground">
-              Mods To Enable
+              {t("mod_library_dialogs.mods_to_enable")}
             </p>
             <ul className="mt-3 list-disc space-y-1 pl-5 text-sm">
               {controller.analysis?.missingInstalledInactiveDependencies.map(
                 (issue) => (
                   <li key={issue.packageId}>
-                    {issue.modName ?? issue.packageId} required by{" "}
-                    {issue.requiredByNames.join(", ")}
+                    {issue.modName ?? issue.packageId}{" "}
+                    {t("mod_library_dialogs.required_by", {
+                      requiredBy: issue.requiredByNames.join(", "),
+                    })}
                   </li>
                 ),
               )}
@@ -174,24 +173,23 @@ export function HomePageDialogs({
 
       <AlertDialog
         open={controller.isSortDialogOpen}
-        title="Apply Recommended Sort Order?"
-        description="The current active mod order is not the recommended load order. Rimun can update the current profile and rewrite ModsConfig.xml with the suggested sequence."
-        confirmLabel="Auto Sort"
-        cancelLabel="Keep Current Order"
+        title={t("mod_library_dialogs.apply_sort_title")}
+        description={t("mod_library_dialogs.apply_sort_description")}
+        confirmLabel={t("mod_library_dialogs.apply_sort_confirm")}
+        cancelLabel={t("mod_library_dialogs.apply_sort_cancel")}
         tone="default"
         busy={controller.applyActivePackageIdsMutation.isPending}
         onConfirm={() => void controller.handleAutoSort()}
         onCancel={() => {
           controller.setIsSortDialogOpen(false);
           if (controller.analysis) {
-            controller.setDismissedSortAnalysisAt(
+          controller.setDismissedSortAnalysisAt(
               controller.analysis.analyzedAt,
             );
           }
           controller.setFeedback({
             tone: "warning",
-            message:
-              "Skipped automatic sorting. The current active list order may still be suboptimal.",
+            message: t("mod_library_dialogs.apply_sort_skipped_feedback"),
           });
         }}
       >
@@ -199,7 +197,7 @@ export function HomePageDialogs({
           <div className="rounded-lg border border-border/60 bg-background/70 p-4">
             <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.2em] text-muted-foreground">
               <Sparkles className="h-4 w-4 text-primary" />
-              Recommended Active Order
+              {t("mod_library_dialogs.recommended_active_order")}
             </p>
             <ol className="mt-3 space-y-1 text-sm">
               {controller.analysis?.recommendedOrderPackageIds.map(

@@ -4,6 +4,7 @@ import type {
   DropPlacement,
   ModColumnId,
 } from "@/features/mod-library/lib/mod-list-order";
+import { useI18n } from "@/shared/i18n";
 import { cn } from "@/shared/lib/utils";
 import { useDroppable } from "@dnd-kit/core";
 import { useVirtualizer } from "@tanstack/react-virtual";
@@ -107,6 +108,7 @@ export const ModLibraryColumn = memo(function ModLibraryColumn({
   totalCount,
   onSelectMod,
 }: ModLibraryColumnProps) {
+  const { t } = useI18n();
   const scrollElementRef = useRef<HTMLDivElement | null>(null);
   const rowVirtualizer = useVirtualizer({
     count: items.length,
@@ -205,12 +207,14 @@ export const ModLibraryColumn = memo(function ModLibraryColumn({
               </div>
               <div>
                 <p className="text-sm font-semibold text-foreground">
-                  {totalCount ? "No visible mods" : "Column is empty"}
+                  {totalCount
+                    ? t("mod_library_column.empty_visible_title")
+                    : t("mod_library_column.empty_column_title")}
                 </p>
                 <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
                   {totalCount
-                    ? "Adjust the current search or source filter, or drop a mod into this column."
-                    : "Drop a mod here to create a new order in this column."}
+                    ? t("mod_library_column.empty_visible_description")
+                    : t("mod_library_column.empty_column_description")}
                 </p>
               </div>
             </div>

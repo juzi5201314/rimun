@@ -4,6 +4,7 @@ import type {
   ModColumnId,
 } from "@/features/mod-library/lib/mod-list-order";
 import { Badge } from "@/shared/components/ui/badge";
+import { useI18n } from "@/shared/i18n";
 import { cn } from "@/shared/lib/utils";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import {
@@ -113,6 +114,7 @@ function ModListRowDragHandle({
   item: HomePageModListItem;
   rowElementRef: RefObject<HTMLDivElement | null>;
 }) {
+  const { t } = useI18n();
   const { attributes, listeners, setNodeRef } = useDraggable({
     data: {
       columnId: item.columnId,
@@ -135,7 +137,7 @@ function ModListRowDragHandle({
     return (
       <div
         className="flex size-8 items-center justify-center rounded-xl border border-border/50 bg-muted/20 text-muted-foreground/55"
-        title={item.dragDisabledReason ?? "This mod cannot be dragged."}
+        title={item.dragDisabledReason ?? t("mod_list_row.cannot_drag")}
       >
         {item.isOfficial ? (
           <ShieldCheck className="h-4 w-4" />
@@ -151,7 +153,7 @@ function ModListRowDragHandle({
   return (
     <button
       type="button"
-      aria-label={`Drag ${item.name}`}
+      aria-label={t("mod_list_row.drag_aria", { name: item.name })}
       className="flex size-8 items-center justify-center rounded-xl border border-border/60 bg-background/90 text-muted-foreground transition-colors hover:border-primary/30 hover:bg-primary/5 hover:text-primary"
       {...attributes}
       {...listeners}
@@ -163,6 +165,8 @@ function ModListRowDragHandle({
 }
 
 function SourceBadge({ source }: { source: HomePageModListItem["source"] }) {
+  const { t } = useI18n();
+
   return (
     <Badge
       variant="outline"
@@ -173,7 +177,9 @@ function SourceBadge({ source }: { source: HomePageModListItem["source"] }) {
           : "border-sky-500/30 bg-sky-500/5 text-sky-700",
       )}
     >
-      {source === "installation" ? "Local" : "Workshop"}
+      {source === "installation"
+        ? t("mod_list_row.source_local")
+        : t("mod_list_row.source_workshop")}
     </Badge>
   );
 }
@@ -205,6 +211,7 @@ export const ModListRowCard = memo(function ModListRowCard({
   showDropAfter: boolean;
   showDropBefore: boolean;
 }) {
+  const { t } = useI18n();
   const metaSummary = buildMetaSummary(item);
 
   return (
@@ -253,17 +260,17 @@ export const ModListRowCard = memo(function ModListRowCard({
               {item.isOfficial ? (
                 <div
                   className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary ring-1 ring-inset ring-primary/20"
-                  title="Official mod"
+                  title={t("mod_list_row.official_mod_title")}
                 >
-                  Official
+                  {t("mod_list_row.official_badge")}
                 </div>
               ) : null}
               {!item.hasAboutXml ? (
                 <div
                   className="rounded-full bg-destructive/10 px-2 py-0.5 text-[10px] font-semibold text-destructive ring-1 ring-inset ring-destructive/20"
-                  title="Missing About.xml"
+                  title={t("mod_list_row.missing_about_title")}
                 >
-                  Invalid
+                  {t("mod_list_row.invalid_badge")}
                 </div>
               ) : null}
             </div>
@@ -281,7 +288,7 @@ export const ModListRowCard = memo(function ModListRowCard({
             {item.dragDisabledReason ? (
               <span className="inline-flex shrink-0 items-center gap-1 text-amber-700">
                 <AlertTriangle className="h-3 w-3" />
-                Locked
+                {t("mod_list_row.locked_badge")}
               </span>
             ) : null}
           </div>

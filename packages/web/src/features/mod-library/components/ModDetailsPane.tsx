@@ -1,5 +1,6 @@
 import type { HomePageController } from "@/features/mod-library/hooks/useHomePageController";
 import { Badge } from "@/shared/components/ui/badge";
+import { useI18n } from "@/shared/i18n";
 import { cn } from "@/shared/lib/utils";
 import {
   ChevronDown,
@@ -14,13 +15,12 @@ import { useEffect, useState } from "react";
 
 type DetailSectionId = "description" | "orderHints" | "analysis" | "paths";
 
-function renderDescriptionBlocks(description: string | null) {
+function renderDescriptionBlocks(
+  description: string | null,
+  noDescriptionText: string,
+) {
   if (!description) {
-    return (
-      <p className="text-sm text-muted-foreground">
-        No description was found in About.xml.
-      </p>
-    );
+    return <p className="text-sm text-muted-foreground">{noDescriptionText}</p>;
   }
 
   return description
@@ -58,9 +58,9 @@ function renderDescriptionBlocks(description: string | null) {
     });
 }
 
-function renderPackageList(items: string[]) {
+function renderPackageList(items: string[], noneText: string) {
   if (items.length === 0) {
-    return <p className="text-sm text-muted-foreground">None</p>;
+    return <p className="text-sm text-muted-foreground">{noneText}</p>;
   }
 
   return (
@@ -121,6 +121,7 @@ export function ModDetailsPane({
 }: {
   controller: HomePageController;
 }) {
+  const { t } = useI18n();
   const selectedModId = controller.selectedMod?.id ?? null;
   const [openSections, setOpenSections] = useState<
     Record<DetailSectionId, boolean>
@@ -154,6 +155,8 @@ export function ModDetailsPane({
     controller.analysis?.diagnostics.filter(
       (diagnostic) => diagnostic.code === "hard_order_violation",
     ) ?? [];
+  const resolvedVersion =
+    controller.selectedMod?.version ?? t("mod_details.unknown_version");
 
   return (
     <aside className="flex shrink-0 flex-col overflow-hidden bg-card/10">
@@ -165,7 +168,7 @@ export function ModDetailsPane({
                 <div className="min-w-0 space-y-3">
                   <div className="space-y-1">
                     <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
-                      Module Detail
+                      {t("mod_details.module_detail")}
                     </p>
                     <h3 className="text-2xl font-black tracking-tight text-foreground">
                       {controller.selectedMod.name}
@@ -184,22 +187,24 @@ export function ModDetailsPane({
                           : "bg-background text-muted-foreground",
                       )}
                     >
-                      {controller.selectedMod.enabled ? "Enabled" : "Disabled"}
+                      {controller.selectedMod.enabled
+                        ? t("common.enabled")
+                        : t("common.disabled")}
                     </Badge>
                     <Badge
                       variant="outline"
                       className="h-7 rounded-full px-3 text-muted-foreground"
                     >
                       {controller.selectedMod.source === "installation"
-                        ? "Local install"
-                        : "Workshop"}
+                        ? t("mod_details.source_local_install")
+                        : t("mod_details.source_workshop")}
                     </Badge>
                     {controller.selectedMod.isOfficial ? (
                       <Badge
                         variant="outline"
                         className="h-7 rounded-full border-primary/30 bg-primary/10 px-3 text-primary"
                       >
-                        Official core
+                        {t("mod_details.official_core")}
                       </Badge>
                     ) : null}
                   </div>
@@ -215,28 +220,37 @@ export function ModDetailsPane({
               <div className="grid gap-3">
                 <div className="rounded-2xl border border-border/60 bg-background/80 p-4">
                   <p className="text-xs font-medium text-muted-foreground">
-                    Package ID
+                    {t("mod_details.package_id_label")}
                   </p>
                   <p
                     className="mt-2 break-all font-mono text-xs text-foreground select-text"
-                    title={controller.selectedMod.packageId ?? "N/A"}
+                    title={
+                      controller.selectedMod.packageId ??
+                      t("common.not_available")
+                    }
                   >
-                    {controller.selectedMod.packageId ?? "None"}
+                    {controller.selectedMod.packageId ?? t("common.none")}
                   </p>
                 </div>
                 <div className="rounded-2xl border border-border/60 bg-background/80 p-4">
                   <p className="text-xs font-medium text-muted-foreground">
-                    Author & Version
+                    {t("mod_details.author_version_label")}
                   </p>
                   <div className="mt-2 space-y-1">
                     <span
                       className="block break-words text-sm font-medium text-foreground"
-                      title={controller.selectedMod.author ?? "Unknown author"}
+                      title={
+                        controller.selectedMod.author ??
+                        t("mod_details.unknown_author_title")
+                      }
                     >
-                      {controller.selectedMod.author ?? "Unknown"}
+                      {controller.selectedMod.author ??
+                        t("mod_details.unknown_author")}
                     </span>
                     <span className="block font-mono text-xs text-muted-foreground">
-                      v{controller.selectedMod.version ?? "?.?"}
+                      {t("mod_details.version_format", {
+                        version: resolvedVersion,
+                      })}
                     </span>
                   </div>
                 </div>
@@ -250,7 +264,7 @@ export function ModDetailsPane({
                 <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-5">
                   <p className="flex items-center gap-2 text-sm font-semibold text-destructive">
                     <span className="h-2 w-2 rounded-full bg-destructive" />
-                    Load order errors
+                    {t("mod_details.load_order_errors")}
                   </p>
                   <ul className="mt-4 list-disc space-y-2 pl-5 text-sm leading-relaxed text-destructive/90">
                     {hardOrderDiagnostics.map((diagnostic) => (
@@ -268,7 +282,7 @@ export function ModDetailsPane({
                 <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-5">
                   <p className="flex items-center gap-2 text-sm font-semibold text-destructive">
                     <span className="h-2 w-2 rounded-full bg-destructive" />
-                    Critical deployment issues
+                    {t("mod_details.critical_deployment_issues")}
                   </p>
                   {controller.analysis.missingUnavailableDependencies.length >
                   0 ? (
@@ -279,7 +293,9 @@ export function ModDetailsPane({
                             <span className="font-mono font-semibold">
                               {issue.packageId}
                             </span>{" "}
-                            is required by {issue.requiredByNames.join(", ")}.
+                            {t("mod_details.dependency_required_by", {
+                              requiredBy: issue.requiredByNames.join(", "),
+                            })}
                           </li>
                         ),
                       )}
@@ -289,8 +305,8 @@ export function ModDetailsPane({
               ) : null}
 
               <DetailSection
-                title="Description"
-                description="Primary summary shown to users before they inspect compatibility details."
+                title={t("mod_details.section_description_title")}
+                description={t("mod_details.section_description_description")}
                 open={openSections.description}
                 onToggle={() =>
                   setOpenSections((current) => ({
@@ -300,13 +316,16 @@ export function ModDetailsPane({
                 }
               >
                 <div className="space-y-4 text-sm leading-relaxed text-foreground/90 select-text">
-                  {renderDescriptionBlocks(controller.selectedMod.description)}
+                  {renderDescriptionBlocks(
+                    controller.selectedMod.description,
+                    t("mod_details.no_description"),
+                  )}
                 </div>
               </DetailSection>
 
               <DetailSection
-                title="Execution Order Hints"
-                description="Dependency and sort metadata that matters when you need to troubleshoot ordering."
+                title={t("mod_details.section_order_hints_title")}
+                description={t("mod_details.section_order_hints_description")}
                 open={openSections.orderHints}
                 onToggle={() =>
                   setOpenSections((current) => ({
@@ -318,25 +337,25 @@ export function ModDetailsPane({
                 <div className="grid gap-3">
                   {[
                     {
-                      label: "Absolute Dependencies",
+                      label: t("mod_details.absolute_dependencies"),
                       items:
                         controller.selectedMod.dependencyMetadata.dependencies,
                       color: "bg-blue-500",
                     },
                     {
-                      label: "Initialize After",
+                      label: t("mod_details.initialize_after"),
                       items:
                         controller.selectedMod.dependencyMetadata.loadAfter,
                       color: "bg-emerald-500",
                     },
                     {
-                      label: "Initialize Before",
+                      label: t("mod_details.initialize_before"),
                       items:
                         controller.selectedMod.dependencyMetadata.loadBefore,
                       color: "bg-amber-500",
                     },
                     {
-                      label: "Incompatible Modules",
+                      label: t("mod_details.incompatible_modules"),
                       items:
                         controller.selectedMod.dependencyMetadata
                           .incompatibleWith,
@@ -353,7 +372,7 @@ export function ModDetailsPane({
                           {label}
                         </p>
                       </div>
-                      {renderPackageList(items)}
+                      {renderPackageList(items, t("common.none"))}
                     </div>
                   ))}
                 </div>
@@ -361,8 +380,8 @@ export function ModDetailsPane({
 
               {controller.selectedExplanation?.reasons.length ? (
                 <DetailSection
-                  title="Deployment Logic Analysis"
-                  description="Why this mod lands in its current position or triggers a recommendation."
+                  title={t("mod_details.section_analysis_title")}
+                  description={t("mod_details.section_analysis_description")}
                   open={openSections.analysis}
                   onToggle={() =>
                     setOpenSections((current) => ({
@@ -387,8 +406,8 @@ export function ModDetailsPane({
               ) : null}
 
               <DetailSection
-                title="Physical Environment"
-                description="Underlying filesystem paths for manual inspection and debugging."
+                title={t("mod_details.section_paths_title")}
+                description={t("mod_details.section_paths_description")}
                 open={openSections.paths}
                 onToggle={() =>
                   setOpenSections((current) => ({
@@ -401,7 +420,7 @@ export function ModDetailsPane({
                   <div className="space-y-2">
                     <p className="flex items-center gap-2 font-sans text-xs font-medium text-muted-foreground">
                       <FolderSearch className="h-3.5 w-3.5" />
-                      Host system location
+                      {t("mod_details.host_system_location")}
                     </p>
                     <p className="break-all rounded-xl border border-border/50 bg-background px-3 py-3 text-muted-foreground select-text">
                       {controller.selectedMod.windowsPath}
@@ -410,10 +429,11 @@ export function ModDetailsPane({
                   <div className="space-y-2">
                     <p className="flex items-center gap-2 font-sans text-xs font-medium text-muted-foreground">
                       <HardDrive className="h-3.5 w-3.5" />
-                      Metadata manifest
+                      {t("mod_details.metadata_manifest")}
                     </p>
                     <p className="break-all rounded-xl border border-border/50 bg-background px-3 py-3 text-muted-foreground select-text">
-                      {controller.selectedMod.manifestPath ?? "N/A"}
+                      {controller.selectedMod.manifestPath ??
+                        t("common.not_available")}
                     </p>
                   </div>
                 </div>
@@ -430,11 +450,10 @@ export function ModDetailsPane({
             </div>
             <div className="space-y-2">
               <p className="text-lg font-semibold text-muted-foreground">
-                No module selected
+                {t("mod_details.no_module_selected_title")}
               </p>
               <p className="text-sm leading-relaxed text-muted-foreground">
-                Select a module from the list to inspect its description,
-                ordering hints, and filesystem paths.
+                {t("mod_details.no_module_selected_description")}
               </p>
             </div>
           </div>

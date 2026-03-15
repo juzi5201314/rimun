@@ -3,6 +3,7 @@ import type { HomePageController } from "@/features/mod-library/hooks/useHomePag
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
+import { useI18n } from "@/shared/i18n";
 import { cn } from "@/shared/lib/utils";
 import {
   AlertTriangle,
@@ -50,6 +51,7 @@ export function ModLibraryPane({
 }: {
   controller: HomePageController;
 }) {
+  const { t } = useI18n();
   const visibleCount =
     controller.visibleActiveMods.length + controller.visibleInactiveMods.length;
 
@@ -64,31 +66,34 @@ export function ModLibraryPane({
 
   return (
     <section className="flex min-h-0 min-w-0 flex-1 flex-col border-r border-border/60 bg-background/20">
-      <h2 className="sr-only">Mod Library</h2>
+      <h2 className="sr-only">{t("nav.mod_library")}</h2>
 
       <header className="shrink-0 border-b border-border/60 bg-card/40 px-5 py-3">
         <div className="flex flex-col gap-3">
           <div className="flex flex-wrap items-center gap-2">
             <ToolbarChip
-              label="Active"
+              label={t("mod_library.toolbar_active")}
               value={String(controller.draftActivePackageIds.length)}
             />
             <ToolbarChip
-              label="Inactive"
+              label={t("mod_library.toolbar_inactive")}
               value={String(controller.inactiveMods.length)}
             />
-            <ToolbarChip label="Visible" value={String(visibleCount)} />
             <ToolbarChip
-              label="Total"
+              label={t("mod_library.toolbar_visible")}
+              value={String(visibleCount)}
+            />
+            <ToolbarChip
+              label={t("mod_library.toolbar_total")}
               value={String(controller.modLibrary.mods.length)}
             />
             {controller.isDirty ? (
               <Badge
                 variant="outline"
                 className="h-7 border-amber-500/40 bg-amber-500/10 text-amber-700"
-                title="Unsaved Changes"
+                title={t("mod_library.unsaved_changes")}
               >
-                Unsaved changes
+                {t("mod_library.unsaved_changes")}
               </Badge>
             ) : null}
           </div>
@@ -97,7 +102,7 @@ export function ModLibraryPane({
             <button
               type="button"
               aria-expanded={controller.isProfilePanelOpen}
-              aria-label="Toggle Active Profile Panel"
+              aria-label={t("mod_library.toggle_active_profile_panel")}
               className="flex w-full items-center justify-between gap-3 text-left"
               onClick={() =>
                 controller.setIsProfilePanelOpen((current) => !current)
@@ -105,13 +110,14 @@ export function ModLibraryPane({
             >
               <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
                 <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
-                  Active Profile
+                  {t("mod_library.active_profile_label")}
                 </p>
                 <span className="truncate text-sm font-semibold text-foreground">
-                  {controller.currentProfile?.name ?? "No profile selected"}
+                  {controller.currentProfile?.name ??
+                    t("mod_library.no_profile_selected")}
                 </span>
                 <span className="text-xs text-muted-foreground">
-                  Active column order is the exact RimWorld load order.
+                  {t("mod_library.active_order_hint")}
                 </span>
               </div>
 
@@ -129,10 +135,10 @@ export function ModLibraryPane({
                 <div className="mt-2 flex flex-wrap items-end gap-2 border-t border-border/50 pt-2">
                   <label className="min-w-[150px] flex-1">
                     <span className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
-                      Profile Selection
+                      {t("mod_library.profile_selection_label")}
                     </span>
                     <select
-                      aria-label="Profile Selection"
+                      aria-label={t("mod_library.profile_selection_label")}
                       className="mt-1 h-8 w-full rounded-lg border border-border/60 bg-background px-3 text-sm font-medium text-foreground outline-none"
                       disabled={
                         controller.isBusy || !controller.currentProfileId
@@ -157,11 +163,11 @@ export function ModLibraryPane({
                       htmlFor="profile-name-input"
                       className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground"
                     >
-                      Profile Name
+                      {t("mod_library.profile_name_label")}
                     </label>
                     <Input
                       id="profile-name-input"
-                      aria-label="Profile Name"
+                      aria-label={t("mod_library.profile_name_label")}
                       className="mt-1 h-8 border-border/60 bg-background text-sm font-medium"
                       disabled={controller.isBusy || !controller.currentProfile}
                       value={controller.draftProfileName}
@@ -177,21 +183,21 @@ export function ModLibraryPane({
                       variant="outline"
                       size="sm"
                       className="h-8 gap-2 px-3"
-                      title="New Profile"
+                      title={t("mod_library.new_profile")}
                       onClick={controller.handleOpenCreateProfileDialog}
                     >
                       <Plus className="h-4 w-4" />
-                      New Profile
+                      {t("mod_library.new_profile")}
                     </Button>
                     <Button
                       variant="outline"
                       size="sm"
                       className="h-8 gap-2 px-3"
-                      title="Delete Profile"
+                      title={t("mod_library.delete_profile")}
                       onClick={controller.handleOpenDeleteProfileDialog}
                     >
                       <Trash2 className="h-4 w-4" />
-                      Delete
+                      {t("mod_library.delete_profile")}
                     </Button>
                     <Button
                       size="sm"
@@ -204,7 +210,7 @@ export function ModLibraryPane({
                       onClick={() => void controller.handleSaveProfile()}
                     >
                       <Save className="h-4 w-4" />
-                      Save
+                      {t("mod_library.save_profile")}
                     </Button>
                   </div>
                 </div>
@@ -213,7 +219,7 @@ export function ModLibraryPane({
                   <button
                     type="button"
                     aria-expanded={controller.isFilterPanelOpen}
-                    aria-label="Toggle Filters Panel"
+                    aria-label={t("mod_library.toggle_filters_panel")}
                     className="flex w-full items-center justify-between gap-3 text-left"
                     onClick={() =>
                       controller.setIsFilterPanelOpen((current) => !current)
@@ -221,15 +227,17 @@ export function ModLibraryPane({
                   >
                     <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
                       <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
-                        Filters
+                        {t("mod_library.filters")}
                       </p>
                       <span className="text-xs text-muted-foreground">
-                        Source:
+                        {t("mod_library.source_label")}
                       </span>
                       <span className="text-xs font-medium capitalize text-foreground">
                         {controller.sourceFilter === "all"
-                          ? "all sources"
-                          : controller.sourceFilter}
+                          ? t("mod_library.source_all")
+                          : controller.sourceFilter === "local"
+                            ? t("mod_library.source_local_button")
+                            : t("mod_library.source_workshop_button")}
                       </span>
                     </div>
 
@@ -255,7 +263,7 @@ export function ModLibraryPane({
                           className="h-8 px-3 text-xs"
                           onClick={() => controller.setSourceFilter("all")}
                         >
-                          All Sources
+                          {t("mod_library.source_all_button")}
                         </Button>
                         <Button
                           variant={
@@ -267,7 +275,7 @@ export function ModLibraryPane({
                           className="h-8 px-3 text-xs"
                           onClick={() => controller.setSourceFilter("local")}
                         >
-                          Local
+                          {t("mod_library.source_local_button")}
                         </Button>
                         <Button
                           variant={
@@ -281,7 +289,7 @@ export function ModLibraryPane({
                             controller.setSourceFilter("workshop")
                           }
                         >
-                          Workshop
+                          {t("mod_library.source_workshop_button")}
                         </Button>
                       </div>
                     </div>
@@ -328,7 +336,7 @@ export function ModLibraryPane({
                   className="h-7 gap-2 border-amber-500/30 bg-amber-500/10 text-amber-700"
                 >
                   <AlertTriangle className="h-3.5 w-3.5" />
-                  Analysis Paused (Unsaved Draft)
+                  {t("mod_library.analysis_paused")}
                 </Badge>
               ) : controller.analysis ? (
                 <>
@@ -346,15 +354,15 @@ export function ModLibraryPane({
                     )}
                   >
                     {controller.analysis.isOptimal
-                      ? "Order Optimal"
+                      ? t("mod_library.order_optimal")
                       : hasHardOrderViolation
-                        ? "Load Order Error"
-                        : "Optimization Recommended"}
+                        ? t("mod_library.load_order_error")
+                        : t("mod_library.optimization_recommended")}
                   </Badge>
 
                   {controller.analysis.hasBlockingIssues ? (
                     <Badge variant="destructive" className="h-7 px-3">
-                      Blocking Issues
+                      {t("mod_library.blocking_issues")}
                     </Badge>
                   ) : null}
                 </>
@@ -373,7 +381,7 @@ export function ModLibraryPane({
                   disabled={controller.isBusy}
                 >
                   <Sparkles className="h-3.5 w-3.5" />
-                  Apply Recommended Order
+                  {t("mod_library.apply_recommended_order")}
                 </Button>
               ) : null}
               {(controller.analysis?.missingInstalledInactiveDependencies
@@ -388,10 +396,11 @@ export function ModLibraryPane({
                   disabled={controller.isBusy}
                 >
                   <Link2 className="h-3.5 w-3.5" />
-                  Auto-Enable{" "}
-                  {controller.analysis?.missingInstalledInactiveDependencies
-                    .length ?? 0}{" "}
-                  Deps
+                  {t("mod_library.auto_enable_deps", {
+                    count:
+                      controller.analysis?.missingInstalledInactiveDependencies
+                        .length ?? 0,
+                  })}
                 </Button>
               ) : null}
             </div>
@@ -404,7 +413,7 @@ export function ModLibraryPane({
           <div className="relative min-w-[260px] flex-1">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/70" />
             <Input
-              placeholder="Search by name, author, or package id"
+              placeholder={t("mod_library.search_placeholder")}
               className="h-9 w-full border-border/60 bg-background pl-9 text-sm"
               value={controller.searchQuery}
               onChange={(event) =>
@@ -429,7 +438,7 @@ export function ModLibraryPane({
             ) : (
               <RefreshCcw className="h-4 w-4" />
             )}
-            Rescan
+            {t("mod_library.rescan")}
           </Button>
         </div>
       </div>
@@ -438,13 +447,13 @@ export function ModLibraryPane({
         <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
           <div className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-background/80 px-2.5 py-1">
             <GripVertical className="h-3.5 w-3.5" />
-            Drag between columns to enable or disable mods
+            {t("mod_library.drag_hint")}
           </div>
           <div className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-background/80 px-2.5 py-1">
-            Active column order is the exact saved load order
+            {t("mod_library.active_saved_load_order_hint")}
           </div>
           <div className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-background/80 px-2.5 py-1">
-            Inactive order is session-only
+            {t("mod_library.inactive_session_only_hint")}
           </div>
         </div>
       </div>
@@ -455,16 +464,16 @@ export function ModLibraryPane({
         <div className="flex items-center gap-4 text-xs text-muted-foreground">
           <div className="flex items-center gap-1.5">
             <div className="h-1 w-1 rounded-full bg-emerald-500" />
-            <span>Scanner Active</span>
+            <span>{t("mod_library.scanner_active")}</span>
           </div>
           <span className="opacity-30">|</span>
           <span>
-            Last Scan:{" "}
+            {t("mod_library.last_scan")}{" "}
             {new Date(controller.modLibrary.scannedAt).toLocaleTimeString()}
           </span>
         </div>
         <div className="rounded-full bg-muted/20 px-3 py-1 text-xs font-medium text-muted-foreground">
-          {visibleCount} Visible
+          {t("mod_library.visible_count", { count: visibleCount })}
         </div>
       </footer>
     </section>

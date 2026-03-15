@@ -1,31 +1,35 @@
 import type { HomePageController } from "@/features/mod-library/hooks/useHomePageController";
+import { useI18n } from "@/shared/i18n";
 import { LoaderCircle } from "lucide-react";
 import type { MouseEvent as ReactMouseEvent } from "react";
 import { ModDetailsPane } from "./ModDetailsPane";
 import { ModLibraryPane } from "./ModLibraryPane";
 
-function resolveLoadingLabel(controller: HomePageController) {
+function resolveLoadingLabel(
+  controller: HomePageController,
+  t: (key: string, params?: Record<string, unknown>) => string,
+) {
   if (controller.applyActivePackageIdsMutation.isPending) {
-    return "Synchronizing Order";
+    return t("mod_library_loading.synchronizing_order");
   }
 
   if (controller.saveProfileMutation.isPending) {
-    return "Persisting Data";
+    return t("mod_library_loading.persisting_data");
   }
 
   if (controller.switchProfileMutation.isPending) {
-    return "Loading Profile";
+    return t("mod_library_loading.loading_profile");
   }
 
   if (controller.createProfileMutation.isPending) {
-    return "Generating Profile";
+    return t("mod_library_loading.generating_profile");
   }
 
   if (controller.deleteProfileMutation.isPending) {
-    return "Removing Record";
+    return t("mod_library_loading.removing_record");
   }
 
-  return "Analyzing Dependencies";
+  return t("mod_library_loading.analyzing_dependencies");
 }
 
 export function HomePageWorkspace({
@@ -37,6 +41,8 @@ export function HomePageWorkspace({
   controller: HomePageController;
   onResizeStart: (event: ReactMouseEvent) => void;
 }) {
+  const { t } = useI18n();
+
   return (
     <div className="relative flex min-h-0 w-full flex-1 bg-background/5">
       {controller.loadingOverlayVisible ? (
@@ -44,7 +50,7 @@ export function HomePageWorkspace({
           <div className="rounded-2xl border border-border/40 bg-card/95 px-10 py-8 text-center shadow-2xl ring-1 ring-primary/10">
             <LoaderCircle className="mx-auto h-10 w-10 animate-spin text-primary" />
             <p className="mt-5 text-[10px] font-black uppercase tracking-[0.4em] text-primary/80">
-              {resolveLoadingLabel(controller)}
+              {resolveLoadingLabel(controller, t)}
             </p>
           </div>
         </div>
