@@ -14,6 +14,7 @@ import {
 } from "@/shared/components/ui/card";
 import { Checkbox } from "@/shared/components/ui/checkbox";
 import { Input } from "@/shared/components/ui/input";
+import { useI18n } from "@/shared/i18n";
 import type {
   LlmApiFormat,
   LlmModelConfig,
@@ -34,13 +35,6 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-
-const formatOptions: Array<{ value: LlmApiFormat; label: string }> = [
-  { value: "anthropic", label: "Anthropic / Claude" },
-  { value: "openai-chat", label: "OpenAI Chat" },
-  { value: "openai-responses", label: "OpenAI Responses" },
-  { value: "gemini", label: "Gemini" },
-];
 
 const defaultBaseUrls: Record<LlmApiFormat, string> = {
   anthropic: "https://api.anthropic.com/v1",
@@ -86,10 +80,13 @@ function createDraftId() {
   return `draft-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-function createDefaultProvider(index: number): LlmProviderConfig {
+function createDefaultProvider(
+  index: number,
+  name: string,
+): LlmProviderConfig {
   return {
     id: createDraftId(),
-    name: `Provider ${index}`,
+    name,
     format: "anthropic",
     baseUrl: defaultBaseUrls.anthropic,
     apiKey: "",
@@ -98,11 +95,11 @@ function createDefaultProvider(index: number): LlmProviderConfig {
   };
 }
 
-function createDefaultModel(index: number): LlmModelConfig {
+function createDefaultModel(index: number, label: string): LlmModelConfig {
   return {
     id: createDraftId(),
     modelId: "",
-    label: `Model ${index}`,
+    label,
     enabled: true,
     metadata: null,
     metadataSelection: null,
@@ -133,6 +130,7 @@ function ModelEditorRow({
   onRefreshMetadata,
   onAutoFetchMetadata,
 }: ModelEditorRowProps) {
+  const { t } = useI18n();
   const hasMountedRef = useRef(false);
 
   useEffect(() => {
@@ -162,17 +160,19 @@ function ModelEditorRow({
         <div className="space-y-1">
           <div className="flex flex-wrap items-center gap-2">
             <p className="text-sm font-bold">
-              {model.label || "Unnamed model"}
+              {model.label || t("llm_settings.model_unnamed")}
             </p>
             <Badge variant={model.enabled ? "default" : "outline"}>
-              {model.enabled ? "Enabled" : "Disabled"}
+              {model.enabled ? t("common.enabled") : t("common.disabled")}
             </Badge>
             {model.metadata ? (
-              <Badge variant="secondary">Metadata cached</Badge>
+              <Badge variant="secondary">
+                {t("llm_settings.metadata_cached_badge")}
+              </Badge>
             ) : null}
           </div>
           <p className="text-xs text-muted-foreground">
-            Model ID changes trigger automatic metadata lookup via models.dev.
+            {t("llm_settings.model_id_auto_lookup_hint")}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -188,11 +188,11 @@ function ModelEditorRow({
             ) : (
               <RefreshCw className="h-4 w-4" />
             )}
-            Refresh metadata
+            {t("llm_settings.refresh_metadata")}
           </Button>
           <Button type="button" variant="ghost" size="sm" onClick={onRemove}>
             <Trash2 className="h-4 w-4" />
-            Remove
+            {t("llm_settings.remove")}
           </Button>
         </div>
       </div>
@@ -203,7 +203,7 @@ function ModelEditorRow({
             htmlFor={`llm-model-label-${model.id}`}
             className="text-sm font-bold uppercase text-muted-foreground"
           >
-            Label
+            {t("llm_settings.label")}
           </label>
           <Input
             id={`llm-model-label-${model.id}`}
@@ -215,7 +215,7 @@ function ModelEditorRow({
                 label: nextValue,
               }));
             }}
-            placeholder="Friendly model label"
+            placeholder={t("llm_settings.label_placeholder")}
           />
         </div>
         <div className="space-y-1.5">
@@ -223,7 +223,7 @@ function ModelEditorRow({
             htmlFor={`llm-model-id-${model.id}`}
             className="text-sm font-bold uppercase text-muted-foreground"
           >
-            Model ID
+            {t("llm_settings.model_id_label")}
           </label>
           <Input
             id={`llm-model-id-${model.id}`}
@@ -258,7 +258,7 @@ function ModelEditorRow({
               }));
             }}
           />
-          Enabled
+          {t("common.enabled")}
         </label>
       </div>
 
@@ -272,40 +272,59 @@ function ModelEditorRow({
         <div className="mt-4 space-y-3 rounded-xl border border-border/60 bg-card/60 p-4">
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant="outline">
-              Context {formatLimit(model.metadata.contextLimit)}
+              {t("llm_settings.context_badge", {
+                value: formatLimit(model.metadata.contextLimit),
+              })}
             </Badge>
             <Badge variant="outline">
-              Input {formatLimit(model.metadata.inputLimit)}
+              {t("llm_settings.input_badge", {
+                value: formatLimit(model.metadata.inputLimit),
+              })}
             </Badge>
             <Badge variant="outline">
-              Output {formatLimit(model.metadata.outputLimit)}
+              {t("llm_settings.output_badge", {
+                value: formatLimit(model.metadata.outputLimit),
+              })}
             </Badge>
             {model.metadata.supportsToolCall ? (
-              <Badge variant="secondary">Tool calling</Badge>
+              <Badge variant="secondary">
+                {t("llm_settings.tool_calling_badge")}
+              </Badge>
             ) : null}
             {model.metadata.supportsReasoning ? (
-              <Badge variant="secondary">Reasoning</Badge>
+              <Badge variant="secondary">
+                {t("llm_settings.reasoning_badge")}
+              </Badge>
             ) : null}
             {model.metadata.supportsStructuredOutput ? (
-              <Badge variant="secondary">Structured output</Badge>
+              <Badge variant="secondary">
+                {t("llm_settings.structured_output_badge")}
+              </Badge>
             ) : null}
           </div>
           <div className="grid gap-3 text-xs text-muted-foreground md:grid-cols-2">
             <p>
-              Metadata source:{" "}
-              {model.metadataSelection?.sourceProviderName ?? "Unknown"}
+              {t("llm_settings.metadata_source")}{" "}
+              {model.metadataSelection?.sourceProviderName ??
+                t("common.unknown")}
             </p>
             <p>
-              Refreshed: {model.lastMetadataRefreshAt ?? "Not refreshed yet"}
+              {t("llm_settings.refreshed")}{" "}
+              {model.lastMetadataRefreshAt ?? t("llm_settings.not_refreshed")}
             </p>
-            <p>Release: {model.metadata.releaseDate ?? "Unknown"}</p>
-            <p>Updated: {model.metadata.lastUpdated ?? "Unknown"}</p>
+            <p>
+              {t("llm_settings.release")}{" "}
+              {model.metadata.releaseDate ?? t("common.unknown")}
+            </p>
+            <p>
+              {t("llm_settings.updated")}{" "}
+              {model.metadata.lastUpdated ?? t("common.unknown")}
+            </p>
           </div>
         </div>
       ) : (
         <p className="mt-4 text-xs text-muted-foreground">
-          No metadata cached yet. Enter a model ID and pause briefly, or click
-          refresh.
+          {t("llm_settings.no_metadata_cached")}
         </p>
       )}
     </div>
@@ -313,6 +332,7 @@ function ModelEditorRow({
 }
 
 export function LlmSettingsSection() {
+  const { t } = useI18n();
   const llmSettingsQuery = useLlmSettingsQuery();
   const saveLlmSettingsMutation = useSaveLlmSettingsMutation();
   const searchModelMetadata = useSearchModelMetadata();
@@ -330,6 +350,15 @@ export function LlmSettingsSection() {
   const [apiKeyVisibilityByProviderId, setApiKeyVisibilityByProviderId] =
     useState<Record<string, boolean>>({});
   const searchRequestIdsRef = useRef<Record<string, number>>({});
+  const formatOptions: Array<{ value: LlmApiFormat; label: string }> = [
+    { value: "anthropic", label: t("llm_settings.formats.anthropic") },
+    { value: "openai-chat", label: t("llm_settings.formats.openai_chat") },
+    {
+      value: "openai-responses",
+      label: t("llm_settings.formats.openai_responses"),
+    },
+    { value: "gemini", label: t("llm_settings.formats.gemini") },
+  ];
 
   useEffect(() => {
     if (!llmSettingsQuery.data) {
@@ -444,7 +473,7 @@ export function LlmSettingsSection() {
           ...current,
           [requestKey]: {
             pending: false,
-            error: `No models.dev metadata match was found for ${query}.`,
+            error: t("llm_settings.metadata_no_match", { query }),
           },
         }));
         return;
@@ -454,7 +483,7 @@ export function LlmSettingsSection() {
         const firstMatch = result.matches[0];
 
         if (!firstMatch) {
-          throw new Error("Expected a metadata match.");
+          throw new Error(t("llm_settings.metadata_expected_match"));
         }
 
         applyMetadataSelection(providerId, modelConfigId, firstMatch);
@@ -479,7 +508,9 @@ export function LlmSettingsSection() {
         ...current,
         [requestKey]: {
           pending: false,
-          error: `${result.matches.length} metadata matches found. Choose one source.`,
+          error: t("llm_settings.metadata_multiple_matches", {
+            count: result.matches.length,
+          }),
         },
       }));
     } catch (error) {
@@ -488,7 +519,9 @@ export function LlmSettingsSection() {
         [requestKey]: {
           pending: false,
           error:
-            error instanceof Error ? error.message : "Metadata lookup failed.",
+            error instanceof Error
+              ? error.message
+              : t("llm_settings.metadata_lookup_failed"),
         },
       }));
     }
@@ -499,6 +532,9 @@ export function LlmSettingsSection() {
     setDraft((currentDraft) => {
       const nextProvider = createDefaultProvider(
         currentDraft.providers.length + 1,
+        t("llm_settings.provider_default_name", {
+          index: currentDraft.providers.length + 1,
+        }),
       );
 
       setActiveProviderId(nextProvider.id);
@@ -538,7 +574,12 @@ export function LlmSettingsSection() {
       ...provider,
       models: [
         ...provider.models,
-        createDefaultModel(provider.models.length + 1),
+        createDefaultModel(
+          provider.models.length + 1,
+          t("llm_settings.model_default_label", {
+            index: provider.models.length + 1,
+          }),
+        ),
       ],
     }));
   }
@@ -562,7 +603,7 @@ export function LlmSettingsSection() {
       setDraft(saved);
       setFeedback({
         tone: "success",
-        message: "LLM settings saved.",
+        message: t("llm_settings.saved_feedback"),
       });
     } catch (error) {
       setFeedback({
@@ -570,7 +611,7 @@ export function LlmSettingsSection() {
         message:
           error instanceof Error
             ? error.message
-            : "Saving LLM settings failed.",
+            : t("llm_settings.save_failed_feedback"),
       });
     }
   }
@@ -579,14 +620,14 @@ export function LlmSettingsSection() {
     const message =
       llmSettingsQuery.error instanceof Error
         ? llmSettingsQuery.error.message
-        : "Failed to load LLM settings.";
+        : t("llm_settings.load_failed_feedback");
 
     return (
       <Card className="border-destructive/60 bg-destructive/10">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-destructive">
             <TriangleAlert className="h-5 w-5" />
-            LLM Settings Error
+            {t("llm_settings.error_title")}
           </CardTitle>
           <CardDescription className="text-destructive/80">
             {message}
@@ -612,18 +653,16 @@ export function LlmSettingsSection() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-lg">
               <Bot className="h-5 w-5" />
-              LLM Providers
+              {t("llm_settings.title")}
             </CardTitle>
             <CardDescription>
-              Configure reusable LLM providers and models for future AI
-              features. Translation is not wired yet, but the runtime contract
-              is ready.
+              {t("llm_settings.description")}
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <div className="rounded-xl border border-border/60 bg-background/70 p-4">
               <p className="text-[11px] font-black uppercase tracking-widest text-muted-foreground">
-                Formats
+                {t("llm_settings.formats_label")}
               </p>
               <div className="mt-3 flex flex-wrap gap-2">
                 {formatOptions.map((option) => (
@@ -635,29 +674,32 @@ export function LlmSettingsSection() {
             </div>
             <div className="rounded-xl border border-border/60 bg-background/70 p-4">
               <p className="text-[11px] font-black uppercase tracking-widest text-muted-foreground">
-                Metadata
+                {t("llm_settings.metadata_label")}
               </p>
               <p className="mt-3 text-sm text-foreground/90">
-                Model context and output limits are fetched from models.dev and
-                cached locally.
+                {t("llm_settings.metadata_description")}
               </p>
             </div>
             <div className="rounded-xl border border-border/60 bg-background/70 p-4">
               <p className="text-[11px] font-black uppercase tracking-widest text-muted-foreground">
-                Storage
+                {t("llm_settings.storage_label")}
               </p>
               <p className="mt-3 text-sm text-foreground/90">
-                API keys are currently stored in the local app database as plain
-                text.
+                {t("llm_settings.storage_description")}
               </p>
             </div>
             <div className="rounded-xl border border-border/60 bg-background/70 p-4">
               <p className="text-[11px] font-black uppercase tracking-widest text-muted-foreground">
-                Current Config
+                {t("llm_settings.current_config_label")}
               </p>
               <p className="mt-3 text-sm font-bold">
-                {draft.providers.length} provider
-                {draft.providers.length === 1 ? "" : "s"}
+                {draft.providers.length === 1
+                  ? t("llm_settings.provider_count_singular", {
+                      count: draft.providers.length,
+                    })
+                  : t("llm_settings.provider_count_plural", {
+                      count: draft.providers.length,
+                    })}
               </p>
             </div>
           </CardContent>
@@ -667,20 +709,20 @@ export function LlmSettingsSection() {
           <Card className="border-border/60 bg-card/60">
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center justify-between gap-3 text-base">
-                Provider List
+                {t("llm_settings.provider_list_title")}
                 <Button type="button" size="sm" onClick={addProvider}>
                   <Plus className="h-4 w-4" />
-                  Add Provider
+                  {t("llm_settings.add_provider")}
                 </Button>
               </CardTitle>
               <CardDescription>
-                Providers hold auth, base URL, and their model catalog.
+                {t("llm_settings.provider_list_description")}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               {draft.providers.length === 0 ? (
                 <div className="rounded-xl border border-dashed border-border/60 bg-background/70 p-6 text-sm text-muted-foreground">
-                  No LLM providers configured yet.
+                  {t("llm_settings.no_providers")}
                 </div>
               ) : (
                 draft.providers.map((provider) => (
@@ -704,12 +746,19 @@ export function LlmSettingsSection() {
                         </p>
                       </div>
                       <Badge variant={provider.enabled ? "default" : "outline"}>
-                        {provider.enabled ? "Enabled" : "Disabled"}
+                        {provider.enabled
+                          ? t("common.enabled")
+                          : t("common.disabled")}
                       </Badge>
                     </div>
                     <p className="mt-3 text-xs text-muted-foreground">
-                      {provider.models.length} model
-                      {provider.models.length === 1 ? "" : "s"}
+                      {provider.models.length === 1
+                        ? t("llm_settings.model_count_singular", {
+                            count: provider.models.length,
+                          })
+                        : t("llm_settings.model_count_plural", {
+                            count: provider.models.length,
+                          })}
                     </p>
                   </button>
                 ))
@@ -727,8 +776,7 @@ export function LlmSettingsSection() {
                       {activeProvider.name}
                     </CardTitle>
                     <CardDescription>
-                      Configure the provider transport first, then add one or
-                      more models underneath.
+                      {t("llm_settings.active_provider_description")}
                     </CardDescription>
                   </div>
                   <Button
@@ -737,7 +785,7 @@ export function LlmSettingsSection() {
                     onClick={() => removeProvider(activeProvider.id)}
                   >
                     <Trash2 className="h-4 w-4" />
-                    Remove Provider
+                    {t("llm_settings.remove_provider")}
                   </Button>
                 </div>
               </CardHeader>
@@ -748,7 +796,7 @@ export function LlmSettingsSection() {
                       htmlFor={`llm-provider-name-${activeProvider.id}`}
                       className="text-sm font-bold uppercase text-muted-foreground"
                     >
-                      Provider Name
+                      {t("llm_settings.provider_name_label")}
                     </label>
                     <Input
                       id={`llm-provider-name-${activeProvider.id}`}
@@ -761,7 +809,7 @@ export function LlmSettingsSection() {
                           name: nextValue,
                         }));
                       }}
-                      placeholder="Anthropic Primary"
+                      placeholder={t("llm_settings.provider_name_placeholder")}
                     />
                   </div>
                   <div className="space-y-1.5">
@@ -769,7 +817,7 @@ export function LlmSettingsSection() {
                       htmlFor={`llm-provider-format-${activeProvider.id}`}
                       className="text-sm font-bold uppercase text-muted-foreground"
                     >
-                      API Format
+                      {t("llm_settings.provider_format_label")}
                     </label>
                     <select
                       id={`llm-provider-format-${activeProvider.id}`}
@@ -800,7 +848,7 @@ export function LlmSettingsSection() {
                       htmlFor={`llm-provider-base-url-${activeProvider.id}`}
                       className="text-sm font-bold uppercase text-muted-foreground"
                     >
-                      Base URL
+                      {t("llm_settings.provider_base_url_label")}
                     </label>
                     <Input
                       id={`llm-provider-base-url-${activeProvider.id}`}
@@ -823,7 +871,7 @@ export function LlmSettingsSection() {
                       htmlFor={`llm-provider-api-key-${activeProvider.id}`}
                       className="text-sm font-bold uppercase text-muted-foreground"
                     >
-                      API Key
+                      {t("llm_settings.provider_api_key_label")}
                     </label>
                     <div className="flex gap-2">
                       <Input
@@ -842,7 +890,7 @@ export function LlmSettingsSection() {
                             apiKey: nextValue,
                           }));
                         }}
-                        placeholder="sk-..."
+                        placeholder={t("llm_settings.provider_api_key_placeholder")}
                         className="font-mono"
                         autoComplete="off"
                         spellCheck={false}
@@ -858,8 +906,8 @@ export function LlmSettingsSection() {
                         }}
                         aria-label={
                           apiKeyVisibilityByProviderId[activeProvider.id]
-                            ? "Hide API Key"
-                            : "Show API Key"
+                            ? t("llm_settings.hide_api_key")
+                            : t("llm_settings.show_api_key")
                         }
                       >
                         {apiKeyVisibilityByProviderId[activeProvider.id] ? (
@@ -884,17 +932,18 @@ export function LlmSettingsSection() {
                         }));
                       }}
                     />
-                    Enabled
+                    {t("common.enabled")}
                   </label>
                 </div>
 
-                <div className="space-y-4">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <h3 className="text-base font-bold">Configured Models</h3>
+                  <div className="space-y-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                      <h3 className="text-base font-bold">
+                        {t("llm_settings.configured_models_title")}
+                      </h3>
                       <p className="text-sm text-muted-foreground">
-                        Each provider can expose multiple models for later
-                        manual selection.
+                        {t("llm_settings.configured_models_description")}
                       </p>
                     </div>
                     <Button
@@ -903,13 +952,13 @@ export function LlmSettingsSection() {
                       onClick={() => addModel(activeProvider.id)}
                     >
                       <Plus className="h-4 w-4" />
-                      Add Model
+                      {t("llm_settings.add_model")}
                     </Button>
                   </div>
 
                   {activeProvider.models.length === 0 ? (
                     <div className="rounded-xl border border-dashed border-border/60 bg-background/70 p-6 text-sm text-muted-foreground">
-                      No models configured for this provider yet.
+                      {t("llm_settings.no_models")}
                     </div>
                   ) : (
                     <div className="space-y-4">
@@ -956,8 +1005,7 @@ export function LlmSettingsSection() {
               <CardFooter className="flex flex-wrap justify-between gap-3 bg-muted/50 py-4">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <CheckCircle2 className="h-4 w-4" />
-                  Save stores provider credentials, models, and metadata
-                  snapshots.
+                  {t("llm_settings.save_footer_help")}
                 </div>
                 <Button
                   type="button"
@@ -967,7 +1015,7 @@ export function LlmSettingsSection() {
                   {saveLlmSettingsMutation.isPending ? (
                     <LoaderCircle className="h-4 w-4 animate-spin" />
                   ) : null}
-                  Save LLM Config
+                  {t("llm_settings.save_button")}
                 </Button>
               </CardFooter>
             </Card>
@@ -977,16 +1025,15 @@ export function LlmSettingsSection() {
                 <Bot className="h-10 w-10 text-muted-foreground" />
                 <div className="space-y-2">
                   <p className="text-lg font-bold">
-                    Create your first provider
+                    {t("llm_settings.empty_state_title")}
                   </p>
                   <p className="text-sm text-muted-foreground">
-                    Add Anthropic, OpenAI, or Gemini credentials first, then
-                    attach models underneath.
+                    {t("llm_settings.empty_state_description")}
                   </p>
                 </div>
                 <Button type="button" onClick={addProvider}>
                   <Plus className="h-4 w-4" />
-                  Add Provider
+                  {t("llm_settings.add_provider")}
                 </Button>
               </CardContent>
             </Card>
@@ -996,14 +1043,16 @@ export function LlmSettingsSection() {
 
       <AlertDialog
         open={metadataDialog !== null}
-        title="Choose Metadata Source"
+        title={t("llm_settings.metadata_dialog_title")}
         description={
           metadataDialog
-            ? `models.dev returned multiple matches for ${metadataDialog.query}. Pick the source whose limits best match the provider you are configuring.`
+            ? t("llm_settings.metadata_dialog_description", {
+                query: metadataDialog.query,
+              })
             : undefined
         }
-        confirmLabel="Use Selected Metadata"
-        cancelLabel="Dismiss"
+        confirmLabel={t("llm_settings.metadata_dialog_confirm")}
+        cancelLabel={t("llm_settings.metadata_dialog_cancel")}
         onCancel={() => setMetadataDialog(null)}
         onConfirm={() => {
           if (!metadataDialog) {
@@ -1062,21 +1111,29 @@ export function LlmSettingsSection() {
                 </p>
                 <div className="flex flex-wrap gap-2 text-xs">
                   <Badge variant="outline">
-                    Context {formatLimit(match.metadata.contextLimit)}
+                    {t("llm_settings.context_badge", {
+                      value: formatLimit(match.metadata.contextLimit),
+                    })}
                   </Badge>
                   <Badge variant="outline">
-                    Output {formatLimit(match.metadata.outputLimit)}
+                    {t("llm_settings.output_badge", {
+                      value: formatLimit(match.metadata.outputLimit),
+                    })}
                   </Badge>
                   {match.metadata.supportsToolCall ? (
-                    <Badge variant="secondary">Tool calling</Badge>
+                    <Badge variant="secondary">
+                      {t("llm_settings.tool_calling_badge")}
+                    </Badge>
                   ) : null}
                   {match.metadata.supportsReasoning ? (
-                    <Badge variant="secondary">Reasoning</Badge>
+                    <Badge variant="secondary">
+                      {t("llm_settings.reasoning_badge")}
+                    </Badge>
                   ) : null}
                 </div>
                 {match.sourceProviderApi ? (
                   <p className="text-xs text-muted-foreground">
-                    Source API: {match.sourceProviderApi}
+                    {t("llm_settings.source_api")} {match.sourceProviderApi}
                   </p>
                 ) : null}
               </div>
