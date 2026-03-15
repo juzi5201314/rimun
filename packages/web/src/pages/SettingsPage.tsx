@@ -13,6 +13,7 @@ import {
   CardTitle,
 } from "@/shared/components/ui/card";
 import { Input } from "@/shared/components/ui/input";
+import { type UiLocale, useI18n } from "@/shared/i18n";
 import type {
   AppError,
   AppSettings,
@@ -78,16 +79,19 @@ function toSaveSettingsInput(draft: SettingsFormState): SaveSettingsInput {
   };
 }
 
-function formatChannelLabel(channel: DistributionChannel) {
+function formatChannelLabel(
+  t: (key: string, params?: Record<string, unknown>) => string,
+  channel: DistributionChannel,
+) {
   switch (channel) {
     case "steam":
-      return "Steam";
+      return t("settings.channel.steam");
     case "gog":
-      return "GOG";
+      return t("settings.channel.gog");
     case "epic":
-      return "Epic";
+      return t("settings.channel.epic");
     case "manual":
-      return "Manual";
+      return t("settings.channel.manual");
     default:
       return channel;
   }
@@ -98,6 +102,8 @@ function ValidationCard({
 }: {
   validation: ValidatePathResult[];
 }) {
+  const { t } = useI18n();
+
   if (!validation.length) {
     return null;
   }
@@ -105,9 +111,11 @@ function ValidationCard({
   return (
     <Card className="border-border/60 bg-card/60">
       <CardHeader className="pb-3">
-        <CardTitle className="text-base">Last Save Validation</CardTitle>
+        <CardTitle className="text-base">
+          {t("settings.validation.card_title")}
+        </CardTitle>
         <CardDescription>
-          Backend validation returned immediately after persisting settings.
+          {t("settings.validation.card_description")}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -127,7 +135,9 @@ function ValidationCard({
                   {entry.channel}
                 </Badge>
                 <span className="text-sm font-bold">
-                  {isValid ? "Validated" : "Needs attention"}
+                  {isValid
+                    ? t("settings.validation.validated")
+                    : t("settings.validation.needs_attention")}
                 </span>
               </div>
               <p className="mt-3 break-all font-mono text-xs">
@@ -135,12 +145,14 @@ function ValidationCard({
               </p>
               {entry.wslPath ? (
                 <p className="mt-1 break-all font-mono text-xs text-muted-foreground">
-                  WSL: {entry.wslPath}
+                  {t("settings.validation.wsl_prefix")} {entry.wslPath}
                 </p>
               ) : null}
               <p className="mt-2 text-sm text-muted-foreground">
-                Exists: {entry.exists ? "yes" : "no"} / Readable:{" "}
-                {entry.readable ? "yes" : "no"}
+                {t("settings.validation.exists_label")}{" "}
+                {entry.exists ? t("common.yes") : t("common.no")} /{" "}
+                {t("settings.validation.readable_label")}{" "}
+                {entry.readable ? t("common.yes") : t("common.no")}
               </p>
               {entry.issues.length ? (
                 <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-destructive">
@@ -158,6 +170,8 @@ function ValidationCard({
 }
 
 function DetectionErrors({ errors }: { errors: AppError[] }) {
+  const { t } = useI18n();
+
   if (!errors.length) {
     return null;
   }
@@ -167,10 +181,10 @@ function DetectionErrors({ errors }: { errors: AppError[] }) {
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-base text-destructive">
           <AlertTriangle className="h-4 w-4" />
-          Detection Feedback
+          {t("settings.detection.card_title")}
         </CardTitle>
         <CardDescription className="text-destructive/80">
-          Structured errors returned by the backend path detector.
+          {t("settings.detection.card_description")}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -186,7 +200,10 @@ function DetectionErrors({ errors }: { errors: AppError[] }) {
               <p className="mt-1 text-sm text-destructive/80">{error.detail}</p>
             ) : null}
             <p className="mt-2 text-[11px] font-black uppercase tracking-widest text-destructive/80">
-              {error.recoverable ? "Recoverable" : "Blocking"} / {error.code}
+              {error.recoverable
+                ? t("settings.detection.recoverable")
+                : t("settings.detection.blocking")}{" "}
+              / {error.code}
             </p>
           </div>
         ))}
@@ -196,6 +213,7 @@ function DetectionErrors({ errors }: { errors: AppError[] }) {
 }
 
 export function SettingsPage() {
+  const { locale, setLocale, t } = useI18n();
   const settingsQuery = useSettingsQuery();
   const detectPathsMutation = useDetectPathsMutation();
   const saveSettingsMutation = useSaveSettingsMutation();
@@ -247,8 +265,7 @@ export function SettingsPage() {
     if (!detectableChannels.length) {
       setFeedback({
         tone: "warning",
-        message:
-          "The current backend does not expose any automatically detectable distribution channel.",
+        message: t("settings.feedback.no_detectable_channels"),
       });
       return;
     }
@@ -266,13 +283,13 @@ export function SettingsPage() {
       setFeedback({
         tone: detection.requiresManualSelection ? "warning" : "success",
         message: detection.requiresManualSelection
-          ? "Automatic detection finished, but manual path selection is still required."
-          : "Automatic path detection finished.",
+          ? t("settings.feedback.auto_detect_manual_required")
+          : t("settings.feedback.auto_detect_finished"),
       });
     } catch {
       setFeedback({
         tone: "error",
-        message: "Automatic path detection failed.",
+        message: t("settings.feedback.auto_detect_failed"),
       });
     }
   }
@@ -283,7 +300,7 @@ export function SettingsPage() {
     if (!draft.installationPath.trim()) {
       setFeedback({
         tone: "error",
-        message: "Installation path is required before saving.",
+        message: t("settings.feedback.install_required"),
       });
       return;
     }
@@ -302,13 +319,13 @@ export function SettingsPage() {
         message: savedSettings.validation.some(
           (entry) => entry.issues.length > 0,
         )
-          ? "Settings saved, but backend validation reported path issues."
-          : "Settings saved.",
+          ? t("settings.feedback.save_warning")
+          : t("settings.feedback.save_success"),
       });
     } catch {
       setFeedback({
         tone: "error",
-        message: "Saving settings failed.",
+        message: t("settings.feedback.save_failed"),
       });
     }
   }
@@ -317,7 +334,7 @@ export function SettingsPage() {
     const message =
       settingsQuery.error instanceof Error
         ? settingsQuery.error.message
-        : "Failed to load settings data.";
+        : t("settings.error.failed_load_fallback");
 
     return (
       <div className="flex h-full items-center justify-center p-8">
@@ -325,11 +342,13 @@ export function SettingsPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-destructive">
               <AlertTriangle className="h-5 w-5" />
-              Settings Error
+              {t("settings.error.title")}
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-sm font-bold">Failed to load settings data.</p>
+            <p className="text-sm font-bold">
+              {t("settings.error.failed_load_title")}
+            </p>
             <p className="mt-2 text-sm text-destructive/80">{message}</p>
           </CardContent>
         </Card>
@@ -344,11 +363,10 @@ export function SettingsPage() {
           <div>
             <h2 className="flex items-center gap-3 text-2xl font-black tracking-tight">
               <SettingsIcon className="h-6 w-6" />
-              Core Config
+              {t("settings.page.title")}
             </h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Configure only the paths and channels currently supported by the
-              desktop backend.
+              {t("settings.page.description")}
             </p>
           </div>
 
@@ -363,7 +381,7 @@ export function SettingsPage() {
             ) : (
               <FolderSearch className="h-4 w-4" />
             )}
-            Auto Detect Paths
+            {t("settings.page.auto_detect_paths")}
           </Button>
         </div>
       </div>
@@ -384,21 +402,57 @@ export function SettingsPage() {
           </output>
         ) : null}
 
+        <Card className="border-border/60 bg-card/60">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">
+              {t("settings.ui_language.card_title")}
+            </CardTitle>
+            <CardDescription>
+              {t("settings.ui_language.card_description")}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="space-y-1.5">
+              <label
+                htmlFor="ui-language"
+                className="text-sm font-bold uppercase text-muted-foreground"
+              >
+                {t("settings.ui_language.label")}
+              </label>
+              <select
+                id="ui-language"
+                className="flex h-10 w-full border-2 border-border bg-input px-3 py-2 text-sm font-bold text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                value={locale}
+                onChange={(event) => setLocale(event.target.value as UiLocale)}
+              >
+                <option value="en-us">
+                  {t("settings.ui_language.option_en_us")}
+                </option>
+                <option value="zh-cn">
+                  {t("settings.ui_language.option_zh_cn")}
+                </option>
+              </select>
+              <p className="text-xs text-muted-foreground">
+                {t("settings.ui_language.help")}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
         {cachedBootstrap ? (
           <Card className="border-border/60 bg-card/60">
             <CardHeader className="pb-3">
               <CardTitle className="text-base">
-                Backend Capability Snapshot
+                {t("settings.bootstrap.card_title")}
               </CardTitle>
               <CardDescription>
-                Values are read from the bootstrap payload instead of being
-                hardcoded in the renderer.
+                {t("settings.bootstrap.card_description")}
               </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
               <div className="space-y-2">
                 <p className="text-[11px] font-black uppercase tracking-widest text-muted-foreground">
-                  Supported Channels
+                  {t("settings.bootstrap.supported_channels")}
                 </p>
                 <div className="flex flex-wrap gap-2">
                   {selectableChannels.map((channel) => (
@@ -407,18 +461,18 @@ export function SettingsPage() {
                       variant="secondary"
                       className="uppercase"
                     >
-                      {formatChannelLabel(channel)}
+                      {formatChannelLabel(t, channel)}
                     </Badge>
                   ))}
                 </div>
               </div>
               <div className="space-y-2">
                 <p className="text-[11px] font-black uppercase tracking-widest text-muted-foreground">
-                  Runtime
+                  {t("settings.bootstrap.runtime")}
                 </p>
                 <p className="text-sm font-bold">
                   {cachedBootstrap.environment.isWsl
-                    ? `${cachedBootstrap.environment.platform} / WSL`
+                    ? `${cachedBootstrap.environment.platform} / ${t("settings.bootstrap.wsl_suffix")}`
                     : cachedBootstrap.environment.platform}
                 </p>
               </div>
@@ -431,10 +485,11 @@ export function SettingsPage() {
         {detectPathsMutation.data ? (
           <Card className="border-border/60 bg-card/60">
             <CardHeader className="pb-3">
-              <CardTitle className="text-base">Last Detection Result</CardTitle>
+              <CardTitle className="text-base">
+                {t("settings.last_detection.card_title")}
+              </CardTitle>
               <CardDescription>
-                Candidate paths and selection state returned by the backend path
-                detector.
+                {t("settings.last_detection.card_description")}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -447,46 +502,48 @@ export function SettingsPage() {
                   }
                 >
                   {detectPathsMutation.data.requiresManualSelection
-                    ? "Manual selection required"
-                    : "Preferred selection available"}
+                    ? t("settings.last_detection.manual_selection_required")
+                    : t("settings.last_detection.preferred_selection_available")}
                 </Badge>
                 <Badge variant="outline">
-                  {detectPathsMutation.data.candidates.length} candidates
+                  {t("settings.last_detection.candidates_count", {
+                    count: detectPathsMutation.data.candidates.length,
+                  })}
                 </Badge>
               </div>
               {detectPathsMutation.data.preferredSelection ? (
                 <div className="grid gap-3 md:grid-cols-3">
                   <div className="rounded-lg border border-border/60 bg-background/70 p-4">
                     <p className="text-[11px] font-black uppercase tracking-widest text-muted-foreground">
-                      Installation
+                      {t("settings.last_detection.installation")}
                     </p>
                     <p className="mt-2 break-all font-mono text-xs">
                       {detectPathsMutation.data.preferredSelection
-                        .installationPath ?? "Not detected"}
+                        .installationPath ?? t("settings.last_detection.not_detected")}
                     </p>
                   </div>
                   <div className="rounded-lg border border-border/60 bg-background/70 p-4">
                     <p className="text-[11px] font-black uppercase tracking-widest text-muted-foreground">
-                      Workshop
+                      {t("settings.last_detection.workshop")}
                     </p>
                     <p className="mt-2 break-all font-mono text-xs">
                       {detectPathsMutation.data.preferredSelection
-                        .workshopPath ?? "Not detected"}
+                        .workshopPath ?? t("settings.last_detection.not_detected")}
                     </p>
                   </div>
                   <div className="rounded-lg border border-border/60 bg-background/70 p-4">
                     <p className="text-[11px] font-black uppercase tracking-widest text-muted-foreground">
-                      Config
+                      {t("settings.last_detection.config")}
                     </p>
                     <p className="mt-2 break-all font-mono text-xs">
                       {detectPathsMutation.data.preferredSelection.configPath ??
-                        "Not detected"}
+                        t("settings.last_detection.not_detected")}
                     </p>
                   </div>
                 </div>
               ) : (
                 <div className="rounded-lg border border-border/60 bg-background/70 p-4 text-sm text-muted-foreground">
-                  Detection completed without a preferred selection.
+                  {t("settings.last_detection.no_preferred_selection")}
                 </div>
               )}
             </CardContent>
@@ -504,11 +561,10 @@ export function SettingsPage() {
                 >
                   <div className="space-y-1">
                     <CardTitle className="text-base">
-                      Path Format Guide
+                      {t("settings.path_guide.title")}
                     </CardTitle>
                     <CardDescription>
-                      Keep path semantics explicit when working across Windows
-                      and WSL.
+                      {t("settings.path_guide.description")}
                     </CardDescription>
                   </div>
                   <span className="rounded-full border border-border/60 bg-background/80 p-1.5 text-muted-foreground">
@@ -524,35 +580,32 @@ export function SettingsPage() {
                 <CardContent className="grid gap-3 pt-4 md:grid-cols-3">
                   <div className="rounded-lg border border-border/60 bg-background/70 p-4">
                     <p className="text-[11px] font-black uppercase tracking-widest text-muted-foreground">
-                      Enter Windows Paths
+                      {t("settings.path_guide.enter_windows_paths_title")}
                     </p>
                     <p className="mt-2 text-sm text-foreground/90">
-                      Use Windows absolute paths like{" "}
+                      {t("settings.path_guide.enter_windows_paths_prefix")}{" "}
                       <span className="font-mono text-xs">
                         C:\Games\RimWorld
                       </span>
-                      . Do not save{" "}
+                      {t("settings.path_guide.enter_windows_paths_suffix_1")}{" "}
                       <span className="font-mono text-xs">/mnt/c/...</span>{" "}
-                      here.
+                      {t("settings.path_guide.enter_windows_paths_suffix_2")}
                     </p>
                   </div>
                   <div className="rounded-lg border border-border/60 bg-background/70 p-4">
                     <p className="text-[11px] font-black uppercase tracking-widest text-muted-foreground">
-                      Required First
+                      {t("settings.path_guide.required_first_title")}
                     </p>
                     <p className="mt-2 text-sm text-foreground/90">
-                      Installation path is required before the desktop backend
-                      can scan mods. Workshop and Config can stay empty until
-                      detected.
+                      {t("settings.path_guide.required_first_body")}
                     </p>
                   </div>
                   <div className="rounded-lg border border-border/60 bg-background/70 p-4">
                     <p className="text-[11px] font-black uppercase tracking-widest text-muted-foreground">
-                      Auto Detect Flow
+                      {t("settings.path_guide.auto_detect_flow_title")}
                     </p>
                     <p className="mt-2 text-sm text-foreground/90">
-                      Auto Detect fills the draft form immediately. Review the
-                      detected Windows paths, then save to persist them.
+                      {t("settings.path_guide.auto_detect_flow_body")}
                     </p>
                   </div>
                 </CardContent>
@@ -563,11 +616,10 @@ export function SettingsPage() {
               <CardHeader className="bg-muted/50 py-4">
                 <CardTitle className="flex items-center gap-2 text-lg">
                   <HardDrive className="h-5 w-5" />
-                  RimWorld Paths
+                  {t("settings.paths.card_title")}
                 </CardTitle>
                 <CardDescription className="font-bold">
-                  Empty fields stay empty until the backend really detects or
-                  persists them.
+                  {t("settings.paths.card_description")}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4 p-6">
@@ -576,7 +628,7 @@ export function SettingsPage() {
                     htmlFor="channel"
                     className="text-sm font-bold uppercase text-muted-foreground"
                   >
-                    Distribution Channel
+                    {t("settings.paths.distribution_channel_label")}
                   </label>
                   <select
                     id="channel"
@@ -586,13 +638,12 @@ export function SettingsPage() {
                   >
                     {selectableChannels.map((channel) => (
                       <option key={channel} value={channel}>
-                        {formatChannelLabel(channel)}
+                        {formatChannelLabel(t, channel)}
                       </option>
                     ))}
                   </select>
                   <p className="text-xs text-muted-foreground">
-                    Channel controls which Windows path layout the backend
-                    validates.
+                    {t("settings.paths.distribution_channel_help")}
                   </p>
                 </div>
 
@@ -601,21 +652,20 @@ export function SettingsPage() {
                     htmlFor="installationPath"
                     className="text-sm font-bold uppercase text-muted-foreground"
                   >
-                    Installation Path
+                    {t("settings.paths.installation_path_label")}
                   </label>
                   <Input
                     id="installationPath"
                     name="installationPath"
                     value={draft.installationPath}
                     onChange={handleFieldChange("installationPath")}
-                    placeholder="C:\\Program Files (x86)\\Steam\\steamapps\\common\\RimWorld"
+                    placeholder={t("settings.paths.installation_path_placeholder")}
                     className="font-mono"
                     autoComplete="off"
                     spellCheck={false}
                   />
                   <p className="text-xs text-muted-foreground">
-                    Required. Save a Windows install directory, not the WSL
-                    mount path.
+                    {t("settings.paths.installation_path_help")}
                   </p>
                 </div>
 
@@ -624,21 +674,20 @@ export function SettingsPage() {
                     htmlFor="workshopPath"
                     className="text-sm font-bold uppercase text-muted-foreground"
                   >
-                    Workshop Path
+                    {t("settings.paths.workshop_path_label")}
                   </label>
                   <Input
                     id="workshopPath"
                     name="workshopPath"
                     value={draft.workshopPath}
                     onChange={handleFieldChange("workshopPath")}
-                    placeholder="C:\\Program Files (x86)\\Steam\\steamapps\\workshop\\content\\294100"
+                    placeholder={t("settings.paths.workshop_path_placeholder")}
                     className="font-mono"
                     autoComplete="off"
                     spellCheck={false}
                   />
                   <p className="text-xs text-muted-foreground">
-                    Optional for manual installs. Keep this as a Windows path if
-                    Steam Workshop content should be scanned.
+                    {t("settings.paths.workshop_path_help")}
                   </p>
                 </div>
 
@@ -647,35 +696,33 @@ export function SettingsPage() {
                     htmlFor="configPath"
                     className="text-sm font-bold uppercase text-muted-foreground"
                   >
-                    Config Path
+                    {t("settings.paths.config_path_label")}
                   </label>
                   <Input
                     id="configPath"
                     name="configPath"
                     value={draft.configPath}
                     onChange={handleFieldChange("configPath")}
-                    placeholder="C:\\Users\\<name>\\AppData\\LocalLow\\Ludeon Studios\\RimWorld by Ludeon Studios\\Config"
+                    placeholder={t("settings.paths.config_path_placeholder")}
                     className="font-mono"
                     autoComplete="off"
                     spellCheck={false}
                   />
                   <p className="text-xs text-muted-foreground">
-                    Optional until detected. This should point to the Windows
-                    RimWorld config directory that contains ModsConfig.xml.
+                    {t("settings.paths.config_path_help")}
                   </p>
                 </div>
               </CardContent>
               <CardFooter className="flex flex-wrap justify-between gap-3 bg-muted/50 py-4">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <CheckCircle2 className="h-4 w-4" />
-                  Save uses backend schema validation and repository
-                  persistence.
+                  {t("settings.paths.save_footer_help")}
                 </div>
                 <Button type="submit" className="w-32">
                   {saveSettingsMutation.isPending ? (
                     <LoaderCircle className="h-4 w-4 animate-spin" />
                   ) : null}
-                  Save
+                  {t("common.save")}
                 </Button>
               </CardFooter>
             </Card>
