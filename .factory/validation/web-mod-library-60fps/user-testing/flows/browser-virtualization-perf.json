@@ -1,0 +1,65 @@
+{
+  "groupId": "browser-virtualization-perf",
+  "testedAt": "2026-03-15T05:16:16.427021+00:00",
+  "surface": "browser web UI",
+  "testingTool": "agent-browser",
+  "assertionResults": [
+    {
+      "id": "VAL-WEB-MODLIB-020",
+      "status": "pass",
+      "reason": "Dragging [1001]Weapons Tab Reborn while programmatically scrolling the virtualized Active column inserted it into the visible scrolled window at order label 39 between rows 38 and 40 rather than the wrong row.",
+      "evidenceFiles": [
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/web-mod-library-60fps/browser-core/VAL-WEB-MODLIB-020-scroll-drag.webm",
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/web-mod-library-60fps/browser-core/VAL-WEB-MODLIB-020-before-drop.png",
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/web-mod-library-60fps/browser-core/VAL-WEB-MODLIB-020-after-drop.png"
+      ]
+    },
+    {
+      "id": "VAL-WEB-MODLIB-021",
+      "status": "pass",
+      "reason": "Selecting [1001]Weapons Tab Reborn, scrolling the inactive column away, and scrolling back preserved both the selected row and the details pane title.",
+      "evidenceFiles": [
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/web-mod-library-60fps/browser-core/VAL-WEB-MODLIB-021-before-scroll.png",
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/web-mod-library-60fps/browser-core/VAL-WEB-MODLIB-021-scrolled-away.png",
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/web-mod-library-60fps/browser-core/VAL-WEB-MODLIB-021-after-scroll-back.png"
+      ]
+    },
+    {
+      "id": "VAL-WEB-PERF-001",
+      "status": "pass",
+      "reason": "The drag-stress capture completed with an empty browser error log.",
+      "evidenceFiles": [
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/web-mod-library-60fps/browser-virtualization-perf/drag-perf-errors.txt"
+      ]
+    },
+    {
+      "id": "VAL-WEB-PERF-002",
+      "status": "pass",
+      "reason": "Perf capture recorded 1 long task at 90ms, satisfying the bounded long-task threshold (<=1 and max <=150ms).",
+      "evidenceFiles": [
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/web-mod-library-60fps/browser-virtualization-perf/drag-perf-summary.json"
+      ]
+    },
+    {
+      "id": "VAL-WEB-PERF-003",
+      "status": "pass",
+      "reason": "Perf capture recorded rAF pacing with p95=16.8ms and max=66.7ms, which satisfies the validation thresholds.",
+      "evidenceFiles": [
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/web-mod-library-60fps/browser-virtualization-perf/drag-perf-summary.json"
+      ]
+    }
+  ],
+  "interactiveChecks": [
+    {
+      "action": "Dragged an inactive row across a scrolled virtualized Active column and dropped it into the mid-list visible window.",
+      "observed": "The moved row appeared at order label 39 in the scrolled region, and the list stayed interactive."
+    },
+    {
+      "action": "Ran the in-page perf capture helper around a drag stress sequence with ~20 pointer moves.",
+      "observed": "The helper reported longtask count=1 maxDurationMs=90 and rAF p95Ms=16.8 maxMs=66.7 with no console errors."
+    }
+  ],
+  "frictions": [],
+  "blockers": [],
+  "toolsUsed": ["agent-browser", "Execute", "Read"]
+}

@@ -1,0 +1,116 @@
+{
+  "groupId": "browser-filters-cross",
+  "testedAt": "2026-03-15T05:16:16.427021+00:00",
+  "surface": "browser web UI",
+  "testingTool": "agent-browser",
+  "assertionResults": [
+    {
+      "id": "VAL-WEB-MODLIB-014",
+      "status": "pass",
+      "reason": "Search matched author text with mixed case (storyTELLER) and package-id text with upper case (UNLIMITEDHUGS.HUGSLIB).",
+      "evidenceFiles": [
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/web-mod-library-60fps/browser-filters-cross/VAL-WEB-MODLIB-014-author-case-insensitive.png",
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/web-mod-library-60fps/browser-filters-cross/VAL-WEB-MODLIB-014-package-case-insensitive.png"
+      ]
+    },
+    {
+      "id": "VAL-WEB-MODLIB-015",
+      "status": "pass",
+      "reason": "All Sources showed all three fixture rows, Local reduced the view to Core only, and Workshop showed Pawns plus HugsLib.",
+      "evidenceFiles": [
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/web-mod-library-60fps/browser-filters-cross/VAL-WEB-MODLIB-015-all.png",
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/web-mod-library-60fps/browser-filters-cross/VAL-WEB-MODLIB-015-local.png",
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/web-mod-library-60fps/browser-filters-cross/VAL-WEB-MODLIB-015-workshop.png"
+      ]
+    },
+    {
+      "id": "VAL-WEB-MODLIB-018",
+      "status": "pass",
+      "reason": "With the search narrowed to Pawns, the Active column had 0 visible rows; dropping Pawns into it succeeded and Pawns appeared in Active immediately.",
+      "evidenceFiles": [
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/web-mod-library-60fps/browser-filters-cross/VAL-WEB-MODLIB-018-before-empty-active.png",
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/web-mod-library-60fps/browser-filters-cross/VAL-WEB-MODLIB-018-after-drop.png"
+      ]
+    },
+    {
+      "id": "VAL-CROSS-001",
+      "status": "pass",
+      "reason": "After making the fixture page dirty, clicking Settings opened the route blocker dialog instead of navigating away immediately.",
+      "evidenceFiles": [
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/web-mod-library-60fps/browser-filters-cross/VAL-CROSS-001-route-blocker.png"
+      ]
+    },
+    {
+      "id": "VAL-CROSS-002",
+      "status": "pass",
+      "reason": "Choosing Stay Here kept the user on /?fixture=demo with the dirty draft intact and the reordered HugsLib/Core state preserved.",
+      "evidenceFiles": [
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/web-mod-library-60fps/browser-filters-cross/VAL-CROSS-002-stay.png"
+      ]
+    },
+    {
+      "id": "VAL-CROSS-003",
+      "status": "pass",
+      "reason": "Choosing Discard Changes navigated to /settings and no repeated blocker dialog appeared.",
+      "evidenceFiles": [
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/web-mod-library-60fps/browser-filters-cross/VAL-CROSS-003-discard.png"
+      ]
+    },
+    {
+      "id": "VAL-CROSS-004",
+      "status": "fail",
+      "reason": "Switching from Default to Builder while search/filter were active cleared the active search input instead of recomputing results under the existing filter state, so the visible results were not preserved under the active search/filter context.",
+      "evidenceFiles": [
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/web-mod-library-60fps/browser-filters-cross/VAL-CROSS-004-before-switch.png",
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/web-mod-library-60fps/browser-filters-cross/VAL-CROSS-004-after-switch.png"
+      ]
+    },
+    {
+      "id": "VAL-CROSS-005",
+      "status": "pass",
+      "reason": "Reordering HugsLib above Core while filtered to matching rows persisted after clearing search.",
+      "evidenceFiles": [
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/web-mod-library-60fps/browser-filters-cross/VAL-CROSS-005-filtered-before.png",
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/web-mod-library-60fps/browser-filters-cross/VAL-CROSS-005-filtered-after-reorder.png",
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/web-mod-library-60fps/browser-filters-cross/VAL-CROSS-005-after-clear-search.png"
+      ]
+    },
+    {
+      "id": "VAL-CROSS-008",
+      "status": "pass",
+      "reason": "After a drag attempt, switching fixture profiles did not leave behind a drag overlay or indicator and produced no console errors.",
+      "evidenceFiles": [
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/web-mod-library-60fps/browser-filters-cross/VAL-CROSS-008-during-drag.png",
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/web-mod-library-60fps/browser-filters-cross/VAL-CROSS-008-after-profile-switch.png"
+      ]
+    },
+    {
+      "id": "VAL-CROSS-009",
+      "status": "pass",
+      "reason": "Dragging Pawns into Active while filtered by search persisted after clearing the search input.",
+      "evidenceFiles": [
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/web-mod-library-60fps/browser-filters-cross/VAL-WEB-MODLIB-018-before-empty-active.png",
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/web-mod-library-60fps/browser-filters-cross/VAL-WEB-MODLIB-018-after-drop.png",
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/web-mod-library-60fps/browser-filters-cross/VAL-CROSS-009-after-clear-search.png"
+      ]
+    }
+  ],
+  "interactiveChecks": [
+    {
+      "action": "Exercised fixture search and source filters with author, package-id, local-only, workshop-only, and empty-target flows.",
+      "observed": "Search and source filters worked except that profile switching reset the active search/filter state."
+    },
+    {
+      "action": "Made the fixture page dirty and attempted to navigate to Settings.",
+      "observed": "The route blocker dialog showed Stay Here and Discard Changes actions; Stay preserved the dirty draft and Discard navigated to Settings."
+    }
+  ],
+  "frictions": [
+    {
+      "type": "product-bug",
+      "description": "Fixture profile switching resets searchQuery, which caused VAL-CROSS-004 to fail because active search/filter context was not preserved through the switch."
+    }
+  ],
+  "blockers": [],
+  "toolsUsed": ["agent-browser", "Execute", "Read"]
+}

@@ -1,0 +1,176 @@
+{
+  "groupId": "browser-core-dnd",
+  "testedAt": "2026-03-15T05:16:16.427021+00:00",
+  "surface": "browser web UI",
+  "testingTool": "agent-browser",
+  "assertionResults": [
+    {
+      "id": "VAL-WEB-MODLIB-001",
+      "status": "pass",
+      "reason": "Dragging only started from the row handle, and movement below the 6px activation threshold showed no overlay while movement beyond the threshold produced the drag overlay.",
+      "evidenceFiles": [
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/web-mod-library-60fps/browser-core/VAL-WEB-MODLIB-001-threshold.webm",
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/web-mod-library-60fps/browser-core/VAL-WEB-MODLIB-001-below-threshold.png",
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/web-mod-library-60fps/browser-core/VAL-WEB-MODLIB-003-overlay-centered.png"
+      ]
+    },
+    {
+      "id": "VAL-WEB-MODLIB-002",
+      "status": "pass",
+      "reason": "Clicking the Pawns drag handle left Core selected and the details pane title unchanged.",
+      "evidenceFiles": [
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/web-mod-library-60fps/browser-core/VAL-WEB-MODLIB-002-before.png",
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/web-mod-library-60fps/browser-core/VAL-WEB-MODLIB-002-after-handle-click.png"
+      ]
+    },
+    {
+      "id": "VAL-WEB-MODLIB-003",
+      "status": "pass",
+      "reason": "The mid-drag overlay showed HugsLib with the same secondary identity line (unlimitedhugs.hugslib) as the row being dragged.",
+      "evidenceFiles": [
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/web-mod-library-60fps/browser-core/VAL-WEB-MODLIB-003-overlay-centered.png"
+      ]
+    },
+    {
+      "id": "VAL-WEB-MODLIB-004",
+      "status": "pass",
+      "reason": "Reordering HugsLib above Core in the Active column updated the visible order labels from Core/HugsLib = 1/2 to HugsLib/Core = 1/2.",
+      "evidenceFiles": [
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/web-mod-library-60fps/browser-core/VAL-WEB-MODLIB-013-before-selected-hugslib.png",
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/web-mod-library-60fps/browser-core/VAL-WEB-MODLIB-004-013-016-after-reorder.png"
+      ]
+    },
+    {
+      "id": "VAL-WEB-MODLIB-005",
+      "status": "pass",
+      "reason": "Reordering three filtered inactive mods on the live dataset changed the session-only inactive ordering while the Unsaved changes badge remained absent.",
+      "evidenceFiles": [
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/web-mod-library-60fps/browser-core/VAL-WEB-MODLIB-005-before-filtered-inactive.png",
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/web-mod-library-60fps/browser-core/VAL-WEB-MODLIB-005-after-filtered-inactive.png"
+      ]
+    },
+    {
+      "id": "VAL-WEB-MODLIB-006",
+      "status": "pass",
+      "reason": "Dragging Pawns from Inactive into Active increased the active count from 2 to 3, removed the inactive row, and the details pane showed Pawns as Enabled.",
+      "evidenceFiles": [
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/web-mod-library-60fps/browser-core/VAL-WEB-MODLIB-006-before.png",
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/web-mod-library-60fps/browser-core/VAL-WEB-MODLIB-006-after-selected-pawns.png"
+      ]
+    },
+    {
+      "id": "VAL-WEB-MODLIB-007",
+      "status": "pass",
+      "reason": "Dragging HugsLib from Active to the left side of the inactive Pawns row moved it into Inactive and the details pane showed HugsLib as Disabled.",
+      "evidenceFiles": [
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/web-mod-library-60fps/browser-core/VAL-WEB-MODLIB-007-before.png",
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/web-mod-library-60fps/browser-core/VAL-WEB-MODLIB-007-hover-pawns-left.png",
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/web-mod-library-60fps/browser-core/VAL-WEB-MODLIB-007-after-selected-hugslib-disabled.png"
+      ]
+    },
+    {
+      "id": "VAL-WEB-MODLIB-008",
+      "status": "pass",
+      "reason": "Pressing Escape during a drag cleared the overlay/indicators and left membership plus ordering unchanged with no dirty state.",
+      "evidenceFiles": [
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/web-mod-library-60fps/browser-core/VAL-WEB-MODLIB-008-before.png",
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/web-mod-library-60fps/browser-core/VAL-WEB-MODLIB-008-during-drag.png",
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/web-mod-library-60fps/browser-core/VAL-WEB-MODLIB-008-after-cancel.png"
+      ]
+    },
+    {
+      "id": "VAL-WEB-MODLIB-009",
+      "status": "pass",
+      "reason": "Attempting to drag a locked harmony duplicate row produced no overlay and no ordering/membership change.",
+      "evidenceFiles": [
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/web-mod-library-60fps/browser-core/VAL-WEB-MODLIB-009-before.png",
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/web-mod-library-60fps/browser-core/VAL-WEB-MODLIB-009-after-attempt.png"
+      ]
+    },
+    {
+      "id": "VAL-WEB-MODLIB-010",
+      "status": "pass",
+      "reason": "Hovering the dragged HugsLib row above and then below the Core row midpoint flipped the row drop indicator from before to after.",
+      "evidenceFiles": [
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/web-mod-library-60fps/browser-core/VAL-WEB-MODLIB-010-before-midpoint.png",
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/web-mod-library-60fps/browser-core/VAL-WEB-MODLIB-010-after-midpoint.png"
+      ]
+    },
+    {
+      "id": "VAL-WEB-MODLIB-011",
+      "status": "pass",
+      "reason": "Hovering the active column droppable area below its rows showed the column-end drop indicator when the column still had visible rows.",
+      "evidenceFiles": [
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/web-mod-library-60fps/browser-core/VAL-WEB-MODLIB-007-drag-target.png"
+      ]
+    },
+    {
+      "id": "VAL-WEB-MODLIB-012",
+      "status": "pass",
+      "reason": "Clicking the HugsLib row body selected it and updated the details pane title to HugsLib.",
+      "evidenceFiles": [
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/web-mod-library-60fps/browser-core/VAL-WEB-MODLIB-012-selection-hugslib.png"
+      ]
+    },
+    {
+      "id": "VAL-WEB-MODLIB-013",
+      "status": "pass",
+      "reason": "HugsLib remained selected after it was reordered above Core in the Active column.",
+      "evidenceFiles": [
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/web-mod-library-60fps/browser-core/VAL-WEB-MODLIB-013-before-selected-hugslib.png",
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/web-mod-library-60fps/browser-core/VAL-WEB-MODLIB-004-013-016-after-reorder.png"
+      ]
+    },
+    {
+      "id": "VAL-WEB-MODLIB-016",
+      "status": "pass",
+      "reason": "Reordering within Active surfaced the Unsaved changes badge immediately.",
+      "evidenceFiles": [
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/web-mod-library-60fps/browser-core/VAL-WEB-MODLIB-004-013-016-after-reorder.png"
+      ]
+    },
+    {
+      "id": "VAL-WEB-MODLIB-017",
+      "status": "pass",
+      "reason": "Dragging between columns marked the profile dirty while preserving the moved row state.",
+      "evidenceFiles": [
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/web-mod-library-60fps/browser-core/VAL-WEB-MODLIB-006-017-after.png",
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/web-mod-library-60fps/browser-core/VAL-WEB-MODLIB-007-after-selected-hugslib-disabled.png"
+      ]
+    },
+    {
+      "id": "VAL-WEB-MODLIB-019",
+      "status": "pass",
+      "reason": "Hovering a dragged inactive row over a locked harmony duplicate did not show a row-level before/after indicator on the locked row.",
+      "evidenceFiles": [
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/web-mod-library-60fps/browser-core/VAL-WEB-MODLIB-019-hover-locked-row.png"
+      ]
+    }
+  ],
+  "interactiveChecks": [
+    {
+      "action": "Used fixture-demo rows Pawns, Core, and HugsLib to exercise handle click, threshold drag start, active reorder, cross-column moves, cancel, and row indicator behavior.",
+      "observed": "All tested drag interactions behaved as expected and console errors remained empty."
+    },
+    {
+      "action": "Filtered the live dataset to harmony duplicates and attempted to drag a locked row.",
+      "observed": "The row stayed locked with no overlay, no mutation, and no console errors."
+    },
+    {
+      "action": "Filtered the live dataset to three [DHM] inactive rows and reordered one within Inactive.",
+      "observed": "The inactive order changed while the dirty badge stayed absent."
+    }
+  ],
+  "frictions": [
+    {
+      "type": "subagent-launch",
+      "description": "Task-based flow-validator launches failed in this environment, so the parent validator executed the browser flow directly."
+    },
+    {
+      "type": "fixture-drop-targeting",
+      "description": "On fixture Active → Inactive moves, hovering the left side of the inactive row was required to hit the row droppable instead of the active column-end droppable."
+    }
+  ],
+  "blockers": [],
+  "toolsUsed": ["agent-browser", "Execute", "Read"]
+}

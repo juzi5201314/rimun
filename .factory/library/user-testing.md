@@ -29,6 +29,18 @@ Validation surface discovery, setup notes, and resource classification.
 - Planned max concurrent validators for terminal perf guardrail surface: `1`
 - Rationale: the tests share one local Bun workspace and write a single flow report, so serialization avoids noisy overlap while keeping runtime predictable
 
+## Flow Validator Guidance: browser web UI
+
+- Stay inside `/home/soeur/project/rimun` and the assigned evidence/output paths only.
+- Use the dev services from `.factory/services.yaml`: Bun host on `http://127.0.0.1:3071` and Vite on `http://127.0.0.1:5175`.
+- Prefer `http://127.0.0.1:5175/?fixture=demo` for deterministic drag/drop, filter, profile-switch, and route-blocker assertions. Switch to the host-backed root URL only if a flow specifically requires live backend behavior that the fixture cannot cover.
+- Use a dedicated `agent-browser` session for this validator; do not reuse another validator's browser state.
+- Avoid actions that would write back to a real RimWorld installation or config. In particular, do not click save/apply actions unless the assigned assertion explicitly requires it.
+- For `VAL-WEB-PERF-001/002/003`, use `window.__rimunPerfCapture.start(label)` before the drag stress interaction and `window.__rimunPerfCapture.stop()` immediately after, then save the returned JSON in the flow report.
+- Capture screenshots or recordings for every assertion group and store them under the assigned evidence directory. Treat any uncaught console error, missing drag overlay cleanup, or broken navigation dialog as a failed assertion.
+- In this environment, Task-based `user-testing-flow-validator` launches may fail before producing output; if that happens, run the planned browser flow directly in the parent validator and record the launch failure as a friction.
+- For fixture-demo validation of Active → Inactive drags, hover the pointer over the left side of the inactive target row to hit the row droppable. Center-hovering over the row can resolve to the active column-end droppable instead.
+
 ## Flow Validator Guidance: terminal perf guardrails
 
 - Stay inside `/home/soeur/project/rimun`.
