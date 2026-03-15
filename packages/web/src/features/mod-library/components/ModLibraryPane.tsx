@@ -57,6 +57,11 @@ export function ModLibraryPane({
     return null;
   }
 
+  const hasHardOrderViolation =
+    controller.analysis?.diagnostics.some(
+      (diagnostic) => diagnostic.code === "hard_order_violation",
+    ) ?? false;
+
   return (
     <section className="flex min-h-0 min-w-0 flex-1 flex-col border-r border-border/60 bg-background/20">
       <h2 className="sr-only">Mod Library</h2>
@@ -335,12 +340,16 @@ export function ModLibraryPane({
                       "h-7 px-3",
                       controller.analysis.isOptimal
                         ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700"
-                        : "bg-primary/10 text-primary",
+                        : hasHardOrderViolation
+                          ? "border-destructive/30 bg-destructive/10 text-destructive"
+                          : "bg-primary/10 text-primary",
                     )}
                   >
                     {controller.analysis.isOptimal
                       ? "Order Optimal"
-                      : "Optimization Recommended"}
+                      : hasHardOrderViolation
+                        ? "Load Order Error"
+                        : "Optimization Recommended"}
                   </Badge>
 
                   {controller.analysis.hasBlockingIssues ? (

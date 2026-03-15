@@ -63,6 +63,7 @@ export const modOrderDiagnosticCodeSchema = z.enum([
   "cycle_detected",
   "incompatible_mods",
   "unknown_active_mod",
+  "hard_order_violation",
 ]);
 
 export const windowsAbsolutePathSchema = z

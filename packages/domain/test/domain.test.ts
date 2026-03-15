@@ -379,4 +379,75 @@ describe("domain mod derivation", () => {
       "ludeon.rimworld",
     ]);
   });
+
+  it("reports hard load order violations as errors without blocking auto-sort", () => {
+    const snapshot = createSnapshot([
+      "ludeon.rimworld",
+      "example.beta",
+      "example.alpha",
+    ]);
+    const [coreEntry] = snapshot.entries;
+
+    if (!coreEntry) {
+      throw new Error("Expected the snapshot to contain the Core entry.");
+    }
+
+    const library = buildModLibraryFromSnapshot({
+      ...snapshot,
+      entries: [
+        coreEntry,
+        {
+          entryName: "Beta",
+          source: "workshop",
+          modWindowsPath:
+            "C:\\Games\\Steam\\steamapps\\workshop\\content\\294100\\333333333",
+          modReadablePath: rimunTmpPath("workshop", "333333333"),
+          manifestPath:
+            "C:\\Games\\Steam\\steamapps\\workshop\\content\\294100\\333333333\\About\\About.xml",
+          hasAboutXml: true,
+          aboutXmlText: `
+            <ModMetaData>
+              <name>Beta</name>
+              <packageId>example.beta</packageId>
+              <supportedVersions><li>1.5</li></supportedVersions>
+            </ModMetaData>
+          `,
+          notes: [],
+        },
+        {
+          entryName: "Alpha",
+          source: "workshop",
+          modWindowsPath:
+            "C:\\Games\\Steam\\steamapps\\workshop\\content\\294100\\444444444",
+          modReadablePath: rimunTmpPath("workshop", "444444444"),
+          manifestPath:
+            "C:\\Games\\Steam\\steamapps\\workshop\\content\\294100\\444444444\\About\\About.xml",
+          hasAboutXml: true,
+          aboutXmlText: `
+            <ModMetaData>
+              <name>Alpha</name>
+              <packageId>example.alpha</packageId>
+              <supportedVersions><li>1.5</li></supportedVersions>
+              <forceLoadBefore><li>example.beta</li></forceLoadBefore>
+            </ModMetaData>
+          `,
+          notes: [],
+        },
+      ],
+    });
+    const analysis = analyzeModOrder(library);
+
+    expect(analysis.hasBlockingIssues).toBe(false);
+    expect(
+      analysis.diagnostics.some(
+        (diagnostic) =>
+          diagnostic.code === "hard_order_violation" &&
+          diagnostic.severity === "error" &&
+          diagnostic.isBlocking === false,
+      ),
+    ).toBe(true);
+    expect(
+      resolveRecommendedActivePackageIds(analysis, ["reorderActiveMods"]),
+    ).toEqual(["ludeon.rimworld", "example.alpha", "example.beta"]);
+  });
 });

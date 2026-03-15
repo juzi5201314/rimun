@@ -298,6 +298,70 @@ function countSortDifferences(
   return differenceCount;
 }
 
+function appendHardOrderViolationDiagnostics(input: {
+  diagnostics: ModOrderDiagnostic[];
+  edges: ModOrderEdge[];
+  groups: Map<string, ModGroup>;
+  currentOrderIndex: Map<string, number>;
+}) {
+  const seenPairs = new Set<string>();
+
+  for (const edge of input.edges) {
+    if (!edge.isHard) {
+      continue;
+    }
+
+    const fromIndex = input.currentOrderIndex.get(edge.fromPackageId);
+    const toIndex = input.currentOrderIndex.get(edge.toPackageId);
+
+    // Only report violations inside the currently active (user-saved) list.
+    if (fromIndex === undefined || toIndex === undefined) {
+      continue;
+    }
+
+    if (fromIndex < toIndex) {
+      continue;
+    }
+
+    const pairKey = `${edge.fromPackageId}:${edge.toPackageId}`;
+
+    if (seenPairs.has(pairKey)) {
+      continue;
+    }
+
+    seenPairs.add(pairKey);
+
+    const fromName =
+      getDisplayName(input.groups.get(edge.fromPackageId)) ?? edge.fromPackageId;
+    const toName =
+      getDisplayName(input.groups.get(edge.toPackageId)) ?? edge.toPackageId;
+    const fromModId = input.groups.get(edge.fromPackageId)?.preferredMod?.id;
+    const toModId = input.groups.get(edge.toPackageId)?.preferredMod?.id;
+    const modIds: string[] = [];
+
+    if (fromModId) {
+      modIds.push(fromModId);
+    }
+
+    if (toModId && toModId !== fromModId) {
+      modIds.push(toModId);
+    }
+
+    createDiagnostic(
+      {
+        code: "hard_order_violation",
+        severity: "error",
+        message: `${fromName} must load before ${toName}. ${edge.reason}`,
+        packageIds: [edge.fromPackageId, edge.toPackageId],
+        modIds,
+        // This is fixable via reordering, so don't block auto-sort.
+        isBlocking: false,
+      },
+      input.diagnostics,
+    );
+  }
+}
+
 export function analyzeModOrder(
   modLibrary: ModLibraryResult,
 ): ModOrderAnalysisResult {
@@ -607,6 +671,14 @@ export function analyzeModOrder(
     topologicalOrder.ordered.length === sortablePackageIds.length
       ? topologicalOrder.ordered
       : recommendedActivePackageIds;
+
+  appendHardOrderViolationDiagnostics({
+    diagnostics,
+    edges: graphEdges,
+    groups,
+    currentOrderIndex,
+  });
+
   const sortDifferenceCount = countSortDifferences(
     currentActivePackageIds,
     recommendedOrderPackageIds,

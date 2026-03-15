@@ -150,6 +150,11 @@ export function ModDetailsPane({
     });
   }, [selectedModId]);
 
+  const hardOrderDiagnostics =
+    controller.analysis?.diagnostics.filter(
+      (diagnostic) => diagnostic.code === "hard_order_violation",
+    ) ?? [];
+
   return (
     <aside className="flex shrink-0 flex-col overflow-hidden bg-card/10">
       {controller.selectedMod ? (
@@ -241,6 +246,24 @@ export function ModDetailsPane({
 
           <div className="no-scrollbar flex-1 overflow-y-auto bg-background/5 p-6">
             <div className="space-y-4">
+              {hardOrderDiagnostics.length > 0 ? (
+                <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-5">
+                  <p className="flex items-center gap-2 text-sm font-semibold text-destructive">
+                    <span className="h-2 w-2 rounded-full bg-destructive" />
+                    Load order errors
+                  </p>
+                  <ul className="mt-4 list-disc space-y-2 pl-5 text-sm leading-relaxed text-destructive/90">
+                    {hardOrderDiagnostics.map((diagnostic) => (
+                      <li
+                        key={`${diagnostic.code}:${diagnostic.packageIds.join(":")}:${diagnostic.message}`}
+                      >
+                        {diagnostic.message}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+
               {controller.analysis?.hasBlockingIssues ? (
                 <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-5">
                   <p className="flex items-center gap-2 text-sm font-semibold text-destructive">
