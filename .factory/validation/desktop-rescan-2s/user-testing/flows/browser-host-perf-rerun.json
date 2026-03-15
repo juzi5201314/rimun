@@ -1,0 +1,65 @@
+{
+  "groupId": "browser-host-perf-rerun",
+  "testedAt": "2026-03-15T08:07:49.714166+00:00",
+  "surface": "browser web UI + host timing",
+  "testingTool": "agent-browser + Execute",
+  "assertionResults": [
+    {
+      "id": "VAL-HOST-PERF-002",
+      "status": "pass",
+      "reason": "The available live filesystem dataset contained 650 real mods (49 active, 573 inactive, 650 visible total). During the live rescan, the search field changed to 'slibhug' while the Rescan button stayed disabled for another 486.9ms, showing the UI remained responsive before the request completed. Host timing logs recorded a warm real-filesystem rescan of 776.9ms with zero scan errors, and the orchestrator-approved acceptance criteria allows actual local dataset size and timing evidence when near-2000 real data is unavailable.",
+      "evidenceFiles": [
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/desktop-rescan-2s/browser-host-perf-rerun/rescan-before.png",
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/desktop-rescan-2s/browser-host-perf-rerun/body-initial.txt",
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/desktop-rescan-2s/browser-host-perf-rerun/rescan-monitor-typed-during.json",
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/desktop-rescan-2s/browser-host-perf-rerun/rescan-after-typed.png",
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/desktop-rescan-2s/browser-host-perf-rerun/real-dataset-rescan.txt",
+        "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/desktop-rescan-2s/browser-host-perf-rerun/console-errors.txt"
+      ]
+    }
+  ],
+  "interactiveChecks": [
+    {
+      "action": "Opened the live host-backed Mod Library at http://127.0.0.1:5175/ and captured the visible dataset counts from the page body.",
+      "observed": "The local real-filesystem dataset exposed 49 active mods, 573 inactive mods, and 650 visible/total mods on the Default profile."
+    },
+    {
+      "action": "Triggered a live Rescan and typed into the search box before the request completed while the monitor recorded DOM state.",
+      "observed": "The Rescan button became disabled at t=2071.1ms, the search value changed to 'slibhug' at t=2516.8ms while the button was still disabled, the disabled state persisted until t=3003.7ms, and the button re-enabled at t=3178.4ms. This left a 486.9ms window where input updates occurred during the in-flight rescan."
+    }
+  ],
+  "commandsRun": [
+    {
+      "command": "bun --cwd /home/soeur/project/rimun /tmp/rimun-real-dataset-rescan.ts",
+      "exitCode": 0,
+      "observation": "The live settings resolved to the persisted Windows installation/workshop/config roots, scanned 650 entries twice, and logged '[mod-scan] total=755.2ms mods=650 ... errs=0' for the warm rescan along with a JSON summary reporting warmMs=776.9 and activePackageIds=49.",
+      "evidenceFile": "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/desktop-rescan-2s/browser-host-perf-rerun/real-dataset-rescan.txt"
+    },
+    {
+      "command": "python3 <monitor analysis>",
+      "exitCode": 0,
+      "observation": "The monitor analysis found the first typed-while-disabled event at t=2516.8ms, the last disabled event at t=3003.7ms, and the first re-enabled event at t=3178.4ms, confirming the UI accepted search input during the disabled-window of the live rescan.",
+      "evidenceFile": "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/desktop-rescan-2s/browser-host-perf-rerun/rescan-monitor-typed-during.json"
+    }
+  ],
+  "frictions": [
+    {
+      "type": "subagent-launch",
+      "description": "Task-based flow-validator launch failed immediately because this environment still resolves to an invalid model name custom:GPT-5.4, so the parent validator executed the rerun directly."
+    },
+    {
+      "type": "service-reuse",
+      "description": "Ports 3071 and 5175 were already occupied by healthy dev services, so the rerun reused those existing services instead of restarting them."
+    }
+  ],
+  "blockers": [],
+  "toolsUsed": ["Task", "agent-browser", "Execute", "ApplyPatch"],
+  "evidenceFiles": [
+    "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/desktop-rescan-2s/browser-host-perf-rerun/rescan-before.png",
+    "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/desktop-rescan-2s/browser-host-perf-rerun/body-initial.txt",
+    "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/desktop-rescan-2s/browser-host-perf-rerun/rescan-monitor-typed-during.json",
+    "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/desktop-rescan-2s/browser-host-perf-rerun/rescan-after-typed.png",
+    "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/desktop-rescan-2s/browser-host-perf-rerun/real-dataset-rescan.txt",
+    "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/desktop-rescan-2s/browser-host-perf-rerun/console-errors.txt"
+  ]
+}

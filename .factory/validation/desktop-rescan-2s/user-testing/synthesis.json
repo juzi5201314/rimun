@@ -1,46 +1,22 @@
 {
   "milestone": "desktop-rescan-2s",
-  "round": 1,
-  "status": "fail",
+  "round": 2,
+  "status": "pass",
   "assertionsSummary": {
-    "total": 14,
-    "passed": 13,
+    "total": 1,
+    "passed": 1,
     "failed": 0,
-    "blocked": 1
+    "blocked": 0
   },
-  "passedAssertions": [
-    "VAL-HOST-001",
-    "VAL-HOST-002",
-    "VAL-HOST-003",
-    "VAL-HOST-004",
-    "VAL-HOST-005",
-    "VAL-HOST-006",
-    "VAL-HOST-007",
-    "VAL-HOST-008",
-    "VAL-HOST-SAFETY-001",
-    "VAL-HOST-SAFETY-002",
-    "VAL-HOST-PERF-001",
-    "VAL-CROSS-006",
-    "VAL-CROSS-007"
-  ],
+  "passedAssertions": ["VAL-HOST-PERF-002"],
   "failedAssertions": [],
-  "blockedAssertions": [
-    {
-      "id": "VAL-HOST-PERF-002",
-      "blockedBy": "The available live dataset contains 650 mods rather than a near-2000-mod real filesystem library. Warm rescan evidence was still recorded (698.8ms, responsive UI), but the contract requires near-2000 real-data evidence before this assertion can pass."
-    }
-  ],
-  "appliedUpdates": [
-    {
-      "target": "user-testing.md",
-      "description": "Documented live host-backed rescan validation guidance, healthy-service reuse on occupied ports, and the temporary profile-name draft technique for dirty-guard checks.",
-      "source": "flow-report"
-    }
-  ],
-  "previousRound": null,
+  "blockedAssertions": [],
+  "appliedUpdates": [],
+  "previousRound": ".factory/validation/desktop-rescan-2s/user-testing/synthesis.round1.json",
   "notes": [
-    "The Task-based user-testing-flow-validator launcher still fails in this environment because it resolves to an invalid custom model name; the parent validator executed both planned validation groups directly.",
-    "The live machine exposed only one real profile and a 650-mod real filesystem dataset. That was sufficient for all host UI/correctness assertions and for recording actual timing/log evidence, but not for passing VAL-HOST-PERF-002's near-2000 real-data requirement.",
-    "The direct host timing script resolved real Windows paths from the persisted settings: E:\\SteamLibrary\\steamapps\\common\\RimWorld, E:\\SteamLibrary\\steamapps\\workshop\\content\\294100, and C:\\Users\\soeur\\AppData\\LocalLow\\Ludeon Studios\\RimWorld by Ludeon Studios\\Config."
+    "This rerun retested only the previously blocked assertion VAL-HOST-PERF-002.",
+    "The available live dataset still contains 650 real filesystem mods (49 active, 573 inactive, 650 visible total), which is below the preferred near-2000 scale but now acceptable per the orchestrator's approval as long as actual dataset size and timing are recorded.",
+    "The live UI accepted search input while the Rescan button remained disabled for another 486.9ms, and the direct host timing script recorded a warm real-filesystem rescan of 776.9ms with zero scan errors.",
+    "The Task-based user-testing-flow-validator launcher still fails in this environment because it resolves to an invalid custom model name; the parent validator executed the rerun directly."
   ]
 }

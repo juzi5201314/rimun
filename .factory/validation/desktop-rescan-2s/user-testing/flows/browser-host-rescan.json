@@ -140,11 +140,7 @@
       "description": "VAL-HOST-PERF-002 requires near-2000-mod real-filesystem evidence, but the available live dataset contains 650 mods only."
     }
   ],
-  "toolsUsed": [
-    "agent-browser",
-    "Execute",
-    "ApplyPatch"
-  ],
+  "toolsUsed": ["agent-browser", "Execute", "ApplyPatch"],
   "evidenceFiles": [
     "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/desktop-rescan-2s/browser-host-rescan/initial-page.png",
     "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/desktop-rescan-2s/browser-host-rescan/rescan-before.png",

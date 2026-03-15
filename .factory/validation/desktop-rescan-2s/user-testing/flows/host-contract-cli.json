@@ -71,9 +71,7 @@
     }
   ],
   "blockers": [],
-  "toolsUsed": [
-    "Execute"
-  ],
+  "toolsUsed": ["Execute"],
   "evidenceFiles": [
     "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/desktop-rescan-2s/host-contract-cli/web-rescan-tests.txt",
     "/home/soeur/.factory/missions/865e1ec5-c607-486e-89ee-23f62d4cb8b0/evidence/desktop-rescan-2s/host-contract-cli/host-service-tests.txt",
