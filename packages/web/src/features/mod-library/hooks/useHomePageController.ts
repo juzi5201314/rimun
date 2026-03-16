@@ -56,9 +56,7 @@ function collectCurrentOrderViolations(
     const toIndex = currentOrderIndex.get(edge.toPackageId);
 
     return (
-      fromIndex !== undefined &&
-      toIndex !== undefined &&
-      fromIndex >= toIndex
+      fromIndex !== undefined && toIndex !== undefined && fromIndex >= toIndex
     );
   });
 }
@@ -294,13 +292,22 @@ export function useHomePageController() {
     currentProfile !== null &&
     ((draftProfileName.trim() || savedProfileName) !== savedProfileName ||
       !areStringArraysEqual(draftActivePackageIds, savedActivePackageIds));
-  const computedAnalysis = useMemo(() => {
+  const analysisInput = useMemo(() => {
     if (!modLibrary || modLibrary.requiresConfiguration) {
       return null;
     }
 
-    return analyzeModOrder(modLibrary);
-  }, [modLibrary]);
+    if (
+      areStringArraysEqual(draftActivePackageIds, modLibrary.activePackageIds)
+    ) {
+      return modLibrary;
+    }
+
+    return {
+      ...modLibrary,
+      activePackageIds: draftActivePackageIds,
+    };
+  }, [draftActivePackageIds, modLibrary]);
 
   useEffect(() => {
     if (!currentProfileId) {
@@ -350,7 +357,13 @@ export function useHomePageController() {
       saveProfileMutation.isPending,
     400,
   );
-  const analysis = isDirty ? null : computedAnalysis;
+  const analysis = useMemo(() => {
+    if (!analysisInput) {
+      return null;
+    }
+
+    return analyzeModOrder(analysisInput);
+  }, [analysisInput]);
   const currentOrderViolations = useMemo(
     () => collectCurrentOrderViolations(analysis),
     [analysis],
@@ -548,8 +561,8 @@ export function useHomePageController() {
     null;
   const selectedPackageId = selectedMod?.packageIdNormalized ?? null;
   const selectedExplanation =
-    selectedPackageId && computedAnalysis
-      ? (computedAnalysis.explanations.find(
+    selectedPackageId && analysis
+      ? (analysis.explanations.find(
           (explanation) => explanation.packageId === selectedPackageId,
         ) ?? null)
       : null;
@@ -806,7 +819,9 @@ export function useHomePageController() {
       return;
     }
 
-    setNewProfileName(t("home_controller.copy_of", { name: currentProfile.name }));
+    setNewProfileName(
+      t("home_controller.copy_of", { name: currentProfile.name }),
+    );
     setIsCreateProfileDialogOpen(true);
   }
 

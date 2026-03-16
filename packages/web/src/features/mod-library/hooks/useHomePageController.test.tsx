@@ -348,6 +348,43 @@ describe("useHomePageController", () => {
     });
   });
 
+  it("recomputes load order violations immediately after a drag reorder", async () => {
+    const hostApi = createTestHostApi({
+      modSourceSnapshot: createOptimalHarmonySnapshot(),
+    });
+    const wrapper = ({ children }: PropsWithChildren) => (
+      <AppProviders hostApi={hostApi}>{children}</AppProviders>
+    );
+    const { result } = renderHook(() => useHomePageController(), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.currentOrderViolations).toHaveLength(0);
+      expect(result.current.analysis?.sortDifferenceCount).toBe(0);
+    });
+
+    act(() => {
+      result.current.handleDropMod({
+        packageId: "brrainz.harmony",
+        placement: "after",
+        sourceColumn: "active",
+        targetColumn: "active",
+        targetPackageId: "ludeon.rimworld",
+      });
+    });
+
+    await waitFor(() => {
+      expect(result.current.isDirty).toBe(true);
+      expect(result.current.draftActivePackageIds).toEqual([
+        "ludeon.rimworld",
+        "brrainz.harmony",
+        "oskarpotocki.vanillafactionsexpanded.core",
+      ]);
+      expect(result.current.currentOrderViolations).toHaveLength(1);
+      expect(result.current.analysis?.isOptimal).toBe(false);
+      expect(result.current.analysis?.sortDifferenceCount).toBeGreaterThan(0);
+    });
+  });
+
   it("treats Harmony before Core as an optimal order and keeps sort actions closed", async () => {
     const hostApi = createTestHostApi({
       modSourceSnapshot: createOptimalHarmonySnapshot(),
@@ -364,13 +401,13 @@ describe("useHomePageController", () => {
       expect(result.current.analysis?.isOptimal).toBe(true);
       expect(result.current.isSortDialogOpen).toBe(false);
       expect(result.current.isDependencyDialogOpen).toBe(false);
-      expect(result.current.visibleActiveMods.map((mod) => mod.packageId)).toEqual(
-        [
-          "brrainz.harmony",
-          "ludeon.rimworld",
-          "OskarPotocki.VanillaFactionsExpanded.Core",
-        ],
-      );
+      expect(
+        result.current.visibleActiveMods.map((mod) => mod.packageId),
+      ).toEqual([
+        "brrainz.harmony",
+        "ludeon.rimworld",
+        "OskarPotocki.VanillaFactionsExpanded.Core",
+      ]);
     });
   });
 });

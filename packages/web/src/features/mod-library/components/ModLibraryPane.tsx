@@ -6,7 +6,6 @@ import { Input } from "@/shared/components/ui/input";
 import { useI18n } from "@/shared/i18n";
 import { cn } from "@/shared/lib/utils";
 import {
-  AlertTriangle,
   ChevronDown,
   ChevronRight,
   GripVertical,
@@ -73,7 +72,9 @@ export function ModLibraryPane({
   saveShortcutState.current.modLibraryReady = Boolean(controller.modLibrary);
   saveShortcutState.current.isDirty = controller.isDirty;
   saveShortcutState.current.isBusy = controller.isBusy;
-  saveShortcutState.current.hasCurrentProfile = Boolean(controller.currentProfile);
+  saveShortcutState.current.hasCurrentProfile = Boolean(
+    controller.currentProfile,
+  );
   saveShortcutState.current.handleSaveProfile = controller.handleSaveProfile;
 
   const hasCurrentOrderViolation = controller.currentOrderViolations.length > 0;
@@ -341,9 +342,7 @@ export function ModLibraryPane({
                           }
                           size="sm"
                           className="h-8 px-3 text-xs"
-                          onClick={() =>
-                            controller.setSourceFilter("workshop")
-                          }
+                          onClick={() => controller.setSourceFilter("workshop")}
                         >
                           {t("mod_library.source_workshop_button")}
                         </Button>
@@ -386,15 +385,7 @@ export function ModLibraryPane({
         <div className="shrink-0 border-b border-border/60 bg-background/50 px-5 py-2.5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2 overflow-hidden">
-              {controller.isDirty ? (
-                <Badge
-                  variant="outline"
-                  className="h-7 gap-2 border-amber-500/30 bg-amber-500/10 text-amber-700"
-                >
-                  <AlertTriangle className="h-3.5 w-3.5" />
-                  {t("mod_library.analysis_paused")}
-                </Badge>
-              ) : controller.analysis ? (
+              {controller.analysis ? (
                 <>
                   <Badge
                     variant={
