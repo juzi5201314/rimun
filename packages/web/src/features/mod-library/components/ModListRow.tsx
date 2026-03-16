@@ -331,6 +331,7 @@ export const ModListRow = memo(function ModListRow({
   return (
     <div
       ref={setRowElementRef}
+      className="py-0.5"
       data-testid="mod-library-row"
       data-index={virtualIndex}
       data-column-id={item.columnId}
