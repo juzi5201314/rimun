@@ -63,6 +63,7 @@ export function buildModLibraryFromSnapshot(
     selection: snapshot.selection,
     scannedAt: snapshot.scannedAt,
     scannedRoots: snapshot.scannedRoots,
+    gameVersion: snapshot.gameVersion,
     activePackageIds: snapshot.activePackageIds,
     mods,
     errors: snapshot.errors,

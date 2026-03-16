@@ -47,32 +47,6 @@ function normalizeGameVersion(value: string | null) {
   return match?.[1] ?? null;
 }
 
-function deriveCurrentGameVersion(
-  modLibrary:
-    | {
-        mods: ModRecord[];
-      }
-    | null
-    | undefined,
-) {
-  const coreMod =
-    modLibrary?.mods.find(
-      (mod) => mod.dependencyMetadata.packageIdNormalized === "ludeon.rimworld",
-    ) ?? null;
-
-  if (!coreMod) {
-    return null;
-  }
-
-  return (
-    normalizeGameVersion(coreMod.version) ??
-    coreMod.dependencyMetadata.supportedVersions
-      .map((version) => normalizeGameVersion(version))
-      .find((version): version is string => Boolean(version)) ??
-    null
-  );
-}
-
 function collectCurrentOrderViolations(
   analysis: ModOrderAnalysisResult | null,
 ): ModOrderEdge[] {
@@ -417,8 +391,8 @@ export function useHomePageController() {
     [currentOrderViolations],
   );
   const currentGameVersion = useMemo(
-    () => deriveCurrentGameVersion(modLibrary),
-    [modLibrary],
+    () => normalizeGameVersion(modLibrary?.gameVersion ?? null),
+    [modLibrary?.gameVersion],
   );
   const preparedMods = useMemo<PreparedModRecord[]>(() => {
     const draftActivePackageIdSet = new Set(draftActivePackageIds);

@@ -35,6 +35,7 @@ function createSnapshot(activePackageIds: string[]): ModSourceSnapshot {
       modsConfigPath:
         "C:\\Users\\alice\\AppData\\LocalLow\\Ludeon Studios\\RimWorld by Ludeon Studios\\Config\\ModsConfig.xml",
     },
+    gameVersion: "1.5.4104 rev435",
     activePackageIds,
     entries: [
       {
@@ -201,6 +202,7 @@ describe("domain mod derivation", () => {
       createSnapshot(["ludeon.rimworld", "unlimitedhugs.hugslib"]),
     );
 
+    expect(library.gameVersion).toBe("1.5.4104 rev435");
     expect(library.mods).toHaveLength(3);
     expect(library.mods[0]?.name).toBe("Core");
     expect(library.mods[1]?.name).toBe("HugsLib");

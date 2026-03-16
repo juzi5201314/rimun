@@ -235,11 +235,14 @@ export const scannedRootsSchema = z.object({
   modsConfigPath: windowsAbsolutePathSchema.nullable(),
 });
 
+export const gameVersionSchema = z.string().trim().min(1).nullable();
+
 export const modSourceSnapshotSchema = z.object({
   environment: executionEnvironmentSchema,
   selection: pathSelectionSchema.nullable(),
   scannedAt: isoDateTimeSchema,
   scannedRoots: scannedRootsSchema,
+  gameVersion: gameVersionSchema,
   activePackageIds: z.array(z.string().trim().min(1)).default([]),
   entries: z.array(modSourceSnapshotEntrySchema),
   errors: z.array(appErrorSchema),
@@ -305,6 +308,7 @@ export const modLibraryResultSchema = z.object({
   selection: pathSelectionSchema.nullable(),
   scannedAt: isoDateTimeSchema,
   scannedRoots: scannedRootsSchema,
+  gameVersion: gameVersionSchema,
   activePackageIds: z.array(z.string().trim().min(1)).default([]),
   mods: z.array(modRecordSchema),
   errors: z.array(appErrorSchema),

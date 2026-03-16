@@ -30,6 +30,7 @@ function createRescannedSnapshot(): ModSourceSnapshot {
       modsConfigPath:
         "C:\\Users\\player\\AppData\\LocalLow\\Ludeon Studios\\RimWorld by Ludeon Studios\\Config\\ModsConfig.xml",
     },
+    gameVersion: "1.5.4104 rev435",
     activePackageIds: ["ludeon.rimworld", "unlimitedhugs.hugslib"],
     entries: [
       {
@@ -101,6 +102,7 @@ function createOptimalHarmonySnapshot(): ModSourceSnapshot {
       modsConfigPath:
         "C:\\Users\\player\\AppData\\LocalLow\\Ludeon Studios\\RimWorld by Ludeon Studios\\Config\\ModsConfig.xml",
     },
+    gameVersion: "1.5.4104 rev435",
     activePackageIds: [
       "brrainz.harmony",
       "ludeon.rimworld",
@@ -205,6 +207,7 @@ function createMisorderedHarmonySnapshot(): ModSourceSnapshot {
       modsConfigPath:
         "C:\\Users\\player\\AppData\\LocalLow\\Ludeon Studios\\RimWorld by Ludeon Studios\\Config\\ModsConfig.xml",
     },
+    gameVersion: "1.5.4104 rev435",
     activePackageIds: [
       "ludeon.rimworld",
       "brrainz.harmony",
@@ -241,6 +244,7 @@ function createUnsupportedVersionSnapshot(): ModSourceSnapshot {
       modsConfigPath:
         "C:\\Users\\player\\AppData\\LocalLow\\Ludeon Studios\\RimWorld by Ludeon Studios\\Config\\ModsConfig.xml",
     },
+    gameVersion: "1.5.4104 rev435",
     activePackageIds: ["ludeon.rimworld", "example.legacy"],
     entries: [
       {
@@ -258,7 +262,6 @@ function createUnsupportedVersionSnapshot(): ModSourceSnapshot {
             <name>Core</name>
             <packageId>ludeon.rimworld</packageId>
             <author>Ludeon Studios</author>
-            <modVersion>1.5.4062</modVersion>
           </ModMetaData>
         `,
         notes: [],

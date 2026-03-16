@@ -287,6 +287,16 @@ async function readXmlFile(filePath: string) {
   return decodeXmlFileContent(await Bun.file(filePath).bytes());
 }
 
+function parseGameVersionText(versionText: string) {
+  const firstLine = versionText
+    .replace(/^\ufeff/, "")
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .find((line) => line.length > 0);
+
+  return firstLine ?? null;
+}
+
 function readXmlFileWithEncoding(filePath: string) {
   const fileContent = readFileSync(filePath);
 
@@ -336,6 +346,31 @@ function toErrorMessage(error: unknown) {
   }
 
   return String(error);
+}
+
+async function readInstallationGameVersion(
+  installationPath: string,
+  toReadablePath: (windowsPath: string) => string | null,
+) {
+  const versionWindowsPath = win32.join(installationPath, "Version.txt");
+  const versionReadablePath = toReadablePath(versionWindowsPath);
+
+  if (!versionReadablePath) {
+    return null;
+  }
+
+  try {
+    const versionText = await Bun.file(versionReadablePath).text();
+    const parsedVersion = parseGameVersionText(versionText);
+
+    if (parsedVersion) {
+      return parsedVersion;
+    }
+  } catch (error) {
+    return null;
+  }
+
+  return null;
 }
 
 function chunkTasks<TTask>(tasks: TTask[]) {
@@ -1252,6 +1287,7 @@ export async function readModSourceSnapshot(
         workshopPath,
         modsConfigPath,
       },
+      gameVersion: null,
       activePackageIds: [],
       entries: [],
       errors,
@@ -1260,6 +1296,10 @@ export async function readModSourceSnapshot(
   }
 
   const configStart = performance.now();
+  const gameVersionPromise = readInstallationGameVersion(
+    selection.installationPath,
+    toReadablePath,
+  );
   const activePackageIdsPromise =
     options.activePackageIdsOverride !== undefined
       ? Promise.resolve(
@@ -1291,8 +1331,9 @@ export async function readModSourceSnapshot(
   const activeModsConfig = await activePackageIdsPromise;
   const activePackageIdsOrdered = activeModsConfig.activePackageIdsOrdered;
   const configMs = performance.now() - configStart;
-  const [installationTasks, installationDataTasks, workshopTasks] =
+  const [gameVersion, installationTasks, installationDataTasks, workshopTasks] =
     await Promise.all([
+      gameVersionPromise,
       installationTasksPromise,
       installationDataTasksPromise,
       workshopTasksPromise,
@@ -1357,6 +1398,7 @@ export async function readModSourceSnapshot(
       workshopPath,
       modsConfigPath,
     },
+    gameVersion,
     activePackageIds: activePackageIdsOrdered,
     entries,
     errors,

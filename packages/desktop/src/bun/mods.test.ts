@@ -12,8 +12,9 @@ import {
 
 function createSandboxLayout() {
   const sandboxRoot = createRimunTempDir("rimun-mod-scan-");
-  const installationModsRoot = join(sandboxRoot, "installation", "Mods");
-  const installationDataRoot = join(sandboxRoot, "installation", "Data");
+  const installationRoot = join(sandboxRoot, "installation");
+  const installationModsRoot = join(installationRoot, "Mods");
+  const installationDataRoot = join(installationRoot, "Data");
   const workshopRoot = join(sandboxRoot, "workshop");
   const configRoot = join(sandboxRoot, "config");
 
@@ -26,6 +27,7 @@ function createSandboxLayout() {
     configRoot,
     installationDataRoot,
     installationModsRoot,
+    installationRoot,
     sandboxRoot,
     workshopRoot,
   };
@@ -80,6 +82,13 @@ function createReadablePathResolver(paths: {
       return join(paths.configRoot, "ModsConfig.xml");
     }
 
+    if (
+      paths.installationModsRoot &&
+      windowsPath === "C:\\Games\\RimWorld\\Version.txt"
+    ) {
+      return join(paths.installationModsRoot, "..", "Version.txt");
+    }
+
     return null;
   };
 }
@@ -121,6 +130,10 @@ function writeModsConfigXml(
       </ModsConfigData>
     `,
   );
+}
+
+function writeGameVersionFile(installationRoot: string, versionText: string) {
+  writeFileSync(join(installationRoot, "Version.txt"), versionText);
 }
 
 const testEnvironment = {
@@ -181,8 +194,10 @@ describe("mod scanner", () => {
       configRoot,
       installationDataRoot,
       installationModsRoot,
+      installationRoot,
       workshopRoot,
     } = createSandboxLayout();
+    writeGameVersionFile(installationRoot, "1.5.4104 rev435\n");
 
     writeAboutXml(
       installationModsRoot,
@@ -230,6 +245,7 @@ describe("mod scanner", () => {
     });
 
     expect(result.requiresConfiguration).toBe(false);
+    expect(result.gameVersion).toBe("1.5.4104 rev435");
     expect(result.mods).toHaveLength(2);
     expect(result.mods[0]?.name).toBe("Core");
     expect(result.mods[0]?.enabled).toBe(true);
@@ -256,8 +272,9 @@ describe("mod scanner", () => {
   });
 
   it("keeps scanning mods when config path is missing but reports enabled-state fallback", async () => {
-    const { installationDataRoot, installationModsRoot } =
+    const { installationDataRoot, installationModsRoot, installationRoot } =
       createSandboxLayout();
+    writeGameVersionFile(installationRoot, "1.5.4104 rev435");
 
     writeAboutXml(
       installationModsRoot,
@@ -285,13 +302,19 @@ describe("mod scanner", () => {
     );
 
     expect(result.mods).toHaveLength(1);
+    expect(result.gameVersion).toBe("1.5.4104 rev435");
     expect(result.mods[0]?.enabled).toBe(false);
     expect(result.errors).toHaveLength(1);
   });
 
   it("uses active package id overrides for profile-backed scans", async () => {
-    const { configRoot, installationDataRoot, installationModsRoot } =
-      createSandboxLayout();
+    const {
+      configRoot,
+      installationDataRoot,
+      installationModsRoot,
+      installationRoot,
+    } = createSandboxLayout();
+    writeGameVersionFile(installationRoot, "1.5.4104 rev435");
 
     writeAboutXml(
       installationModsRoot,
@@ -344,8 +367,13 @@ describe("mod scanner", () => {
   });
 
   it("scans official DLC from installation Data and resolves enabled state from knownExpansions", async () => {
-    const { configRoot, installationDataRoot, installationModsRoot } =
-      createSandboxLayout();
+    const {
+      configRoot,
+      installationDataRoot,
+      installationModsRoot,
+      installationRoot,
+    } = createSandboxLayout();
+    writeGameVersionFile(installationRoot, "1.5.4104 rev435");
 
     writeAboutXml(
       installationModsRoot,

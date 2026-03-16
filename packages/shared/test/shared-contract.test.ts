@@ -5,6 +5,7 @@ import {
   createProfileInputSchema,
   detectPathsResultSchema,
   llmSettingsSchema,
+  modLibraryResultSchema,
   modOrderAnalysisResultSchema,
   modSourceSnapshotSchema,
   profileCatalogResultSchema,
@@ -126,6 +127,7 @@ describe("shared schemas", () => {
         modsConfigPath:
           "C:\\Users\\alice\\AppData\\LocalLow\\Ludeon Studios\\RimWorld by Ludeon Studios\\Config\\ModsConfig.xml",
       },
+      gameVersion: "1.5.4104 rev435",
       activePackageIds: ["ludeon.rimworld"],
       entries: [
         {
@@ -150,6 +152,41 @@ describe("shared schemas", () => {
     expect(parsed.entries).toHaveLength(1);
     expect(parsed.entries[0]?.source).toBe("installation");
     expect(parsed.activePackageIds).toEqual(["ludeon.rimworld"]);
+    expect(parsed.gameVersion).toBe("1.5.4104 rev435");
+  });
+
+  it("accepts a mod library payload with an explicit game version", () => {
+    const parsed = modLibraryResultSchema.parse({
+      environment: {
+        platform: "linux",
+        isWsl: true,
+        wslDistro: "Ubuntu",
+      },
+      selection: {
+        channel: "steam",
+        installationPath:
+          "C:\\Program Files (x86)\\Steam\\steamapps\\common\\RimWorld",
+        workshopPath:
+          "C:\\Program Files (x86)\\Steam\\steamapps\\workshop\\content\\294100",
+        configPath: null,
+      },
+      scannedAt: "2026-03-12T10:00:00.000Z",
+      scannedRoots: {
+        installationModsPath:
+          "C:\\Program Files (x86)\\Steam\\steamapps\\common\\RimWorld\\Mods",
+        workshopPath:
+          "C:\\Program Files (x86)\\Steam\\steamapps\\workshop\\content\\294100",
+        modsConfigPath:
+          "C:\\Users\\alice\\AppData\\LocalLow\\Ludeon Studios\\RimWorld by Ludeon Studios\\Config\\ModsConfig.xml",
+      },
+      gameVersion: "1.5.4104 rev435",
+      activePackageIds: ["ludeon.rimworld"],
+      mods: [],
+      errors: [],
+      requiresConfiguration: false,
+    });
+
+    expect(parsed.gameVersion).toBe("1.5.4104 rev435");
   });
 
   it("accepts a profile catalog payload", () => {

@@ -86,6 +86,7 @@ function createSyntheticLibrary(): ModLibraryResult {
       modsConfigPath:
         "C:\\Users\\alice\\AppData\\LocalLow\\Ludeon Studios\\RimWorld by Ludeon Studios\\Config\\ModsConfig.xml",
     },
+    gameVersion: "1.5.4104 rev435",
     activePackageIds: mods.map((mod) => mod.packageId ?? mod.id),
     mods,
     errors: [],
