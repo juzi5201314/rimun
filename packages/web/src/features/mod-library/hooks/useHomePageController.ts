@@ -573,6 +573,20 @@ export function useHomePageController() {
     saveProfileMutation.isPending ||
     applyActivePackageIdsMutation.isPending;
   const isRescanning = isRescanInFlight || modSourceSnapshotQuery.isFetching;
+  const shouldPromptEnableDependencies =
+    Boolean(analysis) &&
+    !applyActivePackageIdsMutation.isPending &&
+    !isDirty &&
+    (analysis?.missingInstalledInactiveDependencies.length ?? 0) > 0 &&
+    dismissedDependencyAnalysisAt !== analysis?.analyzedAt;
+  const shouldPromptApplySort =
+    Boolean(analysis) &&
+    !applyActivePackageIdsMutation.isPending &&
+    !isDirty &&
+    (analysis?.missingInstalledInactiveDependencies.length ?? 0) === 0 &&
+    !analysis?.hasBlockingIssues &&
+    (analysis?.sortDifferenceCount ?? 0) > 0 &&
+    dismissedSortAnalysisAt !== analysis?.analyzedAt;
 
   useEffect(() => {
     if (
@@ -588,31 +602,12 @@ export function useHomePageController() {
   }, [preparedMods, selectedMod, selectedModId]);
 
   useEffect(() => {
-    if (!analysis || applyActivePackageIdsMutation.isPending || isDirty) {
-      return;
-    }
+    setIsDependencyDialogOpen(shouldPromptEnableDependencies);
+  }, [shouldPromptEnableDependencies]);
 
-    if (analysis.missingInstalledInactiveDependencies.length > 0) {
-      if (dismissedDependencyAnalysisAt !== analysis.analyzedAt) {
-        setIsDependencyDialogOpen(true);
-      }
-      return;
-    }
-
-    if (
-      !analysis.hasBlockingIssues &&
-      analysis.sortDifferenceCount > 0 &&
-      dismissedSortAnalysisAt !== analysis.analyzedAt
-    ) {
-      setIsSortDialogOpen(true);
-    }
-  }, [
-    analysis,
-    applyActivePackageIdsMutation.isPending,
-    dismissedDependencyAnalysisAt,
-    dismissedSortAnalysisAt,
-    isDirty,
-  ]);
+  useEffect(() => {
+    setIsSortDialogOpen(shouldPromptApplySort);
+  }, [shouldPromptApplySort]);
 
   function updateDraftModOrder(
     updater: (currentOrder: DraftModOrder) => DraftModOrder,

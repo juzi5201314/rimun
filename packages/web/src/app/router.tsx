@@ -1,7 +1,7 @@
 import { HomePage } from "@/pages/HomePage";
 import { SettingsPage } from "@/pages/SettingsPage";
-import { cn } from "@/shared/lib/utils";
 import { useI18n } from "@/shared/i18n";
+import { cn } from "@/shared/lib/utils";
 import {
   ChevronLeft,
   ChevronRight,
@@ -31,6 +31,7 @@ function SidebarLink({
   return (
     <Link
       to={to}
+      aria-label={collapsed ? label : undefined}
       title={collapsed ? label : undefined}
       className={cn(
         "flex items-center border-l-4 text-sm font-medium transition-all",
@@ -52,7 +53,7 @@ function SidebarLink({
 }
 
 function RootLayout() {
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(true);
   const { t } = useI18n();
 
   return (
@@ -123,17 +124,11 @@ function RootLayout() {
             isCollapsed ? "items-center p-4" : "p-5",
           )}
         >
-          <div
-            className="flex items-center gap-2"
-            title={t("app.dev_console")}
-          >
+          <div className="flex items-center gap-2" title={t("app.dev_console")}>
             <Terminal className="w-3.5 h-3.5 shrink-0" />
             {!isCollapsed && <span>{t("app.dev_console")}</span>}
           </div>
-          <div
-            className="flex items-center gap-2"
-            title={t("app.verified")}
-          >
+          <div className="flex items-center gap-2" title={t("app.verified")}>
             <Shield className="w-3.5 h-3.5 text-primary/40 shrink-0" />
             {!isCollapsed && <span>{t("app.verified")}</span>}
           </div>

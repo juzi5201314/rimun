@@ -432,9 +432,12 @@ export function ModDetailsPane({
     controller.selectedMod?.version ?? t("mod_details.unknown_version");
 
   return (
-    <aside className="flex shrink-0 flex-col overflow-hidden bg-card/10">
+    <aside
+      data-testid="mod-details-pane"
+      className="flex h-full min-h-0 min-w-0 shrink-0 flex-col overflow-hidden bg-card/10"
+    >
       {controller.selectedMod ? (
-        <div className="flex h-full flex-col">
+        <div className="flex h-full min-h-0 flex-col overflow-hidden">
           <header className="shrink-0 border-b border-border/60 bg-background/40 p-6">
             <div className="flex flex-col gap-5">
               <div className="flex items-start justify-between gap-4">
@@ -531,7 +534,10 @@ export function ModDetailsPane({
             </div>
           </header>
 
-          <div className="no-scrollbar flex-1 overflow-y-auto bg-background/5 p-6">
+          <div
+            data-testid="mod-details-scroll"
+            className="no-scrollbar min-h-0 flex-1 overflow-y-auto bg-background/5 p-6"
+          >
             <div className="space-y-4">
               {hardOrderDiagnostics.length > 0 ? (
                 <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-5">

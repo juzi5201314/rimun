@@ -289,6 +289,25 @@ async function expandActiveProfilePanel() {
 }
 
 describe("App", () => {
+  it("starts with the primary sidebar collapsed while keeping navigation accessible", async () => {
+    renderApp({
+      hostApi: createTestHostApi(),
+    });
+
+    expect(
+      await screen.findByRole("heading", { name: /Mod Library/i }),
+    ).toBeInTheDocument();
+
+    expect(
+      screen.getByRole("button", { name: /Expand sidebar/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/^R$/)).toBeInTheDocument();
+    expect(screen.queryByText(/^rimun$/i)).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: /^Settings$/i }),
+    ).toBeInTheDocument();
+  });
+
   it("renders dual mod columns with drag handles instead of checkboxes", async () => {
     renderApp({
       hostApi: createTestHostApi(),
@@ -306,6 +325,27 @@ describe("App", () => {
       screen.getByText(/Active column order is the exact saved load order/i),
     ).toBeInTheDocument();
     expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+  });
+
+  it("keeps the mod details pane in a scrollable overflow container", async () => {
+    renderApp({
+      hostApi: createTestHostApi(),
+    });
+
+    expect(
+      await screen.findByRole("heading", { name: /Mod Library/i }),
+    ).toBeInTheDocument();
+
+    expect(screen.getByTestId("mod-details-pane")).toHaveClass(
+      "h-full",
+      "min-h-0",
+      "overflow-hidden",
+    );
+    expect(screen.getByTestId("mod-details-scroll")).toHaveClass(
+      "min-h-0",
+      "flex-1",
+      "overflow-y-auto",
+    );
   });
 
   it("shows an optimal order state without blocking or sort actions for Harmony before Core", async () => {
@@ -356,12 +396,14 @@ describe("App", () => {
     expect(
       screen.getByText(/^1 order conflicts for this mod$/i),
     ).toBeInTheDocument();
-    expect(screen.getByText(/It should load after Harmony/i)).toBeInTheDocument();
     expect(
-      screen.getByText(
-        /Reason: Harmony declares loadBefore Core in About\.xml\./i,
-      ),
+      screen.getByText(/It should load after Harmony/i),
     ).toBeInTheDocument();
+    expect(
+      screen.getAllByText(
+        /Reason: Harmony declares loadBefore Core in About\.xml\./i,
+      ).length,
+    ).toBeGreaterThan(0);
   });
 
   it("auto-saves before switching profiles when the current draft is dirty", async () => {
@@ -387,8 +429,8 @@ describe("App", () => {
 
     expect(await screen.findByTitle(/Unsaved Changes/i)).toBeInTheDocument();
     expect(
-      screen.getByText(/Analysis Paused \(Unsaved Draft\)/i),
-    ).toBeInTheDocument();
+      screen.queryByText(/Analysis Paused \(Unsaved Draft\)/i),
+    ).not.toBeInTheDocument();
 
     await userEvent.selectOptions(
       screen.getByRole("combobox", { name: /Profile/i }),

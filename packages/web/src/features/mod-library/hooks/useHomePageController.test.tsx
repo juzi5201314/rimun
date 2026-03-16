@@ -385,6 +385,43 @@ describe("useHomePageController", () => {
     });
   });
 
+  it("closes the sort dialog once manual reordering reaches the optimal order", async () => {
+    const hostApi = createTestHostApi({
+      modSourceSnapshot: createMisorderedHarmonySnapshot(),
+    });
+    const wrapper = ({ children }: PropsWithChildren) => (
+      <AppProviders hostApi={hostApi}>{children}</AppProviders>
+    );
+    const { result } = renderHook(() => useHomePageController(), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.analysis?.sortDifferenceCount).toBeGreaterThan(0);
+      expect(result.current.isSortDialogOpen).toBe(true);
+    });
+
+    act(() => {
+      result.current.handleDropMod({
+        packageId: "brrainz.harmony",
+        placement: "before",
+        sourceColumn: "active",
+        targetColumn: "active",
+        targetPackageId: "ludeon.rimworld",
+      });
+    });
+
+    await waitFor(() => {
+      expect(result.current.isDirty).toBe(true);
+      expect(result.current.draftActivePackageIds).toEqual([
+        "brrainz.harmony",
+        "ludeon.rimworld",
+        "oskarpotocki.vanillafactionsexpanded.core",
+      ]);
+      expect(result.current.analysis?.sortDifferenceCount).toBe(0);
+      expect(result.current.analysis?.isOptimal).toBe(true);
+      expect(result.current.isSortDialogOpen).toBe(false);
+    });
+  });
+
   it("treats Harmony before Core as an optimal order and keeps sort actions closed", async () => {
     const hostApi = createTestHostApi({
       modSourceSnapshot: createOptimalHarmonySnapshot(),

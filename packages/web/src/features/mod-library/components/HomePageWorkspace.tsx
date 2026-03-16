@@ -71,7 +71,7 @@ export function HomePageWorkspace({
       </div>
 
       <div
-        className="flex min-h-0 shrink-0 flex-col"
+        className="flex min-h-0 min-w-0 shrink-0 flex-col overflow-hidden"
         style={{ width: `${asideWidth}%` }}
       >
         <ModDetailsPane controller={controller} />
