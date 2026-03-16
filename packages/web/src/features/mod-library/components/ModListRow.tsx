@@ -269,6 +269,17 @@ export const ModListRowCard = memo(function ModListRowCard({
             </span>
 
             <div className="flex shrink-0 items-center gap-1">
+              {item.hasUnsupportedGameVersion ? (
+                <div
+                  className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-700 ring-1 ring-inset ring-amber-500/25"
+                  title={t("mod_list_row.unsupported_game_version_title", {
+                    version:
+                      item.currentGameVersion ?? t("common.not_available"),
+                  })}
+                >
+                  {t("mod_list_row.unsupported_game_version_badge")}
+                </div>
+              ) : null}
               {item.isOfficial ? (
                 <div
                   className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary ring-1 ring-inset ring-primary/20"
@@ -301,6 +312,12 @@ export const ModListRowCard = memo(function ModListRowCard({
               <span className="inline-flex shrink-0 items-center gap-1 text-amber-700">
                 <AlertTriangle className="h-3 w-3" />
                 {t("mod_list_row.locked_badge")}
+              </span>
+            ) : null}
+            {item.hasUnsupportedGameVersion ? (
+              <span className="inline-flex shrink-0 items-center gap-1 text-amber-700">
+                <AlertTriangle className="h-3 w-3" />
+                {t("mod_list_row.unsupported_game_version_inline")}
               </span>
             ) : null}
           </div>

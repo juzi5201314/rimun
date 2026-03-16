@@ -37,8 +37,10 @@ function createItem(
       supportedVersions: ["1.5"],
     },
     notes: [],
+    currentGameVersion: "1.5",
     dragDisabledReason: null,
     hasCurrentOrderIssue: false,
+    hasUnsupportedGameVersion: false,
     isDraggable: true,
     packageIdNormalized: "unlimitedhugs.hugslib",
     searchText: "hugslib unlimitedhugs",
@@ -68,5 +70,40 @@ describe("ModListRowCard", () => {
 
     expect(await screen.findByText("RW 1.5")).toBeInTheDocument();
     expect(screen.queryByText(/^v1\.5$/i)).toBeNull();
+  });
+
+  it("shows an unsupported badge when the enabled mod does not support the current game version", async () => {
+    render(
+      <HostApiProvider hostApi={createTestHostApi()}>
+        <I18nProvider>
+          <ModListRowCard
+            dragHandle={<span aria-hidden="true" />}
+            isDragging={false}
+            isSelected={false}
+            item={createItem({
+              columnId: "active",
+              enabled: true,
+              hasUnsupportedGameVersion: true,
+              dependencyMetadata: {
+                packageIdNormalized: "unlimitedhugs.hugslib",
+                dependencies: [],
+                loadAfter: [],
+                loadBefore: [],
+                forceLoadAfter: [],
+                forceLoadBefore: [],
+                incompatibleWith: [],
+                supportedVersions: ["1.4"],
+              },
+            })}
+            onSelect={() => {}}
+            showDropAfter={false}
+            showDropBefore={false}
+          />
+        </I18nProvider>
+      </HostApiProvider>,
+    );
+
+    expect(await screen.findByText("Unsupported")).toBeInTheDocument();
+    expect(screen.getByText("version mismatch")).toBeInTheDocument();
   });
 });

@@ -37,6 +37,42 @@ function sortModsByName(left: ModRecord, right: ModRecord) {
   return left.name.localeCompare(right.name);
 }
 
+function normalizeGameVersion(value: string | null) {
+  if (!value) {
+    return null;
+  }
+
+  const match = /(\d+\.\d+)/.exec(value);
+
+  return match?.[1] ?? null;
+}
+
+function deriveCurrentGameVersion(
+  modLibrary:
+    | {
+        mods: ModRecord[];
+      }
+    | null
+    | undefined,
+) {
+  const coreMod =
+    modLibrary?.mods.find(
+      (mod) => mod.dependencyMetadata.packageIdNormalized === "ludeon.rimworld",
+    ) ?? null;
+
+  if (!coreMod) {
+    return null;
+  }
+
+  return (
+    normalizeGameVersion(coreMod.version) ??
+    coreMod.dependencyMetadata.supportedVersions
+      .map((version) => normalizeGameVersion(version))
+      .find((version): version is string => Boolean(version)) ??
+    null
+  );
+}
+
 function collectCurrentOrderViolations(
   analysis: ModOrderAnalysisResult | null,
 ): ModOrderEdge[] {
@@ -62,8 +98,10 @@ function collectCurrentOrderViolations(
 }
 
 type PreparedModRecord = ModRecord & {
+  currentGameVersion: string | null;
   dragDisabledReason: string | null;
   hasCurrentOrderIssue: boolean;
+  hasUnsupportedGameVersion: boolean;
   isDraggable: boolean;
   packageIdNormalized: string | null;
   searchText: string;
@@ -378,6 +416,10 @@ export function useHomePageController() {
       ),
     [currentOrderViolations],
   );
+  const currentGameVersion = useMemo(
+    () => deriveCurrentGameVersion(modLibrary),
+    [modLibrary],
+  );
   const preparedMods = useMemo<PreparedModRecord[]>(() => {
     const draftActivePackageIdSet = new Set(draftActivePackageIds);
 
@@ -389,9 +431,19 @@ export function useHomePageController() {
       const enabled = packageIdNormalized
         ? draftActivePackageIdSet.has(packageIdNormalized)
         : false;
+      const normalizedSupportedVersions =
+        mod.dependencyMetadata.supportedVersions
+          .map((version) => normalizeGameVersion(version))
+          .filter((version): version is string => Boolean(version));
+      const hasUnsupportedGameVersion =
+        enabled &&
+        currentGameVersion !== null &&
+        normalizedSupportedVersions.length > 0 &&
+        !normalizedSupportedVersions.includes(currentGameVersion);
 
       return {
         ...mod,
+        currentGameVersion,
         dragDisabledReason: !packageIdNormalized
           ? t("home_controller.missing_package_id")
           : !isUniquePackageId
@@ -401,6 +453,7 @@ export function useHomePageController() {
         hasCurrentOrderIssue: packageIdNormalized
           ? currentOrderProblemPackageIds.has(packageIdNormalized)
           : false,
+        hasUnsupportedGameVersion,
         isDraggable: Boolean(packageIdNormalized && isUniquePackageId),
         packageIdNormalized,
         searchText: [mod.name, mod.packageId ?? "", mod.author ?? ""]
@@ -412,6 +465,7 @@ export function useHomePageController() {
     currentOrderProblemPackageIds,
     draftActivePackageIds,
     modLibrary,
+    currentGameVersion,
     packageIdCounts,
     t,
   ]);
@@ -946,6 +1000,7 @@ export function useHomePageController() {
     createProfileMutation,
     currentProfile,
     currentProfileId,
+    currentGameVersion,
     currentOrderViolations,
     deleteProfileMutation,
     draftActivePackageIds,

@@ -61,6 +61,9 @@ describe("i18n translate", () => {
       "mod_details.author_version_label",
       "mod_details.supported_game_versions_label",
       "mod_details.no_supported_game_versions",
+      "mod_details.unsupported_game_version_badge",
+      "mod_details.unsupported_game_version_title",
+      "mod_details.unsupported_game_version_description",
       "mod_details.selected_order_conflicts_title",
       "mod_details.order_violation_move_before",
       "mod_details.order_violation_move_after",
@@ -73,6 +76,9 @@ describe("i18n translate", () => {
       "mod_details.order_violation_reason_force_load_before",
       "mod_details.order_violation_reason_official_anchor",
       "mod_library_dialogs.apply_sort_skipped_error_feedback",
+      "mod_list_row.unsupported_game_version_title",
+      "mod_list_row.unsupported_game_version_badge",
+      "mod_list_row.unsupported_game_version_inline",
     ];
     const params = {
       count: 1,

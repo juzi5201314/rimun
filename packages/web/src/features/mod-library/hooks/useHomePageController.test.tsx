@@ -216,6 +216,79 @@ function createMisorderedHarmonySnapshot(): ModSourceSnapshot {
   };
 }
 
+function createUnsupportedVersionSnapshot(): ModSourceSnapshot {
+  return {
+    environment: {
+      platform: "linux",
+      isWsl: true,
+      wslDistro: "Ubuntu",
+    },
+    selection: {
+      channel: "steam",
+      installationPath:
+        "C:\\Program Files (x86)\\Steam\\steamapps\\common\\RimWorld",
+      workshopPath:
+        "C:\\Program Files (x86)\\Steam\\steamapps\\workshop\\content\\294100",
+      configPath:
+        "C:\\Users\\player\\AppData\\LocalLow\\Ludeon Studios\\RimWorld by Ludeon Studios\\Config",
+    },
+    scannedAt: "2026-03-16T00:30:00.000Z",
+    scannedRoots: {
+      installationModsPath:
+        "C:\\Program Files (x86)\\Steam\\steamapps\\common\\RimWorld\\Mods",
+      workshopPath:
+        "C:\\Program Files (x86)\\Steam\\steamapps\\workshop\\content\\294100",
+      modsConfigPath:
+        "C:\\Users\\player\\AppData\\LocalLow\\Ludeon Studios\\RimWorld by Ludeon Studios\\Config\\ModsConfig.xml",
+    },
+    activePackageIds: ["ludeon.rimworld", "example.legacy"],
+    entries: [
+      {
+        entryName: "Core",
+        source: "installation",
+        modWindowsPath:
+          "C:\\Program Files (x86)\\Steam\\steamapps\\common\\RimWorld\\Mods\\Core",
+        modReadablePath:
+          "/mnt/c/Program Files (x86)/Steam/steamapps/common/RimWorld/Mods/Core",
+        manifestPath:
+          "C:\\Program Files (x86)\\Steam\\steamapps\\common\\RimWorld\\Mods\\Core\\About\\About.xml",
+        hasAboutXml: true,
+        aboutXmlText: `
+          <ModMetaData>
+            <name>Core</name>
+            <packageId>ludeon.rimworld</packageId>
+            <author>Ludeon Studios</author>
+            <modVersion>1.5.4062</modVersion>
+          </ModMetaData>
+        `,
+        notes: [],
+      },
+      {
+        entryName: "333333333",
+        source: "workshop",
+        modWindowsPath:
+          "C:\\Program Files (x86)\\Steam\\steamapps\\workshop\\content\\294100\\333333333",
+        modReadablePath:
+          "/mnt/c/Program Files (x86)/Steam/steamapps/workshop/content/294100/333333333",
+        manifestPath:
+          "C:\\Program Files (x86)\\Steam\\steamapps\\workshop\\content\\294100\\333333333\\About\\About.xml",
+        hasAboutXml: true,
+        aboutXmlText: `
+          <ModMetaData>
+            <name>Legacy Framework</name>
+            <packageId>example.legacy</packageId>
+            <author>Archivist</author>
+            <supportedVersions><li>1.4</li></supportedVersions>
+          </ModMetaData>
+        `,
+        notes: [],
+      },
+    ],
+    errors: [],
+    requiresConfiguration: false,
+  };
+}
+
 function createDeferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
   let reject!: (reason?: unknown) => void;
@@ -445,6 +518,26 @@ describe("useHomePageController", () => {
         "ludeon.rimworld",
         "OskarPotocki.VanillaFactionsExpanded.Core",
       ]);
+    });
+  });
+
+  it("marks enabled mods that do not support the current RimWorld version", async () => {
+    const hostApi = createTestHostApi({
+      modSourceSnapshot: createUnsupportedVersionSnapshot(),
+    });
+    const wrapper = ({ children }: PropsWithChildren) => (
+      <AppProviders hostApi={hostApi}>{children}</AppProviders>
+    );
+    const { result } = renderHook(() => useHomePageController(), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.currentGameVersion).toBe("1.5");
+      expect(
+        result.current.visibleActiveMods.find(
+          (mod) => mod.packageIdNormalized === "example.legacy",
+        )?.hasUnsupportedGameVersion,
+      ).toBe(true);
+      expect(result.current.selectedMod?.currentGameVersion).toBe("1.5");
     });
   });
 });

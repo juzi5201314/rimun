@@ -4,6 +4,7 @@ import { useI18n } from "@/shared/i18n";
 import { cn } from "@/shared/lib/utils";
 import type { ModOrderEdge } from "@rimun/shared";
 import {
+  AlertTriangle,
   ChevronDown,
   ChevronRight,
   FolderSearch,
@@ -432,6 +433,8 @@ export function ModDetailsPane({
     controller.selectedMod?.version ?? t("mod_details.unknown_version");
   const supportedGameVersions =
     controller.selectedMod?.dependencyMetadata.supportedVersions ?? [];
+  const selectedModCurrentGameVersion =
+    controller.selectedMod?.currentGameVersion ?? controller.currentGameVersion;
 
   return (
     <aside
@@ -485,6 +488,14 @@ export function ModDetailsPane({
                         {t("mod_details.official_core")}
                       </Badge>
                     ) : null}
+                    {controller.selectedMod.hasUnsupportedGameVersion ? (
+                      <Badge
+                        variant="outline"
+                        className="h-7 rounded-full border-amber-500/30 bg-amber-500/10 px-3 text-amber-700"
+                      >
+                        {t("mod_details.unsupported_game_version_badge")}
+                      </Badge>
+                    ) : null}
                   </div>
                 </div>
 
@@ -496,6 +507,21 @@ export function ModDetailsPane({
               </div>
 
               <div className="grid gap-3">
+                {controller.selectedMod.hasUnsupportedGameVersion ? (
+                  <div className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4 text-amber-900">
+                    <p className="flex items-center gap-2 text-sm font-semibold text-amber-800">
+                      <AlertTriangle className="h-4 w-4" />
+                      {t("mod_details.unsupported_game_version_title")}
+                    </p>
+                    <p className="mt-2 text-sm leading-relaxed text-amber-900/90">
+                      {t("mod_details.unsupported_game_version_description", {
+                        version:
+                          selectedModCurrentGameVersion ??
+                          t("common.not_available"),
+                      })}
+                    </p>
+                  </div>
+                ) : null}
                 <div className="rounded-2xl border border-border/60 bg-background/80 p-4">
                   <p className="text-xs font-medium text-muted-foreground">
                     {t("mod_details.package_id_label")}

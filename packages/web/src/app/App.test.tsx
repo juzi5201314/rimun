@@ -238,6 +238,79 @@ function createMisorderedHarmonySnapshot() {
   };
 }
 
+function createUnsupportedVersionSnapshot() {
+  return {
+    environment: {
+      platform: "linux" as const,
+      isWsl: true,
+      wslDistro: "Ubuntu",
+    },
+    selection: {
+      channel: "steam" as const,
+      installationPath:
+        "C:\\Program Files (x86)\\Steam\\steamapps\\common\\RimWorld",
+      workshopPath:
+        "C:\\Program Files (x86)\\Steam\\steamapps\\workshop\\content\\294100",
+      configPath:
+        "C:\\Users\\player\\AppData\\LocalLow\\Ludeon Studios\\RimWorld by Ludeon Studios\\Config",
+    },
+    scannedAt: "2026-03-16T00:45:00.000Z",
+    scannedRoots: {
+      installationModsPath:
+        "C:\\Program Files (x86)\\Steam\\steamapps\\common\\RimWorld\\Mods",
+      workshopPath:
+        "C:\\Program Files (x86)\\Steam\\steamapps\\workshop\\content\\294100",
+      modsConfigPath:
+        "C:\\Users\\player\\AppData\\LocalLow\\Ludeon Studios\\RimWorld by Ludeon Studios\\Config\\ModsConfig.xml",
+    },
+    activePackageIds: ["example.legacy", "ludeon.rimworld"],
+    entries: [
+      {
+        entryName: "Core",
+        source: "installation" as const,
+        modWindowsPath:
+          "C:\\Program Files (x86)\\Steam\\steamapps\\common\\RimWorld\\Mods\\Core",
+        modReadablePath:
+          "/mnt/c/Program Files (x86)/Steam/steamapps/common/RimWorld/Mods/Core",
+        manifestPath:
+          "C:\\Program Files (x86)\\Steam\\steamapps\\common\\RimWorld\\Mods\\Core\\About\\About.xml",
+        hasAboutXml: true,
+        aboutXmlText: `
+          <ModMetaData>
+            <name>Core</name>
+            <packageId>ludeon.rimworld</packageId>
+            <author>Ludeon Studios</author>
+            <modVersion>1.5.4062</modVersion>
+          </ModMetaData>
+        `,
+        notes: [],
+      },
+      {
+        entryName: "333333333",
+        source: "workshop" as const,
+        modWindowsPath:
+          "C:\\Program Files (x86)\\Steam\\steamapps\\workshop\\content\\294100\\333333333",
+        modReadablePath:
+          "/mnt/c/Program Files (x86)/Steam/steamapps/workshop/content/294100/333333333",
+        manifestPath:
+          "C:\\Program Files (x86)\\Steam\\steamapps\\workshop\\content\\294100\\333333333\\About\\About.xml",
+        hasAboutXml: true,
+        aboutXmlText: `
+          <ModMetaData>
+            <name>Legacy Framework</name>
+            <packageId>example.legacy</packageId>
+            <author>Archivist</author>
+            <supportedVersions><li>1.4</li></supportedVersions>
+          </ModMetaData>
+        `,
+        notes: [],
+      },
+    ],
+    errors: [],
+    requiresConfiguration: false,
+  };
+}
+
 function createDeferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
   let reject!: (reason?: unknown) => void;
@@ -404,6 +477,35 @@ describe("App", () => {
         /Reason: Harmony declares loadBefore Core in About\.xml\./i,
       ).length,
     ).toBeGreaterThan(0);
+  });
+
+  it("shows a warning marker for enabled mods that do not support the current RimWorld version", async () => {
+    renderApp({
+      hostApi: createTestHostApi({
+        modSourceSnapshot: createUnsupportedVersionSnapshot(),
+      }),
+    });
+
+    expect(
+      await screen.findByRole("heading", { name: /Mod Library/i }),
+    ).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("heading", { name: /^Legacy Framework$/i }),
+      ).toBeInTheDocument();
+    });
+
+    expect(
+      screen.getByText(
+        /^This mod does not support the current RimWorld version\.$/i,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /^It is currently enabled, but it does not declare support for RimWorld 1\.5\.$/i,
+      ),
+    ).toBeInTheDocument();
   });
 
   it("auto-saves before switching profiles when the current draft is dirty", async () => {
