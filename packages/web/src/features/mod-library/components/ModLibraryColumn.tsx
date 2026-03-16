@@ -119,8 +119,7 @@ export const ModLibraryColumn = memo(function ModLibraryColumn({
       width: 0,
     },
     getItemKey: (index) => items[index]?.id ?? index,
-    measureElement: (element) =>
-      element?.getBoundingClientRect().height ?? 86,
+    measureElement: (element) => element?.getBoundingClientRect().height ?? 86,
     overscan: 8,
   });
   const virtualRows = rowVirtualizer.getVirtualItems();

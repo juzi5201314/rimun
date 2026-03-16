@@ -191,6 +191,10 @@ function buildMetaSummary(item: HomePageModListItem) {
     parts.push(`v${item.version}`);
   }
 
+  if (item.dependencyMetadata.supportedVersions.length > 0) {
+    parts.push(`RW ${item.dependencyMetadata.supportedVersions.join(", ")}`);
+  }
+
   return parts.join(" · ");
 }
 

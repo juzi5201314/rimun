@@ -145,7 +145,7 @@ describe("mod scanner", () => {
     expect(parsed.name).toBe("Core");
     expect(parsed.packageId).toBe("ludeon.rimworld");
     expect(parsed.author).toBe("Ludeon Studios");
-    expect(parsed.version).toBe("1.5");
+    expect(parsed.version).toBeNull();
     expect(parsed.description).toBeNull();
     expect(parsed.dependencyMetadata.packageIdNormalized).toBe(
       "ludeon.rimworld",

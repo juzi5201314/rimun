@@ -1,5 +1,6 @@
 import enUsRaw from "@/shared/i18n/locales/en-us.toml?raw";
 import zhCnRaw from "@/shared/i18n/locales/zh-cn.toml?raw";
+import * as toml from "@iarna/toml";
 import type {
   AppSettings,
   ApplyActivePackageIdsInput,
@@ -23,7 +24,6 @@ import type {
   ValidatePathInput,
   ValidatePathResult,
 } from "@rimun/shared";
-import * as toml from "@iarna/toml";
 
 function parseTomlDictionary(payload: string) {
   const parsed = toml.parse(payload);

@@ -503,7 +503,9 @@ export function SettingsPage() {
                 >
                   {detectPathsMutation.data.requiresManualSelection
                     ? t("settings.last_detection.manual_selection_required")
-                    : t("settings.last_detection.preferred_selection_available")}
+                    : t(
+                        "settings.last_detection.preferred_selection_available",
+                      )}
                 </Badge>
                 <Badge variant="outline">
                   {t("settings.last_detection.candidates_count", {
@@ -519,7 +521,8 @@ export function SettingsPage() {
                     </p>
                     <p className="mt-2 break-all font-mono text-xs">
                       {detectPathsMutation.data.preferredSelection
-                        .installationPath ?? t("settings.last_detection.not_detected")}
+                        .installationPath ??
+                        t("settings.last_detection.not_detected")}
                     </p>
                   </div>
                   <div className="rounded-lg border border-border/60 bg-background/70 p-4">
@@ -528,7 +531,8 @@ export function SettingsPage() {
                     </p>
                     <p className="mt-2 break-all font-mono text-xs">
                       {detectPathsMutation.data.preferredSelection
-                        .workshopPath ?? t("settings.last_detection.not_detected")}
+                        .workshopPath ??
+                        t("settings.last_detection.not_detected")}
                     </p>
                   </div>
                   <div className="rounded-lg border border-border/60 bg-background/70 p-4">
@@ -659,7 +663,9 @@ export function SettingsPage() {
                     name="installationPath"
                     value={draft.installationPath}
                     onChange={handleFieldChange("installationPath")}
-                    placeholder={t("settings.paths.installation_path_placeholder")}
+                    placeholder={t(
+                      "settings.paths.installation_path_placeholder",
+                    )}
                     className="font-mono"
                     autoComplete="off"
                     spellCheck={false}

@@ -58,6 +58,9 @@ describe("i18n translate", () => {
       "zh-cn": toml.parse(zhCnRaw) as Record<string, unknown>,
     } as const;
     const keys = [
+      "mod_details.author_version_label",
+      "mod_details.supported_game_versions_label",
+      "mod_details.no_supported_game_versions",
       "mod_details.selected_order_conflicts_title",
       "mod_details.order_violation_move_before",
       "mod_details.order_violation_move_after",

@@ -11,8 +11,8 @@ import { translate } from "@/shared/i18n/translate";
 import {
   type PropsWithChildren,
   createContext,
-  useContext,
   useCallback,
+  useContext,
   useEffect,
   useMemo,
   useState,
@@ -39,9 +39,10 @@ export function I18nProvider({ children }: PropsWithChildren) {
   const systemLocale = detectSystemLocale();
   const initialLocale = storedLocale ?? systemLocale ?? DEFAULT_LOCALE;
   const [locale, setLocale] = useState<UiLocale>(initialLocale);
-  const [dictionaries, setDictionaries] = useState<
-    Record<UiLocale, TranslationDictionary> | null
-  >(null);
+  const [dictionaries, setDictionaries] = useState<Record<
+    UiLocale,
+    TranslationDictionary
+  > | null>(null);
 
   useEffect(() => {
     if (!storedLocale) {
@@ -68,7 +69,6 @@ export function I18nProvider({ children }: PropsWithChildren) {
         }
 
         if (import.meta.env.DEV) {
-          // biome-ignore lint/suspicious/noConsole: dev-only load failure hint
           console.warn(
             "[i18n] Failed to load dictionaries from host; falling back to keys.",
             error,

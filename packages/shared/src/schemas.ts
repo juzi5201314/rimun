@@ -424,13 +424,13 @@ export const applyActivePackageIdsInputSchema = z.object({
 export const applyActivePackageIdsResultSchema = modProfileSummarySchema;
 
 const i18nDictionaryNodeSchema: z.ZodType<unknown> = z.lazy(() =>
-  z.union([
-    z.string(),
-    z.record(z.string(), i18nDictionaryNodeSchema),
-  ]),
+  z.union([z.string(), z.record(z.string(), i18nDictionaryNodeSchema)]),
 );
 
-export const i18nDictionarySchema = z.record(z.string(), i18nDictionaryNodeSchema);
+export const i18nDictionarySchema = z.record(
+  z.string(),
+  i18nDictionaryNodeSchema,
+);
 
 export const i18nDictionariesSchema = z
   .object({

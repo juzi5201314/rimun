@@ -6,9 +6,7 @@ describe("createTestHostApi", () => {
     const hostApi = createTestHostApi();
     const dictionaries = await hostApi.getI18nDictionaries();
 
-    expect(
-      dictionaries["zh-cn"]["mod_library_dialogs"],
-    ).toMatchObject({
+    expect(dictionaries["zh-cn"]["mod_library_dialogs"]).toMatchObject({
       apply_sort_skipped_error_feedback:
         "已保留当前顺序；但仍有 {count} 条加载顺序错误。请按右侧“执行顺序提示”调整。",
     });

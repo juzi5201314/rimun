@@ -332,7 +332,8 @@ function appendHardOrderViolationDiagnostics(input: {
     seenPairs.add(pairKey);
 
     const fromName =
-      getDisplayName(input.groups.get(edge.fromPackageId)) ?? edge.fromPackageId;
+      getDisplayName(input.groups.get(edge.fromPackageId)) ??
+      edge.fromPackageId;
     const toName =
       getDisplayName(input.groups.get(edge.toPackageId)) ?? edge.toPackageId;
     const fromModId = input.groups.get(edge.fromPackageId)?.preferredMod?.id;

@@ -57,10 +57,8 @@ export function translate(
   }
 
   if (import.meta.env.DEV) {
-    // biome-ignore lint/suspicious/noConsole: dev-only missing-translation hint
     console.warn(`[i18n] Missing translation key: ${key}`);
   }
 
   return key;
 }
-

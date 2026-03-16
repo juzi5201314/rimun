@@ -12,7 +12,8 @@ function createMemoryStorage(): Storage {
       data.clear();
     },
     getItem(key: string) {
-      return data.has(key) ? data.get(key)! : null;
+      const value = data.get(key);
+      return value ?? null;
     },
     key(index: number) {
       return [...data.keys()][index] ?? null;

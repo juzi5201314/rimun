@@ -93,4 +93,3 @@ export function toHtmlLangAttribute(locale: UiLocale) {
       return "zh-CN";
   }
 }
-

@@ -1,6 +1,6 @@
+import * as toml from "@iarna/toml";
 import type { I18nDictionariesPayload } from "@rimun/shared";
 import { rimunRpcSchemas } from "@rimun/shared";
-import * as toml from "@iarna/toml";
 import { EN_US_TOML, ZH_CN_TOML } from "./locales";
 
 function parseTomlDictionary(payload: string) {
@@ -30,4 +30,3 @@ export function loadI18nDictionaries(): Promise<I18nDictionariesPayload> {
 
   return cachedPromise;
 }
-

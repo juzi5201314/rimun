@@ -430,6 +430,8 @@ export function ModDetailsPane({
   });
   const resolvedVersion =
     controller.selectedMod?.version ?? t("mod_details.unknown_version");
+  const supportedGameVersions =
+    controller.selectedMod?.dependencyMetadata.supportedVersions ?? [];
 
   return (
     <aside
@@ -528,6 +530,17 @@ export function ModDetailsPane({
                         version: resolvedVersion,
                       })}
                     </span>
+                  </div>
+                </div>
+                <div className="rounded-2xl border border-border/60 bg-background/80 p-4">
+                  <p className="text-xs font-medium text-muted-foreground">
+                    {t("mod_details.supported_game_versions_label")}
+                  </p>
+                  <div className="mt-2">
+                    {renderPackageList(
+                      supportedGameVersions,
+                      t("mod_details.no_supported_game_versions"),
+                    )}
                   </div>
                 </div>
               </div>

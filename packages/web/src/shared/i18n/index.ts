@@ -5,4 +5,3 @@ export {
   type UiLocale,
 } from "@/shared/i18n/locale";
 export { I18nProvider, useI18n } from "@/shared/i18n/I18nProvider";
-

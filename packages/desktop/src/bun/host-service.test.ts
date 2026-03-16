@@ -7,9 +7,9 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
+import { analyzeModOrder, buildModLibraryFromSnapshot } from "@rimun/domain";
 import type { ModSourceSnapshot, PathSelection } from "@rimun/shared";
 import { createRimunTempDir } from "../../../shared/test/tmp-path";
-import { analyzeModOrder, buildModLibraryFromSnapshot } from "@rimun/domain";
 import { createRimunHostService } from "./host-service";
 import { SettingsRepository } from "./persistence";
 
@@ -384,8 +384,12 @@ describe("rimun host service", () => {
   });
 
   it("keeps structured dependency metadata from corrupting package ids in host snapshots", async () => {
-    const { configRoot, installationDataRoot, installationModsRoot, workshopRoot } =
-      createSandboxLayout();
+    const {
+      configRoot,
+      installationDataRoot,
+      installationModsRoot,
+      workshopRoot,
+    } = createSandboxLayout();
     writeAboutXml(
       installationModsRoot,
       "Core",

@@ -112,7 +112,25 @@ describe("domain xml helpers", () => {
 
     expect(parsed.name).toBe("Core");
     expect(parsed.packageId).toBe("ludeon.rimworld");
-    expect(parsed.version).toBe("1.5");
+    expect(parsed.version).toBeNull();
+    expect(parsed.dependencyMetadata.supportedVersions).toEqual(["1.5"]);
+  });
+
+  it("merges targetVersion into supportedVersions without treating it as mod version", () => {
+    const parsed = parseAboutXml(`
+      <ModMetaData>
+        <name>Preview Build</name>
+        <packageId>example.preview</packageId>
+        <targetVersion>1.6</targetVersion>
+        <supportedVersions>
+          <li>1.5</li>
+          <li>1.6</li>
+        </supportedVersions>
+      </ModMetaData>
+    `);
+
+    expect(parsed.version).toBeNull();
+    expect(parsed.dependencyMetadata.supportedVersions).toEqual(["1.6", "1.5"]);
   });
 
   it("extracts dependency package ids from structured modDependencies entries", () => {

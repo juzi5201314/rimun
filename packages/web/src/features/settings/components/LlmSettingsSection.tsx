@@ -650,9 +650,7 @@ export function LlmSettingsSection() {
               <Bot className="h-5 w-5" />
               {t("llm_settings.title")}
             </CardTitle>
-            <CardDescription>
-              {t("llm_settings.description")}
-            </CardDescription>
+            <CardDescription>{t("llm_settings.description")}</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <div className="rounded-xl border border-border/60 bg-background/70 p-4">
@@ -885,7 +883,9 @@ export function LlmSettingsSection() {
                             apiKey: nextValue,
                           }));
                         }}
-                        placeholder={t("llm_settings.provider_api_key_placeholder")}
+                        placeholder={t(
+                          "llm_settings.provider_api_key_placeholder",
+                        )}
                         className="font-mono"
                         autoComplete="off"
                         spellCheck={false}
@@ -931,9 +931,9 @@ export function LlmSettingsSection() {
                   </label>
                 </div>
 
-                  <div className="space-y-4">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div>
+                <div className="space-y-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
                       <h3 className="text-base font-bold">
                         {t("llm_settings.configured_models_title")}
                       </h3>

@@ -207,6 +207,31 @@ function extractAboutTagList(xml: string, tagName: string) {
     .filter(Boolean);
 }
 
+function mergeSupportedVersions(
+  targetVersion: string | null,
+  listedSupportedVersions: string[],
+) {
+  const mergedVersions: string[] = [];
+  const seen = new Set<string>();
+
+  const pushVersion = (value: string | null) => {
+    if (!value || seen.has(value)) {
+      return;
+    }
+
+    seen.add(value);
+    mergedVersions.push(value);
+  };
+
+  pushVersion(targetVersion);
+
+  for (const version of listedSupportedVersions) {
+    pushVersion(version);
+  }
+
+  return mergedVersions;
+}
+
 function createParsedActivePackageIds(
   activePackageIds: string[],
 ): ParsedModsConfig {
@@ -312,7 +337,11 @@ function splitActivePackageIdsForConfig(activePackageIds: string[]) {
 export function parseAboutXml(xml: string) {
   const authors = extractAboutTagList(xml, "authors");
   const authorText = extractAboutTagText(xml, "author");
-  const supportedVersions = extractAboutTagList(xml, "supportedVersions");
+  const targetVersion = extractAboutTagText(xml, "targetVersion");
+  const supportedVersions = mergeSupportedVersions(
+    targetVersion,
+    extractAboutTagList(xml, "supportedVersions"),
+  );
   const packageId = extractAboutTagText(xml, "packageId");
 
   return {
@@ -324,11 +353,7 @@ export function parseAboutXml(xml: string) {
         : authorText
           ? normalizeText(authorText)
           : null,
-    version:
-      extractAboutTagText(xml, "modVersion") ??
-      extractAboutTagText(xml, "targetVersion") ??
-      supportedVersions[0] ??
-      null,
+    version: extractAboutTagText(xml, "modVersion") ?? null,
     description: extractAboutTagMultilineText(xml, "description"),
     dependencyMetadata: {
       packageIdNormalized: normalizePackageId(packageId),
@@ -342,11 +367,11 @@ export function parseAboutXml(xml: string) {
       forceLoadAfter: extractAboutTagList(xml, "forceLoadAfter").map((value) =>
         value.toLowerCase(),
       ),
-      forceLoadBefore: extractAboutTagList(xml, "forceLoadBefore").map((value) =>
-        value.toLowerCase(),
+      forceLoadBefore: extractAboutTagList(xml, "forceLoadBefore").map(
+        (value) => value.toLowerCase(),
       ),
-      incompatibleWith: extractAboutTagList(xml, "incompatibleWith").map((value) =>
-        value.toLowerCase(),
+      incompatibleWith: extractAboutTagList(xml, "incompatibleWith").map(
+        (value) => value.toLowerCase(),
       ),
       supportedVersions,
     } satisfies ModDependencyMetadata,

@@ -72,7 +72,10 @@ export type RpcSchema<
 
 export type RimunHostRequests = {
   getBootstrap: RpcRequestDefinition<EmptyParams, BootstrapPayload>;
-  getI18nDictionaries: RpcRequestDefinition<EmptyParams, I18nDictionariesPayload>;
+  getI18nDictionaries: RpcRequestDefinition<
+    EmptyParams,
+    I18nDictionariesPayload
+  >;
   getProfileCatalog: RpcRequestDefinition<EmptyParams, ProfileCatalogResult>;
   createProfile: RpcRequestDefinition<CreateProfileInput, ProfileCatalogResult>;
   renameProfile: RpcRequestDefinition<RenameProfileInput, ProfileCatalogResult>;
