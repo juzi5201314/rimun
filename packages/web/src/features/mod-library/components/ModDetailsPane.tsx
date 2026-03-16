@@ -35,6 +35,8 @@ type TranslateFn = (
   params?: Record<string, string | number>,
 ) => string;
 
+type LocalizationStatusRenderState = "loading" | "ready" | "unavailable";
+
 function renderDescriptionBlocks(
   description: string | null,
   noDescriptionText: string,
@@ -92,6 +94,71 @@ function renderPackageList(items: string[], noneText: string) {
       ))}
     </div>
   );
+}
+
+function formatLocalizationStatus(
+  renderState: LocalizationStatusRenderState,
+  status: HomePageController["selectedMod"]["localizationStatus"],
+  t: TranslateFn,
+) {
+  if (renderState === "loading") {
+    return t("mod_details.translation_loading");
+  }
+
+  if (renderState === "unavailable") {
+    return t("mod_details.translation_unavailable");
+  }
+
+  if (status.kind === "translated") {
+    if (status.coverage.completeness === "complete") {
+      return t("mod_details.translation_complete");
+    }
+
+    if (status.coverage.completeness === "partial") {
+      return t("mod_details.translation_partial");
+    }
+
+    return t("mod_details.translation_available");
+  }
+
+  if (status.kind === "unknown") {
+    return t("mod_details.translation_unknown");
+  }
+
+  return t("mod_details.translation_missing");
+}
+
+function formatLocalizationCoverage(
+  renderState: LocalizationStatusRenderState,
+  status: HomePageController["selectedMod"]["localizationStatus"],
+  t: TranslateFn,
+) {
+  if (renderState === "loading") {
+    return t("mod_details.translation_coverage_loading");
+  }
+
+  if (renderState === "unavailable") {
+    return t("mod_details.translation_coverage_unavailable");
+  }
+
+  if (status.kind !== "translated") {
+    return t("mod_details.translation_coverage_none");
+  }
+
+  if (
+    status.coverage.totalEntries !== null &&
+    status.coverage.percent !== null
+  ) {
+    return t("mod_details.translation_coverage_known", {
+      covered: String(status.coverage.coveredEntries),
+      percent: String(status.coverage.percent),
+      total: String(status.coverage.totalEntries),
+    });
+  }
+
+  return t("mod_details.translation_coverage_unknown", {
+    covered: String(status.coverage.coveredEntries),
+  });
 }
 
 function buildPackageIdDisplayNameMap(controller: HomePageController) {
@@ -429,12 +496,25 @@ export function ModDetailsPane({
     selectedPackageId,
     packageIdDisplayNameMap,
   });
+  const localizationStatusState: LocalizationStatusRenderState =
+    controller.hasResolvedLocalizationStatus
+      ? "ready"
+      : controller.isLocalizationStatusPending
+        ? "loading"
+        : "unavailable";
+  const localizationProviderNames =
+    controller.selectedMod?.localizationStatus.providerPackageIds.map(
+      (packageId) => packageIdDisplayNameMap.get(packageId) ?? packageId,
+    ) ?? [];
   const resolvedVersion =
     controller.selectedMod?.version ?? t("mod_details.unknown_version");
   const supportedGameVersions =
     controller.selectedMod?.dependencyMetadata.supportedVersions ?? [];
   const selectedModCurrentGameVersion =
     controller.selectedMod?.currentGameVersion ?? controller.currentGameVersion;
+  const currentGameLanguage =
+    controller.modLibrary?.currentGameLanguage.folderName ??
+    t("common.not_available");
 
   return (
     <aside
@@ -567,6 +647,60 @@ export function ModDetailsPane({
                       supportedGameVersions,
                       t("mod_details.no_supported_game_versions"),
                     )}
+                  </div>
+                </div>
+                <div className="rounded-2xl border border-border/60 bg-background/80 p-4">
+                  <p className="text-xs font-medium text-muted-foreground">
+                    {t("mod_details.translation_status_label")}
+                  </p>
+                  <div className="mt-2 space-y-2">
+                    <p className="text-sm font-medium text-foreground">
+                      {formatLocalizationStatus(
+                        localizationStatusState,
+                        controller.selectedMod.localizationStatus,
+                        t,
+                      )}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {t("mod_details.translation_game_language", {
+                        language: currentGameLanguage,
+                      })}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {formatLocalizationCoverage(
+                        localizationStatusState,
+                        controller.selectedMod.localizationStatus,
+                        t,
+                      )}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {t("mod_details.translation_folder", {
+                        folder:
+                          localizationStatusState === "loading"
+                            ? t("mod_details.translation_folder_loading")
+                            : localizationStatusState === "unavailable"
+                              ? t("mod_details.translation_folder_unavailable")
+                              : (controller.selectedMod.localizationStatus
+                                  .matchedFolderName ??
+                                t("common.not_available")),
+                      })}
+                    </p>
+                    <div>
+                      {localizationStatusState === "ready" ? (
+                        renderPackageList(
+                          localizationProviderNames,
+                          t("mod_details.translation_providers_none"),
+                        )
+                      ) : (
+                        <p className="text-sm text-muted-foreground">
+                          {localizationStatusState === "loading"
+                            ? t("mod_details.translation_providers_loading")
+                            : t(
+                                "mod_details.translation_providers_unavailable",
+                              )}
+                        </p>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>

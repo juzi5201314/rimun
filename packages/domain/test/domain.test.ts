@@ -10,6 +10,19 @@ import {
   resolveRecommendedActivePackageIds,
 } from "../src/index";
 
+const defaultLocalizationStatus = {
+  kind: "missing" as const,
+  isSupported: false,
+  matchedFolderName: null,
+  providerPackageIds: [],
+  coverage: {
+    completeness: "unknown" as const,
+    coveredEntries: 0,
+    totalEntries: null,
+    percent: null,
+  },
+};
+
 function createSnapshot(activePackageIds: string[]): ModSourceSnapshot {
   const installationReadablePath = rimunTmpPath("installation", "Mods", "Core");
   const workshopHugsLibReadablePath = rimunTmpPath("workshop", "818773962");
@@ -36,6 +49,11 @@ function createSnapshot(activePackageIds: string[]): ModSourceSnapshot {
         "C:\\Users\\alice\\AppData\\LocalLow\\Ludeon Studios\\RimWorld by Ludeon Studios\\Config\\ModsConfig.xml",
     },
     gameVersion: "1.5.4104 rev435",
+    currentGameLanguage: {
+      folderName: "English",
+      normalizedFolderName: "english",
+      source: "prefs",
+    },
     activePackageIds,
     entries: [
       {
@@ -53,6 +71,7 @@ function createSnapshot(activePackageIds: string[]): ModSourceSnapshot {
             <modVersion>1.5.4062</modVersion>
           </ModMetaData>
         `,
+        localizationStatus: defaultLocalizationStatus,
         notes: [],
       },
       {
@@ -72,6 +91,7 @@ function createSnapshot(activePackageIds: string[]): ModSourceSnapshot {
             <supportedVersions><li>1.5</li></supportedVersions>
           </ModMetaData>
         `,
+        localizationStatus: defaultLocalizationStatus,
         notes: [],
       },
       {
@@ -92,6 +112,7 @@ function createSnapshot(activePackageIds: string[]): ModSourceSnapshot {
             <modDependencies><li>unlimitedhugs.hugslib</li></modDependencies>
           </ModMetaData>
         `,
+        localizationStatus: defaultLocalizationStatus,
         notes: [],
       },
     ],
@@ -301,6 +322,7 @@ describe("domain mod derivation", () => {
               <loadAfter><li>example.beta</li></loadAfter>
             </ModMetaData>
           `,
+          localizationStatus: defaultLocalizationStatus,
           notes: [],
         },
         {
@@ -319,6 +341,7 @@ describe("domain mod derivation", () => {
               <loadAfter><li>example.alpha</li></loadAfter>
             </ModMetaData>
           `,
+          localizationStatus: defaultLocalizationStatus,
           notes: [],
         },
       ],
@@ -380,6 +403,7 @@ describe("domain mod derivation", () => {
               <loadBefore><li>ludeon.rimworld</li></loadBefore>
             </ModMetaData>
           `,
+          localizationStatus: defaultLocalizationStatus,
           notes: [],
         },
         coreEntry,
@@ -432,6 +456,7 @@ describe("domain mod derivation", () => {
               <supportedVersions><li>1.5</li></supportedVersions>
             </ModMetaData>
           `,
+          localizationStatus: defaultLocalizationStatus,
           notes: [],
         },
         {
@@ -451,6 +476,7 @@ describe("domain mod derivation", () => {
               <forceLoadBefore><li>example.beta</li></forceLoadBefore>
             </ModMetaData>
           `,
+          localizationStatus: defaultLocalizationStatus,
           notes: [],
         },
       ],

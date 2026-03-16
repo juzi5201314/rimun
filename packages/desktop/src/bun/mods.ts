@@ -11,11 +11,17 @@ import type {
   AppError,
   ExecutionEnvironment,
   ModLibraryResult,
+  ModLocalizationSnapshot,
   ModSource,
   ModSourceSnapshot,
   ModSourceSnapshotEntry,
   PathSelection,
 } from "@rimun/shared";
+import {
+  type ModLocalizationAnalysisProgress,
+  readCurrentGameLanguage,
+  readModLocalizationSnapshot,
+} from "./mod-localization";
 import { getExecutionEnvironment, windowsPathToWslPath } from "./platform";
 
 export { parseAboutXml, parseModsConfigXml } from "@rimun/domain";
@@ -91,6 +97,18 @@ type WriteActiveModsOptions = {
 const SCAN_CHUNK_SIZE = 24;
 export const MAX_MOD_SCAN_WORKERS = 8;
 const MAX_MOD_SCAN_CACHE_LOOKUP_CONCURRENCY = 16;
+const DEFAULT_LOCALIZATION_STATUS = {
+  kind: "missing" as const,
+  isSupported: false,
+  matchedFolderName: null,
+  providerPackageIds: [] as string[],
+  coverage: {
+    completeness: "unknown" as const,
+    coveredEntries: 0,
+    totalEntries: null,
+    percent: null,
+  },
+};
 
 type ModScanProfile = {
   buildResultMs: number;
@@ -404,6 +422,7 @@ function createMissingAboutFragment(task: WorkerScanTask): ScannedModFragment {
     hasAboutXml: false,
     manifestPath: null,
     aboutXmlText: null,
+    localizationStatus: DEFAULT_LOCALIZATION_STATUS,
     modReadablePath: task.modReadablePath,
     modWindowsPath: task.modWindowsPath,
     notes: ["About/About.xml was not found."],
@@ -512,6 +531,7 @@ async function scanModTask(task: ScanTask | WorkerScanTask) {
       hasAboutXml: true,
       manifestPath: aboutWindowsPath,
       aboutXmlText,
+      localizationStatus: DEFAULT_LOCALIZATION_STATUS,
       modReadablePath: task.modReadablePath,
       modWindowsPath: task.modWindowsPath,
       notes: [],
@@ -526,6 +546,7 @@ async function scanModTask(task: ScanTask | WorkerScanTask) {
         hasAboutXml: false,
         manifestPath: null,
         aboutXmlText: null,
+        localizationStatus: DEFAULT_LOCALIZATION_STATUS,
         modReadablePath: task.modReadablePath,
         modWindowsPath: task.modWindowsPath,
         notes: ["About/About.xml was not found."],
@@ -540,6 +561,7 @@ async function scanModTask(task: ScanTask | WorkerScanTask) {
       hasAboutXml: true,
       manifestPath: aboutWindowsPath,
       aboutXmlText: null,
+      localizationStatus: DEFAULT_LOCALIZATION_STATUS,
       modReadablePath: task.modReadablePath,
       modWindowsPath: task.modWindowsPath,
       notes: [`About/About.xml could not be read: ${toErrorMessage(error)}`],
@@ -846,6 +868,8 @@ function buildWorkerSource() {
       return isNodeErrorWithCode(error) && (error.code === "ENOENT" || error.code === "ENOTDIR");
     }
 
+    const DEFAULT_LOCALIZATION_STATUS = ${JSON.stringify(DEFAULT_LOCALIZATION_STATUS)};
+
     async function readXmlFile(filePath) {
       return decodeXmlFileContent(await Bun.file(filePath).bytes());
     }
@@ -866,6 +890,7 @@ function buildWorkerSource() {
           hasAboutXml: true,
           manifestPath: aboutWindowsPath,
           aboutXmlText,
+          localizationStatus: DEFAULT_LOCALIZATION_STATUS,
           modReadablePath: task.modReadablePath,
           modWindowsPath: task.modWindowsPath,
           notes: [],
@@ -883,6 +908,7 @@ function buildWorkerSource() {
             hasAboutXml: false,
             manifestPath: null,
             aboutXmlText: null,
+            localizationStatus: DEFAULT_LOCALIZATION_STATUS,
             modReadablePath: task.modReadablePath,
             modWindowsPath: task.modWindowsPath,
             notes: ["About/About.xml was not found."],
@@ -898,6 +924,7 @@ function buildWorkerSource() {
           hasAboutXml: true,
           manifestPath: aboutWindowsPath,
           aboutXmlText: null,
+          localizationStatus: DEFAULT_LOCALIZATION_STATUS,
           modReadablePath: task.modReadablePath,
           modWindowsPath: task.modWindowsPath,
           notes: [\`About/About.xml could not be read: \${toErrorMessage(error)}\`],
@@ -1288,6 +1315,11 @@ export async function readModSourceSnapshot(
         modsConfigPath,
       },
       gameVersion: null,
+      currentGameLanguage: {
+        folderName: null,
+        normalizedFolderName: null,
+        source: "unknown",
+      },
       activePackageIds: [],
       entries: [],
       errors,
@@ -1358,6 +1390,10 @@ export async function readModSourceSnapshot(
   const entries = [...fragments].sort((left, right) =>
     left.entryName.localeCompare(right.entryName),
   );
+  const currentGameLanguage = await readCurrentGameLanguage({
+    configPath: selection.configPath,
+    toReadablePath,
+  });
   const buildResultMs = performance.now() - buildStart;
   const totalMs = performance.now() - totalStart;
   const notesCount = entries.reduce(
@@ -1399,6 +1435,7 @@ export async function readModSourceSnapshot(
       modsConfigPath,
     },
     gameVersion,
+    currentGameLanguage,
     activePackageIds: activePackageIdsOrdered,
     entries,
     errors,
@@ -1406,13 +1443,60 @@ export async function readModSourceSnapshot(
   };
 }
 
+export async function readModLocalizationSnapshotForSnapshot(
+  snapshot: ModSourceSnapshot,
+  options: {
+    onProgress?: (progress: ModLocalizationAnalysisProgress) => void;
+    toReadablePath?: (windowsPath: string) => string | null;
+  } = {},
+): Promise<ModLocalizationSnapshot> {
+  if (snapshot.requiresConfiguration || snapshot.entries.length === 0) {
+    return {
+      currentGameLanguage: snapshot.currentGameLanguage,
+      entries: [],
+      scannedAt: snapshot.scannedAt,
+    };
+  }
+
+  const toReadablePath = options.toReadablePath ?? createReadablePathResolver();
+
+  return readModLocalizationSnapshot({
+    activePackageIds: snapshot.activePackageIds,
+    configPath: snapshot.selection?.configPath ?? null,
+    entries: snapshot.entries,
+    gameVersion: snapshot.gameVersion,
+    onProgress: options.onProgress,
+    scannedAt: snapshot.scannedAt,
+    toReadablePath,
+  });
+}
+
 export async function scanModLibrary(
   selection: PathSelection | null,
   options: ScanModLibraryOptions = {},
 ): Promise<ModLibraryResult> {
-  return buildModLibraryFromSnapshot(
-    await readModSourceSnapshot(selection, options),
+  const snapshot = await readModSourceSnapshot(selection, options);
+  const localizationSnapshot = await readModLocalizationSnapshotForSnapshot(
+    snapshot,
+    options,
   );
+  const localizationStatusByWindowsPath = new Map(
+    localizationSnapshot.entries.map((entry) => [
+      entry.modWindowsPath,
+      entry.localizationStatus,
+    ]),
+  );
+
+  return buildModLibraryFromSnapshot({
+    ...snapshot,
+    currentGameLanguage: localizationSnapshot.currentGameLanguage,
+    entries: snapshot.entries.map((entry) => ({
+      ...entry,
+      localizationStatus:
+        localizationStatusByWindowsPath.get(entry.modWindowsPath) ??
+        entry.localizationStatus,
+    })),
+  });
 }
 
 export function writeActiveModsToConfig(

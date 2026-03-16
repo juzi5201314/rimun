@@ -6,4 +6,10 @@ export const queryKeys = {
   modSourceSnapshotRoot: () => ["mod-source-snapshot"] as const,
   modSourceSnapshot: (profileId: string) =>
     ["mod-source-snapshot", profileId] as const,
+  modLocalizationSnapshotRoot: () => ["mod-localization-snapshot"] as const,
+  modLocalizationSnapshot: (profileId: string, snapshotScannedAt: string) =>
+    ["mod-localization-snapshot", profileId, snapshotScannedAt] as const,
+  modLocalizationProgressRoot: () => ["mod-localization-progress"] as const,
+  modLocalizationProgress: (profileId: string, snapshotScannedAt: string) =>
+    ["mod-localization-progress", profileId, snapshotScannedAt] as const,
 };

@@ -113,6 +113,18 @@ Bun.serve({
                 await request.json(),
               ),
             );
+          case "getModLocalizationSnapshot":
+            return hostService.getModLocalizationSnapshot(
+              rimunRpcSchemas.bun.requests.getModLocalizationSnapshot.params.parse(
+                await request.json(),
+              ),
+            );
+          case "getModLocalizationProgress":
+            return hostService.getModLocalizationProgress(
+              rimunRpcSchemas.bun.requests.getModLocalizationProgress.params.parse(
+                await request.json(),
+              ),
+            );
           case "getSettings":
             return hostService.getSettings();
           case "saveSettings":

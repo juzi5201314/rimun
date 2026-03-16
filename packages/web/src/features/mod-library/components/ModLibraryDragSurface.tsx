@@ -134,6 +134,11 @@ export function ModLibraryDragSurface({
     activeDrag,
     dropIndicator,
   );
+  const localizationStatusState = controller.hasResolvedLocalizationStatus
+    ? "ready"
+    : controller.isLocalizationStatusPending
+      ? "loading"
+      : "unavailable";
 
   function handleDragStart(event: DragStartEvent) {
     const packageId = event.active.data.current?.["packageId"];
@@ -198,6 +203,7 @@ export function ModLibraryDragSurface({
             description={t("mod_library_columns.inactive_description")}
             dropIndicator={inactiveColumnDragState.dropIndicator}
             items={controller.visibleInactiveMods}
+            localizationStatusState={localizationStatusState}
             selectedModId={controller.selectedMod?.id ?? null}
             title={t("mod_library_columns.inactive_title")}
             totalCount={controller.inactiveMods.length}
@@ -209,6 +215,7 @@ export function ModLibraryDragSurface({
             description={t("mod_library_columns.active_description")}
             dropIndicator={activeColumnDragState.dropIndicator}
             items={controller.visibleActiveMods}
+            localizationStatusState={localizationStatusState}
             selectedModId={controller.selectedMod?.id ?? null}
             title={t("mod_library_columns.active_title")}
             totalCount={controller.activeMods.length}
@@ -229,6 +236,7 @@ export function ModLibraryDragSurface({
               isDragging={false}
               isSelected={false}
               item={activeDragItem}
+              localizationStatusState={localizationStatusState}
               showDropAfter={false}
               showDropBefore={false}
             />

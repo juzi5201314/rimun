@@ -1,12 +1,51 @@
 import { App } from "@/app/App";
 import { createAppRouter } from "@/app/router";
 import { createTestHostApi } from "@/shared/testing/createTestHostApi.node";
-import type { DetectPathsInput, SaveProfileInput } from "@rimun/shared";
+import type {
+  DetectPathsInput,
+  ModSourceSnapshot,
+  SaveProfileInput,
+} from "@rimun/shared";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-function createRescannedSnapshot() {
+const defaultLocalizationStatus = {
+  kind: "missing" as const,
+  isSupported: false,
+  matchedFolderName: null,
+  providerPackageIds: [],
+  coverage: {
+    completeness: "unknown" as const,
+    coveredEntries: 0,
+    totalEntries: null,
+    percent: null,
+  },
+};
+
+function createSnapshotEntry(
+  entry: Omit<ModSourceSnapshot["entries"][number], "localizationStatus">,
+): ModSourceSnapshot["entries"][number] {
   return {
+    ...entry,
+    localizationStatus: defaultLocalizationStatus,
+  };
+}
+
+function withSnapshotDefaults(
+  snapshot: Omit<ModSourceSnapshot, "currentGameLanguage">,
+): ModSourceSnapshot {
+  return {
+    ...snapshot,
+    currentGameLanguage: {
+      folderName: "English",
+      normalizedFolderName: "english",
+      source: "prefs",
+    },
+  };
+}
+
+function createRescannedSnapshot(): ModSourceSnapshot {
+  return withSnapshotDefaults({
     environment: {
       platform: "linux" as const,
       isWsl: true,
@@ -33,7 +72,7 @@ function createRescannedSnapshot() {
     gameVersion: "1.5.4104 rev435",
     activePackageIds: ["ludeon.rimworld", "unlimitedhugs.hugslib"],
     entries: [
-      {
+      createSnapshotEntry({
         entryName: "Core",
         source: "installation" as const,
         modWindowsPath:
@@ -52,8 +91,8 @@ function createRescannedSnapshot() {
           </ModMetaData>
         `,
         notes: [],
-      },
-      {
+      }),
+      createSnapshotEntry({
         entryName: "818773962",
         source: "workshop" as const,
         modWindowsPath:
@@ -72,8 +111,8 @@ function createRescannedSnapshot() {
           </ModMetaData>
         `,
         notes: [],
-      },
-      {
+      }),
+      createSnapshotEntry({
         entryName: "123456789",
         source: "workshop" as const,
         modWindowsPath:
@@ -92,15 +131,15 @@ function createRescannedSnapshot() {
           </ModMetaData>
         `,
         notes: [],
-      },
+      }),
     ],
     errors: [],
     requiresConfiguration: false,
-  };
+  });
 }
 
-function createOptimalHarmonySnapshot() {
-  return {
+function createOptimalHarmonySnapshot(): ModSourceSnapshot {
+  return withSnapshotDefaults({
     environment: {
       platform: "linux" as const,
       isWsl: true,
@@ -131,7 +170,7 @@ function createOptimalHarmonySnapshot() {
       "oskarpotocki.vanillafactionsexpanded.core",
     ],
     entries: [
-      {
+      createSnapshotEntry({
         entryName: "2009463077",
         source: "workshop" as const,
         modWindowsPath:
@@ -150,8 +189,8 @@ function createOptimalHarmonySnapshot() {
           </ModMetaData>
         `,
         notes: [],
-      },
-      {
+      }),
+      createSnapshotEntry({
         entryName: "Core",
         source: "installation" as const,
         modWindowsPath:
@@ -169,8 +208,8 @@ function createOptimalHarmonySnapshot() {
           </ModMetaData>
         `,
         notes: [],
-      },
-      {
+      }),
+      createSnapshotEntry({
         entryName: "2023507013",
         source: "workshop" as const,
         modWindowsPath:
@@ -197,15 +236,15 @@ function createOptimalHarmonySnapshot() {
           </ModMetaData>
         `,
         notes: [],
-      },
+      }),
     ],
     errors: [],
     requiresConfiguration: false,
-  };
+  });
 }
 
-function createMisorderedHarmonySnapshot() {
-  return {
+function createMisorderedHarmonySnapshot(): ModSourceSnapshot {
+  return withSnapshotDefaults({
     environment: {
       platform: "linux" as const,
       isWsl: true,
@@ -238,11 +277,11 @@ function createMisorderedHarmonySnapshot() {
     entries: createOptimalHarmonySnapshot().entries,
     errors: [],
     requiresConfiguration: false,
-  };
+  });
 }
 
-function createUnsupportedVersionSnapshot() {
-  return {
+function createUnsupportedVersionSnapshot(): ModSourceSnapshot {
+  return withSnapshotDefaults({
     environment: {
       platform: "linux" as const,
       isWsl: true,
@@ -269,7 +308,7 @@ function createUnsupportedVersionSnapshot() {
     gameVersion: "1.5.4104 rev435",
     activePackageIds: ["example.legacy", "ludeon.rimworld"],
     entries: [
-      {
+      createSnapshotEntry({
         entryName: "Core",
         source: "installation" as const,
         modWindowsPath:
@@ -287,8 +326,8 @@ function createUnsupportedVersionSnapshot() {
           </ModMetaData>
         `,
         notes: [],
-      },
-      {
+      }),
+      createSnapshotEntry({
         entryName: "333333333",
         source: "workshop" as const,
         modWindowsPath:
@@ -307,11 +346,11 @@ function createUnsupportedVersionSnapshot() {
           </ModMetaData>
         `,
         notes: [],
-      },
+      }),
     ],
     errors: [],
     requiresConfiguration: false,
-  };
+  });
 }
 
 function createDeferred<T>() {

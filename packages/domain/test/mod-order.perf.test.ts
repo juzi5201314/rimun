@@ -57,6 +57,18 @@ function createSyntheticMod(index: number): ModRecord {
       incompatibleWith: [],
       supportedVersions: ["1.5"],
     },
+    localizationStatus: {
+      kind: "missing",
+      isSupported: false,
+      matchedFolderName: null,
+      providerPackageIds: [],
+      coverage: {
+        completeness: "unknown",
+        coveredEntries: 0,
+        totalEntries: null,
+        percent: null,
+      },
+    },
     notes: [],
   };
 }
@@ -87,6 +99,11 @@ function createSyntheticLibrary(): ModLibraryResult {
         "C:\\Users\\alice\\AppData\\LocalLow\\Ludeon Studios\\RimWorld by Ludeon Studios\\Config\\ModsConfig.xml",
     },
     gameVersion: "1.5.4104 rev435",
+    currentGameLanguage: {
+      folderName: "English",
+      normalizedFolderName: "english",
+      source: "prefs",
+    },
     activePackageIds: mods.map((mod) => mod.packageId ?? mod.id),
     mods,
     errors: [],

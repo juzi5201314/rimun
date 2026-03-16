@@ -118,6 +118,14 @@ export async function createElectrobunHostApi(): Promise<RimunHostApi> {
       callWithReadySocket(() => typedRpc.request.switchProfile(input)),
     getModSourceSnapshot: async (input) =>
       callWithReadySocket(() => typedRpc.request.getModSourceSnapshot(input)),
+    getModLocalizationSnapshot: async (input) =>
+      callWithReadySocket(() =>
+        typedRpc.request.getModLocalizationSnapshot(input),
+      ),
+    getModLocalizationProgress: async (input) =>
+      callWithReadySocket(() =>
+        typedRpc.request.getModLocalizationProgress(input),
+      ),
     getSettings: async () =>
       callWithReadySocket(() => typedRpc.request.getSettings({})),
     saveSettings: async (input) =>

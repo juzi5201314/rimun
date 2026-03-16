@@ -23,6 +23,10 @@ export function createMainWindowRpc(
         switchProfile: (payload) => hostService.switchProfile(payload),
         getModSourceSnapshot: (payload) =>
           hostService.getModSourceSnapshot(payload),
+        getModLocalizationSnapshot: (payload) =>
+          hostService.getModLocalizationSnapshot(payload),
+        getModLocalizationProgress: (payload) =>
+          hostService.getModLocalizationProgress(payload),
         getSettings: () => hostService.getSettings(),
         saveSettings: (payload) => hostService.saveSettings(payload),
         getLlmSettings: () => hostService.getLlmSettings(),

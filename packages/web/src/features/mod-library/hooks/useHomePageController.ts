@@ -6,6 +6,8 @@ import {
   buildDefaultInactivePackageIds,
   reconcileInactivePackageIds,
 } from "@/features/mod-library/lib/mod-list-order";
+import { useModLocalizationProgressQuery } from "@/features/mod-source/hooks/useModLocalizationProgressQuery";
+import { useModLocalizationSnapshotQuery } from "@/features/mod-source/hooks/useModLocalizationSnapshotQuery";
 import { useModSourceSnapshotQuery } from "@/features/mod-source/hooks/useModSourceSnapshotQuery";
 import { useDelayedBusy } from "@/shared/hooks/useDelayedBusy";
 import { useHostApi } from "@/shared/host/HostApiProvider";
@@ -17,6 +19,7 @@ import {
   resolveRecommendedActivePackageIds,
 } from "@rimun/domain";
 import type {
+  ModLocalizationSnapshot,
   ModOrderAnalysisResult,
   ModOrderEdge,
   ModRecord,
@@ -113,6 +116,35 @@ function isVisibleMod(
   return mod.searchText.includes(term);
 }
 
+function mergeLocalizationSnapshotIntoSourceSnapshot(args: {
+  localizationSnapshot: ModLocalizationSnapshot | undefined;
+  modSourceSnapshot: NonNullable<
+    ReturnType<typeof useModSourceSnapshotQuery>["data"]
+  >;
+}) {
+  if (!args.localizationSnapshot) {
+    return args.modSourceSnapshot;
+  }
+
+  const localizationStatusByWindowsPath = new Map(
+    args.localizationSnapshot.entries.map((entry) => [
+      entry.modWindowsPath,
+      entry.localizationStatus,
+    ]),
+  );
+
+  return {
+    ...args.modSourceSnapshot,
+    currentGameLanguage: args.localizationSnapshot.currentGameLanguage,
+    entries: args.modSourceSnapshot.entries.map((entry) => ({
+      ...entry,
+      localizationStatus:
+        localizationStatusByWindowsPath.get(entry.modWindowsPath) ??
+        entry.localizationStatus,
+    })),
+  };
+}
+
 export function useHomePageController() {
   const { t } = useI18n();
   const queryClient = useQueryClient();
@@ -130,6 +162,20 @@ export function useHomePageController() {
       (profile) => profile.id === currentProfileId,
     ) ?? null;
   const modSourceSnapshotQuery = useModSourceSnapshotQuery(currentProfileId);
+  const modLocalizationSnapshotQuery = useModLocalizationSnapshotQuery(
+    currentProfileId,
+    modSourceSnapshotQuery.data,
+  );
+  const localizationSnapshotRequestPending =
+    modSourceSnapshotQuery.data !== undefined &&
+    !modSourceSnapshotQuery.data.requiresConfiguration &&
+    (modLocalizationSnapshotQuery.isPending ||
+      modLocalizationSnapshotQuery.isFetching);
+  const modLocalizationProgressQuery = useModLocalizationProgressQuery(
+    currentProfileId,
+    modSourceSnapshotQuery.data,
+    localizationSnapshotRequestPending,
+  );
   const [searchQuery, setSearchQuery] = useState("");
   const deferredSearchQuery = useDeferredValue(searchQuery);
   const [selectedModId, setSelectedModId] = useState<string | null>(null);
@@ -182,6 +228,12 @@ export function useHomePageController() {
       await queryClient.invalidateQueries({
         queryKey: queryKeys.modSourceSnapshotRoot(),
       });
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.modLocalizationSnapshotRoot(),
+      });
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.modLocalizationProgressRoot(),
+      });
     },
   });
   const deleteProfileMutation = useMutation({
@@ -193,6 +245,12 @@ export function useHomePageController() {
       queryClient.setQueryData(queryKeys.profileCatalog(), result);
       await queryClient.invalidateQueries({
         queryKey: queryKeys.modSourceSnapshotRoot(),
+      });
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.modLocalizationSnapshotRoot(),
+      });
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.modLocalizationProgressRoot(),
       });
     },
   });
@@ -228,6 +286,12 @@ export function useHomePageController() {
       await queryClient.invalidateQueries({
         queryKey: queryKeys.modSourceSnapshot(variables.profileId),
       });
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.modLocalizationSnapshotRoot(),
+      });
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.modLocalizationProgressRoot(),
+      });
     },
   });
   const applyActivePackageIdsMutation = useMutation({
@@ -261,16 +325,32 @@ export function useHomePageController() {
       await queryClient.invalidateQueries({
         queryKey: queryKeys.modSourceSnapshot(variables.profileId),
       });
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.modLocalizationSnapshotRoot(),
+      });
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.modLocalizationProgressRoot(),
+      });
     },
   });
 
   const modSourceSnapshot = modSourceSnapshotQuery.data;
-  const modLibrary = useMemo(
+  const mergedModSourceSnapshot = useMemo(
     () =>
       modSourceSnapshot
-        ? buildModLibraryFromSnapshot(modSourceSnapshot)
+        ? mergeLocalizationSnapshotIntoSourceSnapshot({
+            localizationSnapshot: modLocalizationSnapshotQuery.data,
+            modSourceSnapshot,
+          })
         : undefined,
-    [modSourceSnapshot],
+    [modLocalizationSnapshotQuery.data, modSourceSnapshot],
+  );
+  const modLibrary = useMemo(
+    () =>
+      mergedModSourceSnapshot
+        ? buildModLibraryFromSnapshot(mergedModSourceSnapshot)
+        : undefined,
+    [mergedModSourceSnapshot],
   );
   const packageIdCounts = useMemo(() => {
     const counts = new Map<string, number>();
@@ -601,6 +681,14 @@ export function useHomePageController() {
     saveProfileMutation.isPending ||
     applyActivePackageIdsMutation.isPending;
   const isRescanning = isRescanInFlight || modSourceSnapshotQuery.isFetching;
+  const isLocalizationStatusPending = localizationSnapshotRequestPending;
+  const hasResolvedLocalizationStatus =
+    modLocalizationSnapshotQuery.data !== undefined;
+  const localizationAnalysisProgressPercent = isLocalizationStatusPending
+    ? (modLocalizationProgressQuery.data?.percent ?? 0)
+    : hasResolvedLocalizationStatus
+      ? 100
+      : null;
   const shouldPromptEnableDependencies =
     Boolean(analysis) &&
     !applyActivePackageIdsMutation.isPending &&
@@ -998,11 +1086,16 @@ export function useHomePageController() {
     isDependencyDialogOpen,
     isDirty,
     isFilterPanelOpen,
+    hasResolvedLocalizationStatus,
+    localizationAnalysisProgressPercent,
+    isLocalizationStatusPending,
     isProfilePanelOpen,
     isRescanning,
     isSortDialogOpen,
     loadingOverlayVisible,
     modLibrary,
+    modLocalizationProgressQuery,
+    modLocalizationSnapshotQuery,
     modSourceSnapshotQuery,
     newProfileName,
     profileCatalogQuery,

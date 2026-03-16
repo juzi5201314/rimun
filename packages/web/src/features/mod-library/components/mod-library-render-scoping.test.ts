@@ -43,6 +43,18 @@ function createItem(
     id: `mod-${packageId}`,
     isDraggable: true,
     isOfficial: false,
+    localizationStatus: {
+      kind: "missing",
+      isSupported: false,
+      matchedFolderName: null,
+      providerPackageIds: [],
+      coverage: {
+        completeness: "unknown",
+        coveredEntries: 0,
+        totalEntries: null,
+        percent: null,
+      },
+    },
     manifestPath: `C:\\RimWorld\\Mods\\${packageId}\\About\\About.xml`,
     name: packageId,
     notes: [],
@@ -68,6 +80,7 @@ function createColumnProps(
     columnId,
     description: `${columnId} mods`,
     items,
+    localizationStatusState: "ready",
     selectedModId: null,
     title: `${columnId} title`,
     totalCount: items.length,
@@ -85,6 +98,7 @@ function createRowProps(
     dropIndicator,
     isSelected: false,
     item,
+    localizationStatusState: "ready",
     onSelect: vi.fn(),
   };
 }

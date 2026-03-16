@@ -4,6 +4,10 @@ import type {
   CreateProfileInput,
   DeleteProfileInput,
   DetectPathsInput,
+  ModLocalizationProgress,
+  ModLocalizationProgressInput,
+  ModLocalizationSnapshot,
+  ModLocalizationSnapshotInput,
   ModProfileSummary,
   ModSourceSnapshot,
   ProfileScopedInput,
@@ -25,6 +29,7 @@ import { searchModelMetadata } from "./llm/models-dev";
 import {
   createReadablePathResolver,
   readActivePackageIdsFromSelection,
+  readModLocalizationSnapshotForSnapshot,
   readModSourceSnapshot,
   writeActiveModsToConfig,
 } from "./mods";
@@ -116,6 +121,7 @@ function resolveBootstrap(repository: SettingsRepository): BootstrapPayload {
 }
 
 type CreateRimunHostServiceOptions = {
+  readModLocalizationSnapshotForSnapshot?: typeof readModLocalizationSnapshotForSnapshot;
   readModSourceSnapshot?: typeof readModSourceSnapshot;
   toReadablePath?: (windowsPath: string) => string | null;
 };
@@ -136,19 +142,121 @@ function createSnapshotRequestKey(args: {
   });
 }
 
+function createLocalizationRequestKey(args: {
+  activePackageIds: string[];
+  profileId: string;
+  selection: ReturnType<typeof resolvePreferredSelection>;
+  snapshotScannedAt: string;
+}) {
+  return JSON.stringify({
+    activePackageIds: args.activePackageIds,
+    configPath: args.selection?.configPath ?? null,
+    installationPath: args.selection?.installationPath ?? null,
+    profileId: args.profileId,
+    snapshotScannedAt: args.snapshotScannedAt,
+    workshopPath: args.selection?.workshopPath ?? null,
+  });
+}
+
+function createPendingLocalizationProgress(
+  snapshot: ModSourceSnapshot,
+): ModLocalizationProgress {
+  return {
+    completedUnits: 0,
+    percent: 0,
+    scannedAt: snapshot.scannedAt,
+    state: "pending",
+    totalUnits: 1 + snapshot.entries.length * 2,
+  };
+}
+
+function createCompletedLocalizationProgress(
+  snapshot: ModSourceSnapshot,
+  previous: ModLocalizationProgress | undefined,
+): ModLocalizationProgress {
+  return {
+    completedUnits: previous?.totalUnits ?? 1 + snapshot.entries.length * 2,
+    percent: 100,
+    scannedAt: snapshot.scannedAt,
+    state: "complete",
+    totalUnits: previous?.totalUnits ?? 1 + snapshot.entries.length * 2,
+  };
+}
+
+function createUnavailableLocalizationProgress(
+  snapshot: ModSourceSnapshot,
+): ModLocalizationProgress {
+  return {
+    completedUnits: 0,
+    percent: 0,
+    scannedAt: snapshot.scannedAt,
+    state: "unavailable",
+    totalUnits: 1 + snapshot.entries.length * 2,
+  };
+}
+
+type SnapshotRequestContext = {
+  profileId: string;
+  profileActivePackageIds: string[];
+  requestKey: string;
+  selection: ReturnType<typeof resolvePreferredSelection>;
+};
+
+type LocalizationAnalysisFailure = {
+  error: unknown;
+};
+
 export function createRimunHostService(
   repository: SettingsRepository,
   options: CreateRimunHostServiceOptions = {},
 ): RimunHostApi {
   const toReadablePath = options.toReadablePath ?? createReadablePathResolver();
+  const readModLocalizationSnapshotForSnapshotImpl =
+    options.readModLocalizationSnapshotForSnapshot ??
+    readModLocalizationSnapshotForSnapshot;
   const readModSourceSnapshotImpl =
     options.readModSourceSnapshot ?? readModSourceSnapshot;
   const snapshotRequestsInFlight = new Map<
     string,
     Promise<ModSourceSnapshot>
   >();
+  const latestSnapshots = new Map<string, ModSourceSnapshot>();
+  const localizationRequestsInFlight = new Map<
+    string,
+    Promise<ModLocalizationSnapshot>
+  >();
+  const latestLocalizations = new Map<string, ModLocalizationSnapshot>();
+  const latestLocalizationFailures = new Map<
+    string,
+    LocalizationAnalysisFailure
+  >();
+  const latestLocalizationProgress = new Map<string, ModLocalizationProgress>();
 
-  async function getModSourceSnapshotSingleFlight(profileId: string) {
+  function resolveStoredLocalizationFailure(args: {
+    localizationRequestKey: string;
+    snapshotScannedAt: string;
+  }) {
+    const failure = latestLocalizationFailures.get(args.localizationRequestKey);
+
+    if (failure?.error instanceof Error) {
+      return failure.error;
+    }
+
+    return new Error(
+      `Localization analysis is unavailable for snapshot ${args.snapshotScannedAt}.`,
+    );
+  }
+
+  function startLocalizationAnalysisInBackground(args: {
+    context: SnapshotRequestContext;
+    snapshot: ModSourceSnapshot;
+  }) {
+    void startLocalizationAnalysis(args).catch(() => {});
+  }
+
+  async function resolveSnapshotRequestContext(
+    profileId: string,
+  ): Promise<SnapshotRequestContext> {
     const profile = await resolveStoredProfile(
       repository,
       profileId,
@@ -160,24 +268,286 @@ export function createRimunHostService(
       profileId,
       selection,
     });
-    const existingRequest = snapshotRequestsInFlight.get(requestKey);
+
+    return {
+      profileActivePackageIds: profile.activePackageIds,
+      profileId,
+      requestKey,
+      selection,
+    };
+  }
+
+  function startLocalizationAnalysis(args: {
+    context: SnapshotRequestContext;
+    snapshot: ModSourceSnapshot;
+  }) {
+    const localizationRequestKey = createLocalizationRequestKey({
+      activePackageIds: args.context.profileActivePackageIds,
+      profileId: args.context.profileId,
+      selection: args.context.selection,
+      snapshotScannedAt: args.snapshot.scannedAt,
+    });
+    const existingLocalization = latestLocalizations.get(
+      localizationRequestKey,
+    );
+
+    if (existingLocalization) {
+      latestLocalizationProgress.set(
+        localizationRequestKey,
+        createCompletedLocalizationProgress(
+          args.snapshot,
+          latestLocalizationProgress.get(localizationRequestKey),
+        ),
+      );
+      return Promise.resolve(existingLocalization);
+    }
+
+    const existingFailure = latestLocalizationFailures.get(
+      localizationRequestKey,
+    );
+
+    if (existingFailure) {
+      latestLocalizationProgress.set(
+        localizationRequestKey,
+        createUnavailableLocalizationProgress(args.snapshot),
+      );
+      return Promise.reject(
+        resolveStoredLocalizationFailure({
+          localizationRequestKey,
+          snapshotScannedAt: args.snapshot.scannedAt,
+        }),
+      );
+    }
+
+    const existingRequest = localizationRequestsInFlight.get(
+      localizationRequestKey,
+    );
 
     if (existingRequest) {
       return existingRequest;
     }
 
-    const request = readModSourceSnapshotImpl(selection, {
-      activePackageIdsOverride: profile.activePackageIds,
-      toReadablePath,
-    }).finally(() => {
-      if (snapshotRequestsInFlight.get(requestKey) === request) {
-        snapshotRequestsInFlight.delete(requestKey);
-      }
-    });
+    latestLocalizationProgress.set(
+      localizationRequestKey,
+      createPendingLocalizationProgress(args.snapshot),
+    );
 
-    snapshotRequestsInFlight.set(requestKey, request);
+    const request = readModLocalizationSnapshotForSnapshotImpl(args.snapshot, {
+      onProgress: (progress) => {
+        latestLocalizationProgress.set(localizationRequestKey, {
+          ...progress,
+          scannedAt: args.snapshot.scannedAt,
+          state: "pending",
+        });
+      },
+      toReadablePath,
+    })
+      .then((localizationSnapshot) => {
+        latestLocalizations.set(localizationRequestKey, localizationSnapshot);
+        latestLocalizationFailures.delete(localizationRequestKey);
+        latestLocalizationProgress.set(
+          localizationRequestKey,
+          createCompletedLocalizationProgress(
+            args.snapshot,
+            latestLocalizationProgress.get(localizationRequestKey),
+          ),
+        );
+        return localizationSnapshot;
+      })
+      .catch((error) => {
+        latestLocalizationFailures.set(localizationRequestKey, {
+          error,
+        });
+        latestLocalizationProgress.set(
+          localizationRequestKey,
+          createUnavailableLocalizationProgress(args.snapshot),
+        );
+        console.error("Localization analysis failed for mod snapshot.", {
+          error,
+          localizationRequestKey,
+          snapshotScannedAt: args.snapshot.scannedAt,
+        });
+        throw error;
+      })
+      .finally(() => {
+        if (
+          localizationRequestsInFlight.get(localizationRequestKey) === request
+        ) {
+          localizationRequestsInFlight.delete(localizationRequestKey);
+        }
+      });
+
+    localizationRequestsInFlight.set(localizationRequestKey, request);
 
     return request;
+  }
+
+  async function getModLocalizationProgressSingleFlight(
+    input: ModLocalizationProgressInput,
+  ) {
+    const context = await resolveSnapshotRequestContext(input.profileId);
+    const localizationRequestKey = createLocalizationRequestKey({
+      activePackageIds: context.profileActivePackageIds,
+      profileId: context.profileId,
+      selection: context.selection,
+      snapshotScannedAt: input.snapshotScannedAt,
+    });
+    const cachedSnapshot = latestSnapshots.get(context.requestKey);
+    const cachedLocalization = latestLocalizations.get(localizationRequestKey);
+
+    if (cachedSnapshot?.scannedAt === input.snapshotScannedAt) {
+      if (cachedLocalization) {
+        return createCompletedLocalizationProgress(
+          cachedSnapshot,
+          latestLocalizationProgress.get(localizationRequestKey),
+        );
+      }
+
+      const existingProgress = latestLocalizationProgress.get(
+        localizationRequestKey,
+      );
+
+      if (existingProgress?.state === "unavailable") {
+        return existingProgress;
+      }
+
+      startLocalizationAnalysisInBackground({
+        context,
+        snapshot: cachedSnapshot,
+      });
+
+      return (
+        latestLocalizationProgress.get(localizationRequestKey) ??
+        createPendingLocalizationProgress(cachedSnapshot)
+      );
+    }
+
+    const latestSnapshot = await getModSourceSnapshotSingleFlight(
+      input.profileId,
+    );
+
+    if (latestSnapshot.scannedAt !== input.snapshotScannedAt) {
+      throw new Error(
+        "The requested mod snapshot is stale. Reload the mod source snapshot before requesting localization progress.",
+      );
+    }
+
+    if (cachedLocalization) {
+      return createCompletedLocalizationProgress(
+        latestSnapshot,
+        latestLocalizationProgress.get(localizationRequestKey),
+      );
+    }
+
+    const existingProgress = latestLocalizationProgress.get(
+      localizationRequestKey,
+    );
+
+    if (existingProgress?.state === "unavailable") {
+      return existingProgress;
+    }
+
+    startLocalizationAnalysisInBackground({
+      context,
+      snapshot: latestSnapshot,
+    });
+
+    return (
+      latestLocalizationProgress.get(localizationRequestKey) ??
+      createPendingLocalizationProgress(latestSnapshot)
+    );
+  }
+
+  async function getModSourceSnapshotSingleFlight(profileId: string) {
+    const context = await resolveSnapshotRequestContext(profileId);
+    const existingRequest = snapshotRequestsInFlight.get(context.requestKey);
+
+    if (existingRequest) {
+      return existingRequest;
+    }
+
+    const request = readModSourceSnapshotImpl(context.selection, {
+      activePackageIdsOverride: context.profileActivePackageIds,
+      toReadablePath,
+    })
+      .then((snapshot) => {
+        latestSnapshots.set(context.requestKey, snapshot);
+        startLocalizationAnalysisInBackground({
+          context,
+          snapshot,
+        });
+        return snapshot;
+      })
+      .finally(() => {
+        if (snapshotRequestsInFlight.get(context.requestKey) === request) {
+          snapshotRequestsInFlight.delete(context.requestKey);
+        }
+      });
+
+    snapshotRequestsInFlight.set(context.requestKey, request);
+
+    return request;
+  }
+
+  async function getModLocalizationSnapshotSingleFlight(
+    input: ModLocalizationSnapshotInput,
+  ) {
+    const context = await resolveSnapshotRequestContext(input.profileId);
+    const localizationRequestKey = createLocalizationRequestKey({
+      activePackageIds: context.profileActivePackageIds,
+      profileId: context.profileId,
+      selection: context.selection,
+      snapshotScannedAt: input.snapshotScannedAt,
+    });
+    const existingLocalization = latestLocalizations.get(
+      localizationRequestKey,
+    );
+
+    if (existingLocalization) {
+      return existingLocalization;
+    }
+
+    if (
+      latestLocalizationProgress.get(localizationRequestKey)?.state ===
+      "unavailable"
+    ) {
+      throw resolveStoredLocalizationFailure({
+        localizationRequestKey,
+        snapshotScannedAt: input.snapshotScannedAt,
+      });
+    }
+
+    const existingRequest = localizationRequestsInFlight.get(
+      localizationRequestKey,
+    );
+
+    if (existingRequest) {
+      return existingRequest;
+    }
+
+    const cachedSnapshot = latestSnapshots.get(context.requestKey);
+
+    if (cachedSnapshot?.scannedAt === input.snapshotScannedAt) {
+      return startLocalizationAnalysis({
+        context,
+        snapshot: cachedSnapshot,
+      });
+    }
+
+    const latestSnapshot = await getModSourceSnapshotSingleFlight(
+      input.profileId,
+    );
+
+    if (latestSnapshot.scannedAt !== input.snapshotScannedAt) {
+      throw new Error(
+        "The requested mod snapshot is stale. Reload the mod source snapshot before requesting localization data.",
+      );
+    }
+
+    return startLocalizationAnalysis({
+      context,
+      snapshot: latestSnapshot,
+    });
   }
 
   return {
@@ -300,6 +670,30 @@ export function createRimunHostService(
 
       return rimunRpcSchemas.bun.requests.getModSourceSnapshot.response.parse(
         await getModSourceSnapshotSingleFlight(input.profileId),
+      );
+    },
+    getModLocalizationSnapshot: async (
+      payload: ModLocalizationSnapshotInput,
+    ) => {
+      const input = assertRequestSchema(
+        rimunRpcSchemas.bun.requests.getModLocalizationSnapshot.params,
+        payload,
+      );
+
+      return rimunRpcSchemas.bun.requests.getModLocalizationSnapshot.response.parse(
+        await getModLocalizationSnapshotSingleFlight(input),
+      );
+    },
+    getModLocalizationProgress: async (
+      payload: ModLocalizationProgressInput,
+    ) => {
+      const input = assertRequestSchema(
+        rimunRpcSchemas.bun.requests.getModLocalizationProgress.params,
+        payload,
+      );
+
+      return rimunRpcSchemas.bun.requests.getModLocalizationProgress.response.parse(
+        await getModLocalizationProgressSingleFlight(input),
       );
     },
     getSettings: async () =>

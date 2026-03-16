@@ -46,6 +46,47 @@ function ToolbarChip({
   );
 }
 
+function LocalizationAnalysisProgressBar({
+  label,
+  percent,
+  visible,
+}: {
+  label: string;
+  percent: number | null;
+  visible: boolean;
+}) {
+  const clampedPercent =
+    percent === null ? 0 : Math.min(100, Math.max(0, Math.round(percent)));
+
+  return (
+    <div
+      aria-hidden={!visible}
+      className={cn(
+        "shrink-0 overflow-hidden border-b border-border/40 bg-background/80 transition-all duration-200",
+        visible ? "max-h-12 opacity-100" : "max-h-0 border-b-0 opacity-0",
+      )}
+    >
+      <div aria-live="polite" className="flex items-center gap-3 px-5 py-2">
+        <span className="text-[11px] font-medium text-muted-foreground">
+          {label}
+        </span>
+        <div
+          aria-hidden="true"
+          className="relative h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-primary/10"
+        >
+          <div
+            className="absolute inset-y-0 left-0 rounded-full bg-primary/70 transition-[width] duration-200 ease-out"
+            style={{ width: `${clampedPercent}%` }}
+          />
+        </div>
+        <span className="min-w-10 text-right text-[11px] font-semibold text-foreground/80">
+          {clampedPercent}%
+        </span>
+      </div>
+    </div>
+  );
+}
+
 export function ModLibraryPane({
   controller,
 }: {
@@ -504,6 +545,12 @@ export function ModLibraryPane({
           </div>
         </div>
       </div>
+
+      <LocalizationAnalysisProgressBar
+        label={t("mod_library.translation_analysis_progress")}
+        percent={controller.localizationAnalysisProgressPercent}
+        visible={controller.isLocalizationStatusPending}
+      />
 
       <ModLibraryDragSurface controller={controller} />
 

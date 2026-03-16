@@ -200,6 +200,60 @@ export const modDependencyMetadataSchema = z.object({
   supportedVersions: z.array(z.string().trim().min(1)).default([]),
 });
 
+export const currentGameLanguageSourceSchema = z.enum(["prefs", "unknown"]);
+
+export const currentGameLanguageSchema = z.object({
+  folderName: z.string().trim().min(1).nullable(),
+  normalizedFolderName: z.string().trim().min(1).nullable(),
+  source: currentGameLanguageSourceSchema,
+});
+
+export const modLocalizationKindSchema = z.enum([
+  "translated",
+  "missing",
+  "unknown",
+]);
+
+export const modLocalizationCompletenessSchema = z.enum([
+  "complete",
+  "partial",
+  "unknown",
+]);
+
+export const modLocalizationCoverageSchema = z.object({
+  completeness: modLocalizationCompletenessSchema,
+  coveredEntries: z.number().int().min(0),
+  totalEntries: z.number().int().min(0).nullable(),
+  percent: z.number().min(0).max(100).nullable(),
+});
+
+export const modLocalizationStatusSchema = z.object({
+  kind: modLocalizationKindSchema,
+  isSupported: z.boolean(),
+  matchedFolderName: z.string().trim().min(1).nullable(),
+  providerPackageIds: z.array(z.string().trim().min(1)).default([]),
+  coverage: modLocalizationCoverageSchema,
+});
+
+const defaultCurrentGameLanguage = {
+  folderName: null,
+  normalizedFolderName: null,
+  source: "unknown" as const,
+};
+
+const defaultMissingLocalizationStatus = {
+  kind: "missing" as const,
+  isSupported: false,
+  matchedFolderName: null,
+  providerPackageIds: [] as string[],
+  coverage: {
+    completeness: "unknown" as const,
+    coveredEntries: 0,
+    totalEntries: null,
+    percent: null,
+  },
+};
+
 export const modRecordSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
@@ -215,6 +269,9 @@ export const modRecordSchema = z.object({
   isOfficial: z.boolean(),
   hasAboutXml: z.boolean(),
   dependencyMetadata: modDependencyMetadataSchema,
+  localizationStatus: modLocalizationStatusSchema.default(
+    defaultMissingLocalizationStatus,
+  ),
   notes: z.array(z.string().min(1)).default([]),
 });
 
@@ -226,6 +283,9 @@ export const modSourceSnapshotEntrySchema = z.object({
   manifestPath: windowsAbsolutePathSchema.nullable(),
   hasAboutXml: z.boolean(),
   aboutXmlText: z.string().min(1).nullable(),
+  localizationStatus: modLocalizationStatusSchema.default(
+    defaultMissingLocalizationStatus,
+  ),
   notes: z.array(z.string().min(1)).default([]),
 });
 
@@ -243,6 +303,9 @@ export const modSourceSnapshotSchema = z.object({
   scannedAt: isoDateTimeSchema,
   scannedRoots: scannedRootsSchema,
   gameVersion: gameVersionSchema,
+  currentGameLanguage: currentGameLanguageSchema.default(
+    defaultCurrentGameLanguage,
+  ),
   activePackageIds: z.array(z.string().trim().min(1)).default([]),
   entries: z.array(modSourceSnapshotEntrySchema),
   errors: z.array(appErrorSchema),
@@ -303,12 +366,52 @@ export const profileScopedInputSchema = z.object({
   profileId: profileIdSchema,
 });
 
+export const modLocalizationSnapshotInputSchema =
+  profileScopedInputSchema.extend({
+    snapshotScannedAt: isoDateTimeSchema,
+  });
+
+export const modLocalizationProgressStateSchema = z.enum([
+  "pending",
+  "complete",
+  "unavailable",
+]);
+
+export const modLocalizationProgressInputSchema =
+  modLocalizationSnapshotInputSchema;
+
+export const modLocalizationProgressSchema = z.object({
+  completedUnits: z.number().int().min(0),
+  percent: z.number().min(0).max(100),
+  scannedAt: isoDateTimeSchema,
+  state: modLocalizationProgressStateSchema,
+  totalUnits: z.number().int().min(0),
+});
+
+export const modLocalizationSnapshotEntrySchema = z.object({
+  localizationStatus: modLocalizationStatusSchema.default(
+    defaultMissingLocalizationStatus,
+  ),
+  modWindowsPath: windowsAbsolutePathSchema,
+});
+
+export const modLocalizationSnapshotSchema = z.object({
+  currentGameLanguage: currentGameLanguageSchema.default(
+    defaultCurrentGameLanguage,
+  ),
+  entries: z.array(modLocalizationSnapshotEntrySchema).default([]),
+  scannedAt: isoDateTimeSchema,
+});
+
 export const modLibraryResultSchema = z.object({
   environment: executionEnvironmentSchema,
   selection: pathSelectionSchema.nullable(),
   scannedAt: isoDateTimeSchema,
   scannedRoots: scannedRootsSchema,
   gameVersion: gameVersionSchema,
+  currentGameLanguage: currentGameLanguageSchema.default(
+    defaultCurrentGameLanguage,
+  ),
   activePackageIds: z.array(z.string().trim().min(1)).default([]),
   mods: z.array(modRecordSchema),
   errors: z.array(appErrorSchema),
@@ -478,6 +581,18 @@ export type LlmProviderConfig = z.infer<typeof llmProviderConfigSchema>;
 export type LlmSettings = z.infer<typeof llmSettingsSchema>;
 export type LlmModelMetadataMatch = z.infer<typeof llmModelMetadataMatchSchema>;
 export type ModDependencyMetadata = z.infer<typeof modDependencyMetadataSchema>;
+export type CurrentGameLanguageSource = z.infer<
+  typeof currentGameLanguageSourceSchema
+>;
+export type CurrentGameLanguage = z.infer<typeof currentGameLanguageSchema>;
+export type ModLocalizationKind = z.infer<typeof modLocalizationKindSchema>;
+export type ModLocalizationCompleteness = z.infer<
+  typeof modLocalizationCompletenessSchema
+>;
+export type ModLocalizationCoverage = z.infer<
+  typeof modLocalizationCoverageSchema
+>;
+export type ModLocalizationStatus = z.infer<typeof modLocalizationStatusSchema>;
 export type ModRecord = z.infer<typeof modRecordSchema>;
 export type ModSourceSnapshotEntry = z.infer<
   typeof modSourceSnapshotEntrySchema
@@ -493,6 +608,24 @@ export type BootstrapPayload = z.infer<typeof bootstrapPayloadSchema>;
 export type ModProfileSummary = z.infer<typeof modProfileSummarySchema>;
 export type ProfileCatalogResult = z.infer<typeof profileCatalogResultSchema>;
 export type ProfileScopedInput = z.infer<typeof profileScopedInputSchema>;
+export type ModLocalizationSnapshotInput = z.infer<
+  typeof modLocalizationSnapshotInputSchema
+>;
+export type ModLocalizationProgressState = z.infer<
+  typeof modLocalizationProgressStateSchema
+>;
+export type ModLocalizationProgressInput = z.infer<
+  typeof modLocalizationProgressInputSchema
+>;
+export type ModLocalizationProgress = z.infer<
+  typeof modLocalizationProgressSchema
+>;
+export type ModLocalizationSnapshotEntry = z.infer<
+  typeof modLocalizationSnapshotEntrySchema
+>;
+export type ModLocalizationSnapshot = z.infer<
+  typeof modLocalizationSnapshotSchema
+>;
 export type ModLibraryResult = z.infer<typeof modLibraryResultSchema>;
 export type ModOrderAnalysisResult = z.infer<
   typeof modOrderAnalysisResultSchema

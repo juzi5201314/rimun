@@ -38,6 +38,10 @@ export function createHttpHostApi(): RimunHostApi {
     deleteProfile: (input) => callHost("deleteProfile", input),
     switchProfile: (input) => callHost("switchProfile", input),
     getModSourceSnapshot: (input) => callHost("getModSourceSnapshot", input),
+    getModLocalizationSnapshot: (input) =>
+      callHost("getModLocalizationSnapshot", input),
+    getModLocalizationProgress: (input) =>
+      callHost("getModLocalizationProgress", input),
     getSettings: () => callHost("getSettings", {}),
     saveSettings: (input) => callHost("saveSettings", input),
     getLlmSettings: () => callHost("getLlmSettings", {}),

@@ -34,6 +34,7 @@ export type ModListRowProps = {
   dropIndicator: DropIndicator;
   isSelected: boolean;
   item: HomePageModListItem;
+  localizationStatusState: "loading" | "ready" | "unavailable";
   measureElement?: (element: HTMLDivElement | null) => void;
   onSelect: (modId: string) => void;
   virtualIndex?: number;
@@ -70,6 +71,7 @@ export function areModListRowPropsEqual(
   return (
     previous.item === next.item &&
     previous.isSelected === next.isSelected &&
+    previous.localizationStatusState === next.localizationStatusState &&
     previous.onSelect === next.onSelect &&
     previous.virtualIndex === next.virtualIndex &&
     getRowDropPlacement(previous.dropIndicator, previous.item) ===
@@ -198,11 +200,83 @@ function buildMetaSummary(item: HomePageModListItem) {
   return parts.join(" · ");
 }
 
+function getLocalizationBadge(
+  item: HomePageModListItem,
+  localizationStatusState: "loading" | "ready" | "unavailable",
+  t: (key: string, params?: Record<string, string | number>) => string,
+) {
+  if (localizationStatusState === "loading") {
+    return {
+      className:
+        "bg-slate-500/10 text-slate-700 ring-slate-500/25 dark:text-slate-300",
+      label: t("mod_list_row.translation_loading_badge"),
+      title: t("mod_list_row.translation_loading_title"),
+    };
+  }
+
+  if (localizationStatusState === "unavailable") {
+    return {
+      className:
+        "bg-slate-500/10 text-slate-700 ring-slate-500/25 dark:text-slate-300",
+      label: t("mod_list_row.translation_unavailable_badge"),
+      title: t("mod_list_row.translation_unavailable_title"),
+    };
+  }
+
+  const status = item.localizationStatus;
+
+  if (status.kind === "translated") {
+    if (
+      status.coverage.completeness === "partial" &&
+      status.coverage.percent !== null
+    ) {
+      return {
+        className:
+          "bg-sky-500/10 text-sky-700 ring-sky-500/25 dark:text-sky-300",
+        label: t("mod_list_row.translation_partial_badge", {
+          percent: String(status.coverage.percent),
+        }),
+        title: t("mod_list_row.translation_partial_title"),
+      };
+    }
+
+    return {
+      className:
+        "bg-emerald-500/10 text-emerald-700 ring-emerald-500/25 dark:text-emerald-300",
+      label:
+        status.coverage.completeness === "complete"
+          ? t("mod_list_row.translation_complete_badge")
+          : t("mod_list_row.translation_available_badge"),
+      title:
+        status.coverage.completeness === "complete"
+          ? t("mod_list_row.translation_complete_title")
+          : t("mod_list_row.translation_available_title"),
+    };
+  }
+
+  if (status.kind === "unknown") {
+    return {
+      className:
+        "bg-slate-500/10 text-slate-700 ring-slate-500/25 dark:text-slate-300",
+      label: t("mod_list_row.translation_unknown_badge"),
+      title: t("mod_list_row.translation_unknown_title"),
+    };
+  }
+
+  return {
+    className:
+      "bg-zinc-500/10 text-zinc-700 ring-zinc-500/25 dark:text-zinc-300",
+    label: t("mod_list_row.no_translation_badge"),
+    title: t("mod_list_row.no_translation_title"),
+  };
+}
+
 export const ModListRowCard = memo(function ModListRowCard({
   dragHandle,
   isDragging,
   isSelected,
   item,
+  localizationStatusState,
   onSelect,
   showDropAfter,
   showDropBefore,
@@ -211,12 +285,18 @@ export const ModListRowCard = memo(function ModListRowCard({
   isDragging: boolean;
   isSelected: boolean;
   item: HomePageModListItem;
+  localizationStatusState: "loading" | "ready" | "unavailable";
   onSelect?: () => void;
   showDropAfter: boolean;
   showDropBefore: boolean;
 }) {
   const { t } = useI18n();
   const metaSummary = buildMetaSummary(item);
+  const localizationBadge = getLocalizationBadge(
+    item,
+    localizationStatusState,
+    t,
+  );
 
   return (
     <div
@@ -296,6 +376,15 @@ export const ModListRowCard = memo(function ModListRowCard({
                   {t("mod_list_row.invalid_badge")}
                 </div>
               ) : null}
+              <div
+                className={cn(
+                  "rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ring-inset",
+                  localizationBadge.className,
+                )}
+                title={localizationBadge.title}
+              >
+                {localizationBadge.label}
+              </div>
             </div>
           </div>
 
@@ -332,6 +421,7 @@ export const ModListRow = memo(function ModListRow({
   dropIndicator,
   isSelected,
   item,
+  localizationStatusState,
   measureElement,
   onSelect,
   virtualIndex,
@@ -371,6 +461,7 @@ export const ModListRow = memo(function ModListRow({
         isDragging={isActiveDragRow}
         isSelected={isSelected}
         item={item}
+        localizationStatusState={localizationStatusState}
         onSelect={() => onSelect(item.id)}
         showDropAfter={showDropAfter}
         showDropBefore={showDropBefore}

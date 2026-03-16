@@ -179,6 +179,18 @@ function createSyntheticItem(index: number): HomePageModListItem {
     id: `mod-${index}`,
     isDraggable: true,
     isOfficial: false,
+    localizationStatus: {
+      kind: "missing",
+      isSupported: false,
+      matchedFolderName: null,
+      providerPackageIds: [],
+      coverage: {
+        completeness: "unknown",
+        coveredEntries: 0,
+        totalEntries: null,
+        percent: null,
+      },
+    },
     manifestPath: `C:\\RimWorld\\Mods\\${String(index).padStart(4, "0")}\\About\\About.xml`,
     name,
     notes: [],
@@ -387,6 +399,7 @@ function ModLibraryPerfHarness() {
             description="Inactive synthetic mods"
             dropIndicator={null}
             items={visibleInactiveMods}
+            localizationStatusState="ready"
             selectedModId={null}
             title="Inactive Mods"
             totalCount={columns.inactive.length}
@@ -398,6 +411,7 @@ function ModLibraryPerfHarness() {
             description="Active synthetic mods"
             dropIndicator={null}
             items={visibleActiveMods}
+            localizationStatusState="ready"
             selectedModId={null}
             title="Active Mods"
             totalCount={columns.active.length}

@@ -10,6 +10,8 @@ import type {
   DetectPathsResult,
   I18nDictionariesPayload,
   LlmSettings,
+  ModLocalizationProgress,
+  ModLocalizationSnapshot,
   ModProfileSummary,
   ModSourceSnapshot,
   ProfileCatalogResult,
@@ -127,6 +129,19 @@ const defaultLlmSettings: LlmSettings = {
   updatedAt: null,
 };
 
+const defaultLocalizationStatus = {
+  kind: "missing" as const,
+  isSupported: false,
+  matchedFolderName: null,
+  providerPackageIds: [],
+  coverage: {
+    completeness: "unknown" as const,
+    coveredEntries: 0,
+    totalEntries: null,
+    percent: null,
+  },
+};
+
 const baseEntries: ModSourceSnapshot["entries"] = [
   {
     entryName: "Core",
@@ -147,6 +162,7 @@ const baseEntries: ModSourceSnapshot["entries"] = [
         <description>Core game systems.</description>
       </ModMetaData>
     `,
+    localizationStatus: defaultLocalizationStatus,
     notes: [],
   },
   {
@@ -168,6 +184,7 @@ const baseEntries: ModSourceSnapshot["entries"] = [
         <description>Library helpers for many community mods.</description>
       </ModMetaData>
     `,
+    localizationStatus: defaultLocalizationStatus,
     notes: [],
   },
   {
@@ -190,6 +207,7 @@ const baseEntries: ModSourceSnapshot["entries"] = [
         <description>A content pack that depends on HugsLib.</description>
       </ModMetaData>
     `,
+    localizationStatus: defaultLocalizationStatus,
     notes: [],
   },
 ];
@@ -232,10 +250,40 @@ function createSnapshot(activePackageIds: string[]): ModSourceSnapshot {
         "C:\\Users\\player\\AppData\\LocalLow\\Ludeon Studios\\RimWorld by Ludeon Studios\\Config\\ModsConfig.xml",
     },
     gameVersion: "1.5.4104 rev435",
+    currentGameLanguage: {
+      folderName: "English",
+      normalizedFolderName: "english",
+      source: "prefs",
+    },
     activePackageIds,
     entries: clone(baseEntries),
     errors: [],
     requiresConfiguration: false,
+  };
+}
+
+function createLocalizationSnapshot(
+  snapshot: ModSourceSnapshot,
+): ModLocalizationSnapshot {
+  return {
+    currentGameLanguage: snapshot.currentGameLanguage,
+    entries: snapshot.entries.map((entry) => ({
+      localizationStatus: entry.localizationStatus,
+      modWindowsPath: entry.modWindowsPath,
+    })),
+    scannedAt: snapshot.scannedAt,
+  };
+}
+
+function createLocalizationProgress(
+  snapshot: ModSourceSnapshot,
+): ModLocalizationProgress {
+  return {
+    completedUnits: 1 + snapshot.entries.length * 2,
+    percent: 100,
+    scannedAt: snapshot.scannedAt,
+    state: "complete",
+    totalUnits: 1 + snapshot.entries.length * 2,
   };
 }
 
@@ -245,6 +293,10 @@ type Overrides = Partial<{
   settings: AppSettings;
   llmSettings: LlmSettings;
   detectPaths: DetectPathsResult;
+  modLocalizationSnapshot: ModLocalizationSnapshot;
+  modLocalizationSnapshotsByProfile: Record<string, ModLocalizationSnapshot>;
+  modLocalizationProgress: ModLocalizationProgress;
+  modLocalizationProgressByProfile: Record<string, ModLocalizationProgress>;
   profileCatalog: ProfileCatalogResult;
   modSourceSnapshotsByProfile: Record<string, ModSourceSnapshot>;
   modSourceSnapshot: ModSourceSnapshot;
@@ -275,6 +327,14 @@ type Overrides = Partial<{
   onGetModSourceSnapshot: (input: { profileId: string }) =>
     | ModSourceSnapshot
     | Promise<ModSourceSnapshot>;
+  onGetModLocalizationSnapshot: (input: {
+    profileId: string;
+    snapshotScannedAt: string;
+  }) => ModLocalizationSnapshot | Promise<ModLocalizationSnapshot>;
+  onGetModLocalizationProgress: (input: {
+    profileId: string;
+    snapshotScannedAt: string;
+  }) => ModLocalizationProgress | Promise<ModLocalizationProgress>;
 }>;
 
 export function createTestHostApi(overrides: Overrides = {}): RimunHostApi {
@@ -288,6 +348,28 @@ export function createTestHostApi(overrides: Overrides = {}): RimunHostApi {
     ),
     builder: createSnapshot(["ludeon.rimworld", "example.pawns"]),
     ...clone(overrides.modSourceSnapshotsByProfile ?? {}),
+  };
+  const modLocalizationSnapshotsByProfile: Record<
+    string,
+    ModLocalizationSnapshot
+  > = {
+    default: clone(
+      overrides.modLocalizationSnapshot ??
+        createLocalizationSnapshot(modSourceSnapshotsByProfile["default"]),
+    ),
+    builder: createLocalizationSnapshot(modSourceSnapshotsByProfile["builder"]),
+    ...clone(overrides.modLocalizationSnapshotsByProfile ?? {}),
+  };
+  const modLocalizationProgressByProfile: Record<
+    string,
+    ModLocalizationProgress
+  > = {
+    default: clone(
+      overrides.modLocalizationProgress ??
+        createLocalizationProgress(modSourceSnapshotsByProfile["default"]),
+    ),
+    builder: createLocalizationProgress(modSourceSnapshotsByProfile["builder"]),
+    ...clone(overrides.modLocalizationProgressByProfile ?? {}),
   };
 
   function getProfileSummary(profileId: string) {
@@ -317,6 +399,10 @@ export function createTestHostApi(overrides: Overrides = {}): RimunHostApi {
 
   function setSnapshot(profileId: string, snapshot: ModSourceSnapshot) {
     modSourceSnapshotsByProfile[profileId] = clone(snapshot);
+    modLocalizationSnapshotsByProfile[profileId] =
+      createLocalizationSnapshot(snapshot);
+    modLocalizationProgressByProfile[profileId] =
+      createLocalizationProgress(snapshot);
   }
 
   function createCatalog() {
@@ -413,6 +499,50 @@ export function createTestHostApi(overrides: Overrides = {}): RimunHostApi {
       return clone(
         modSourceSnapshotsByProfile[profileId] ?? createSnapshot([]),
       );
+    },
+    getModLocalizationSnapshot: async ({ profileId, snapshotScannedAt }) => {
+      if (overrides.onGetModLocalizationSnapshot) {
+        return clone(
+          await overrides.onGetModLocalizationSnapshot({
+            profileId,
+            snapshotScannedAt,
+          }),
+        );
+      }
+
+      const snapshot =
+        modSourceSnapshotsByProfile[profileId] ?? createSnapshot([]);
+      const localizationSnapshot =
+        modLocalizationSnapshotsByProfile[profileId] ??
+        createLocalizationSnapshot(snapshot);
+
+      if (localizationSnapshot.scannedAt !== snapshotScannedAt) {
+        return createLocalizationSnapshot(snapshot);
+      }
+
+      return clone(localizationSnapshot);
+    },
+    getModLocalizationProgress: async ({ profileId, snapshotScannedAt }) => {
+      if (overrides.onGetModLocalizationProgress) {
+        return clone(
+          await overrides.onGetModLocalizationProgress({
+            profileId,
+            snapshotScannedAt,
+          }),
+        );
+      }
+
+      const snapshot =
+        modSourceSnapshotsByProfile[profileId] ?? createSnapshot([]);
+      const localizationProgress =
+        modLocalizationProgressByProfile[profileId] ??
+        createLocalizationProgress(snapshot);
+
+      if (localizationProgress.scannedAt !== snapshotScannedAt) {
+        return createLocalizationProgress(snapshot);
+      }
+
+      return clone(localizationProgress);
     },
     getSettings: async () => clone(overrides.settings ?? defaultSettings),
     saveSettings: async (input) => {

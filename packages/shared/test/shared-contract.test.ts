@@ -388,6 +388,8 @@ describe("rpc schema map", () => {
       "getBootstrap",
       "getI18nDictionaries",
       "getLlmSettings",
+      "getModLocalizationProgress",
+      "getModLocalizationSnapshot",
       "getModSourceSnapshot",
       "getProfileCatalog",
       "getSettings",

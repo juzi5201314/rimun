@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import type { PathSelection } from "@rimun/shared";
 import { createRimunTempDir } from "../../../shared/test/tmp-path";
 import {
@@ -83,6 +83,14 @@ function createReadablePathResolver(paths: {
     }
 
     if (
+      paths.configRoot &&
+      windowsPath ===
+        "C:\\Users\\alice\\AppData\\LocalLow\\Ludeon Studios\\RimWorld by Ludeon Studios\\Config\\Prefs.xml"
+    ) {
+      return join(paths.configRoot, "Prefs.xml");
+    }
+
+    if (
       paths.installationModsRoot &&
       windowsPath === "C:\\Games\\RimWorld\\Version.txt"
     ) {
@@ -132,8 +140,59 @@ function writeModsConfigXml(
   );
 }
 
+function writePrefsXml(configRoot: string, languageFolderName: string) {
+  writeFileSync(
+    join(configRoot, "Prefs.xml"),
+    `
+      <Prefs>
+        <langFolderName>${languageFolderName}</langFolderName>
+      </Prefs>
+    `,
+  );
+}
+
 function writeGameVersionFile(installationRoot: string, versionText: string) {
   writeFileSync(join(installationRoot, "Version.txt"), versionText);
+}
+
+function writeDefsXml(
+  modRoot: string,
+  folderName: string,
+  relativePath: string,
+  content: string,
+) {
+  const absolutePath = join(modRoot, folderName, "Defs", relativePath);
+  mkdirSync(dirname(absolutePath), { recursive: true });
+  writeFileSync(absolutePath, content);
+}
+
+function writeLanguageFile(
+  modRoot: string,
+  folderName: string,
+  languageFolderName: string,
+  relativePath: string,
+  content: string,
+) {
+  const absolutePath = join(
+    modRoot,
+    folderName,
+    "Languages",
+    languageFolderName,
+    relativePath,
+  );
+  mkdirSync(dirname(absolutePath), { recursive: true });
+  writeFileSync(absolutePath, content);
+}
+
+function writeModFile(
+  modRoot: string,
+  folderName: string,
+  relativePath: string,
+  content: string,
+) {
+  const absolutePath = join(modRoot, folderName, relativePath);
+  mkdirSync(dirname(absolutePath), { recursive: true });
+  writeFileSync(absolutePath, content);
 }
 
 const testEnvironment = {
@@ -584,6 +643,274 @@ describe("mod scanner", () => {
     expect(result.mods[0]?.hasAboutXml).toBe(false);
     expect(result.mods[0]?.manifestPath).toBeNull();
     expect(result.mods[0]?.notes).toEqual(["About/About.xml was not found."]);
+  });
+
+  it("marks a mod without Languages directories as missing translation", async () => {
+    const { configRoot, installationDataRoot, installationModsRoot } =
+      createSandboxLayout();
+    writePrefsXml(configRoot, "ChineseSimplified");
+    writeAboutXml(
+      installationModsRoot,
+      "NoTranslation",
+      `
+        <ModMetaData>
+          <name>No Translation</name>
+          <packageId>example.notranslation</packageId>
+        </ModMetaData>
+      `,
+    );
+    writeModsConfigXml(configRoot, ["example.notranslation"]);
+
+    const result = await scanModLibrary(
+      createSelection({
+        workshopPath: null,
+      }),
+      {
+        environment: testEnvironment,
+        toReadablePath: createReadablePathResolver({
+          configRoot,
+          installationDataRoot,
+          installationModsRoot,
+        }),
+      },
+    );
+
+    expect(result.currentGameLanguage.folderName).toBe("ChineseSimplified");
+    expect(result.mods[0]?.localizationStatus.kind).toBe("missing");
+    expect(result.mods[0]?.localizationStatus.isSupported).toBe(false);
+  });
+
+  it("aggregates active translation mods and reports partial coverage", async () => {
+    const { configRoot, installationDataRoot, installationModsRoot } =
+      createSandboxLayout();
+    writePrefsXml(configRoot, "ChineseSimplified");
+    writeAboutXml(
+      installationModsRoot,
+      "TargetMod",
+      `
+        <ModMetaData>
+          <name>Target Mod</name>
+          <packageId>example.target</packageId>
+          <author>Source Author</author>
+        </ModMetaData>
+      `,
+    );
+    writeDefsXml(
+      installationModsRoot,
+      "TargetMod",
+      "ThingDefs/Items.xml",
+      `
+        <Defs>
+          <ThingDef>
+            <defName>TargetItemOne</defName>
+            <label>item one</label>
+            <description>item one description</description>
+          </ThingDef>
+          <ThingDef>
+            <defName>TargetItemTwo</defName>
+            <label>item two</label>
+            <description>item two description</description>
+          </ThingDef>
+        </Defs>
+      `,
+    );
+    writeAboutXml(
+      installationModsRoot,
+      "TargetModChinese",
+      `
+        <ModMetaData>
+          <name>Target Mod Chinese Pack</name>
+          <packageId>example.target.zh</packageId>
+          <modDependencies>
+            <li>example.target</li>
+          </modDependencies>
+        </ModMetaData>
+      `,
+    );
+    writeLanguageFile(
+      installationModsRoot,
+      "TargetModChinese",
+      "ChineseSimplified",
+      "DefInjected/ThingDef/ThingDefs/Items.xml",
+      `
+        <LanguageData>
+          <TargetItemOne.label>条目一</TargetItemOne.label>
+          <TargetItemOne.description>条目一描述</TargetItemOne.description>
+        </LanguageData>
+      `,
+    );
+    writeModsConfigXml(configRoot, ["example.target", "example.target.zh"]);
+
+    const result = await scanModLibrary(
+      createSelection({
+        workshopPath: null,
+      }),
+      {
+        environment: testEnvironment,
+        toReadablePath: createReadablePathResolver({
+          configRoot,
+          installationDataRoot,
+          installationModsRoot,
+        }),
+      },
+    );
+    const targetMod = result.mods.find(
+      (mod) => mod.packageId === "example.target",
+    );
+
+    expect(targetMod?.localizationStatus.kind).toBe("translated");
+    expect(targetMod?.localizationStatus.coverage.completeness).toBe("partial");
+    expect(targetMod?.localizationStatus.coverage.percent).toBe(50);
+    expect(targetMod?.localizationStatus.providerPackageIds).toContain(
+      "example.target.zh",
+    );
+  });
+
+  it("loads conditional translation folders from LoadFolders.xml and matches DefInjected entries by def type", async () => {
+    const {
+      configRoot,
+      installationDataRoot,
+      installationModsRoot,
+      installationRoot,
+    } = createSandboxLayout();
+    writeGameVersionFile(installationRoot, "1.6.4471 rev1205");
+    writePrefsXml(configRoot, "ChineseSimplified");
+
+    writeAboutXml(
+      installationModsRoot,
+      "ConditionalTarget",
+      `
+        <ModMetaData>
+          <name>Conditional Target</name>
+          <packageId>example.conditional.target</packageId>
+        </ModMetaData>
+      `,
+    );
+    writeModFile(
+      installationModsRoot,
+      "ConditionalTarget",
+      "LoadFolders.xml",
+      `
+        <loadFolders>
+          <v1.6>
+            <li>/</li>
+            <li>1.6</li>
+            <li IfModActive="example.dependency">Addon</li>
+          </v1.6>
+        </loadFolders>
+      `,
+    );
+    writeDefsXml(
+      installationModsRoot,
+      "ConditionalTarget/1.6",
+      "ThingDefs/Items.xml",
+      `
+        <Defs>
+          <ThingDef>
+            <defName>BaseItem</defName>
+            <label>base item</label>
+            <description>base item description</description>
+          </ThingDef>
+        </Defs>
+      `,
+    );
+    writeDefsXml(
+      installationModsRoot,
+      "ConditionalTarget/Addon",
+      "ThingDefs/Items.xml",
+      `
+        <Defs>
+          <ThingDef>
+            <defName>AddonItem</defName>
+            <label>addon item</label>
+            <description>addon item description</description>
+          </ThingDef>
+        </Defs>
+      `,
+    );
+
+    writeAboutXml(
+      installationModsRoot,
+      "ConditionalTargetChinese",
+      `
+        <ModMetaData>
+          <name>Conditional Target Chinese Pack</name>
+          <packageId>example.conditional.target.zh</packageId>
+          <loadAfter>
+            <li>example.conditional.target</li>
+          </loadAfter>
+        </ModMetaData>
+      `,
+    );
+    writeModFile(
+      installationModsRoot,
+      "ConditionalTargetChinese",
+      "LoadFolders.xml",
+      `
+        <loadFolders>
+          <v1.6>
+            <li>/</li>
+            <li>Cont</li>
+            <li IfModActive="example.dependency">Cont/Addon</li>
+          </v1.6>
+        </loadFolders>
+      `,
+    );
+    writeLanguageFile(
+      installationModsRoot,
+      "ConditionalTargetChinese",
+      "ChineseSimplified",
+      "DefInjected/ThingDef/Noise.xml",
+      `
+        <LanguageData>
+          <UnrelatedItem.label>无关条目</UnrelatedItem.label>
+          <UnrelatedItem.description>无关描述</UnrelatedItem.description>
+        </LanguageData>
+      `,
+    );
+    writeModFile(
+      installationModsRoot,
+      "ConditionalTargetChinese",
+      "Cont/Addon/Languages/ChineseSimplified/DefInjected/ThingDef/ArbitraryName.xml",
+      `
+        <LanguageData>
+          <AddonItem.label>附加条目</AddonItem.label>
+          <AddonItem.description>附加描述</AddonItem.description>
+        </LanguageData>
+      `,
+    );
+
+    writeModsConfigXml(configRoot, [
+      "example.conditional.target",
+      "example.dependency",
+      "example.conditional.target.zh",
+    ]);
+
+    const result = await scanModLibrary(
+      createSelection({
+        workshopPath: null,
+      }),
+      {
+        environment: testEnvironment,
+        toReadablePath: createReadablePathResolver({
+          configRoot,
+          installationDataRoot,
+          installationModsRoot,
+        }),
+      },
+    );
+    const targetMod = result.mods.find(
+      (mod) => mod.packageId === "example.conditional.target",
+    );
+
+    expect(targetMod?.localizationStatus.kind).toBe("translated");
+    expect(targetMod?.localizationStatus.coverage.completeness).toBe("partial");
+    expect(targetMod?.localizationStatus.coverage.coveredEntries).toBe(2);
+    expect(targetMod?.localizationStatus.coverage.totalEntries).toBe(4);
+    expect(targetMod?.localizationStatus.coverage.percent).toBe(50);
+    expect(targetMod?.localizationStatus.providerPackageIds).toContain(
+      "example.conditional.target.zh",
+    );
   });
 
   it("writes official DLC back into knownExpansions instead of activeMods", () => {

@@ -10,6 +10,10 @@ import type {
   EmptyParams,
   I18nDictionariesPayload,
   LlmSettings,
+  ModLocalizationProgress,
+  ModLocalizationProgressInput,
+  ModLocalizationSnapshot,
+  ModLocalizationSnapshotInput,
   ModSourceSnapshot,
   ProfileCatalogResult,
   ProfileScopedInput,
@@ -37,6 +41,10 @@ import {
   emptyParamsSchema,
   i18nDictionariesSchema,
   llmSettingsSchema,
+  modLocalizationProgressInputSchema,
+  modLocalizationProgressSchema,
+  modLocalizationSnapshotInputSchema,
+  modLocalizationSnapshotSchema,
   modSourceSnapshotSchema,
   profileCatalogResultSchema,
   profileScopedInputSchema,
@@ -86,6 +94,14 @@ export type RimunHostRequests = {
     ProfileScopedInput,
     ModSourceSnapshot
   >;
+  getModLocalizationSnapshot: RpcRequestDefinition<
+    ModLocalizationSnapshotInput,
+    ModLocalizationSnapshot
+  >;
+  getModLocalizationProgress: RpcRequestDefinition<
+    ModLocalizationProgressInput,
+    ModLocalizationProgress
+  >;
   getSettings: RpcRequestDefinition<EmptyParams, AppSettings>;
   saveSettings: RpcRequestDefinition<SaveSettingsInput, SaveSettingsResult>;
   getLlmSettings: RpcRequestDefinition<EmptyParams, LlmSettings>;
@@ -121,6 +137,12 @@ export type RimunHostApi = {
   deleteProfile(input: DeleteProfileInput): Promise<ProfileCatalogResult>;
   switchProfile(input: SwitchProfileInput): Promise<ProfileCatalogResult>;
   getModSourceSnapshot(input: ProfileScopedInput): Promise<ModSourceSnapshot>;
+  getModLocalizationSnapshot(
+    input: ModLocalizationSnapshotInput,
+  ): Promise<ModLocalizationSnapshot>;
+  getModLocalizationProgress(
+    input: ModLocalizationProgressInput,
+  ): Promise<ModLocalizationProgress>;
   getSettings(): Promise<AppSettings>;
   saveSettings(input: SaveSettingsInput): Promise<SaveSettingsResult>;
   getLlmSettings(): Promise<LlmSettings>;
@@ -173,6 +195,14 @@ export const rimunRpcSchemas = {
       getModSourceSnapshot: {
         params: profileScopedInputSchema,
         response: modSourceSnapshotSchema,
+      },
+      getModLocalizationSnapshot: {
+        params: modLocalizationSnapshotInputSchema,
+        response: modLocalizationSnapshotSchema,
+      },
+      getModLocalizationProgress: {
+        params: modLocalizationProgressInputSchema,
+        response: modLocalizationProgressSchema,
       },
       getSettings: {
         params: emptyParamsSchema,

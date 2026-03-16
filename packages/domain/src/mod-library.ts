@@ -44,6 +44,7 @@ function buildModRecord(
     hasAboutXml: entry.hasAboutXml,
     dependencyMetadata:
       parsedAbout?.dependencyMetadata ?? createEmptyDependencyMetadata(),
+    localizationStatus: entry.localizationStatus,
     notes: entry.notes,
   };
 }
@@ -64,6 +65,7 @@ export function buildModLibraryFromSnapshot(
     scannedAt: snapshot.scannedAt,
     scannedRoots: snapshot.scannedRoots,
     gameVersion: snapshot.gameVersion,
+    currentGameLanguage: snapshot.currentGameLanguage,
     activePackageIds: snapshot.activePackageIds,
     mods,
     errors: snapshot.errors,

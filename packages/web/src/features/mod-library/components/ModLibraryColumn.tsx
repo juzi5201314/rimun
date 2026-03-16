@@ -29,6 +29,7 @@ export type ModLibraryColumnProps = {
   description: string;
   dropIndicator: ColumnDropIndicator;
   items: HomePageModListItem[];
+  localizationStatusState: "loading" | "ready" | "unavailable";
   selectedModId: string | null;
   title: string;
   totalCount: number;
@@ -54,6 +55,7 @@ export function areModLibraryColumnPropsEqual(
     getColumnDropIndicatorKey(previous.dropIndicator) ===
       getColumnDropIndicatorKey(next.dropIndicator) &&
     previous.items === next.items &&
+    previous.localizationStatusState === next.localizationStatusState &&
     previous.selectedModId === next.selectedModId &&
     previous.title === next.title &&
     previous.totalCount === next.totalCount &&
@@ -103,6 +105,7 @@ export const ModLibraryColumn = memo(function ModLibraryColumn({
   description,
   dropIndicator,
   items,
+  localizationStatusState,
   selectedModId,
   title,
   totalCount,
@@ -172,6 +175,7 @@ export const ModLibraryColumn = memo(function ModLibraryColumn({
                     dropIndicator={dropIndicator}
                     isSelected={selectedModId === item.id}
                     item={item}
+                    localizationStatusState={localizationStatusState}
                     measureElement={rowVirtualizer.measureElement}
                     virtualIndex={virtualRow.index}
                     onSelect={onSelectMod}

@@ -144,6 +144,11 @@ function createSnapshot(activePackageIds: string[]): ModSourceSnapshot {
         "C:\\Users\\alice\\AppData\\LocalLow\\Ludeon Studios\\RimWorld by Ludeon Studios\\Config\\ModsConfig.xml",
     },
     gameVersion: "1.5.4104 rev435",
+    currentGameLanguage: {
+      folderName: "English",
+      normalizedFolderName: "english",
+      source: "prefs",
+    },
     activePackageIds,
     entries: [],
     errors: [],
@@ -379,6 +384,68 @@ describe("rimun host service", () => {
 
       expect(afterFiles.every(isAllowlistedSqliteArtifact)).toBe(true);
       expect(newFiles.every(isAllowlistedSqliteArtifact)).toBe(true);
+    } finally {
+      repository.close();
+    }
+  });
+
+  it("does not restart localization analysis for the same failed snapshot", async () => {
+    const { configRoot } = createSandboxLayout();
+    writeModsConfigXml(configRoot, ["ludeon.rimworld"]);
+    process.env["RIMUN_APP_DATA_DIR"] = createRimunTempDir("rimun-app-data-");
+
+    const repository = new SettingsRepository();
+    const snapshot = createSnapshot(["ludeon.rimworld"]);
+    let localizationReads = 0;
+
+    try {
+      repository.saveSettings(
+        createSelection({
+          workshopPath: null,
+        }),
+      );
+
+      const hostService = createRimunHostService(repository, {
+        readModLocalizationSnapshotForSnapshot: async () => {
+          localizationReads += 1;
+          throw new Error("broken localization xml");
+        },
+        readModSourceSnapshot: async () => snapshot,
+        toReadablePath: createReadablePathResolver({ configRoot }),
+      });
+
+      await hostService.getModSourceSnapshot({
+        profileId: "default",
+      });
+
+      await expect(
+        hostService.getModLocalizationSnapshot({
+          profileId: "default",
+          snapshotScannedAt: snapshot.scannedAt,
+        }),
+      ).rejects.toThrow("broken localization xml");
+
+      expect(
+        await hostService.getModLocalizationProgress({
+          profileId: "default",
+          snapshotScannedAt: snapshot.scannedAt,
+        }),
+      ).toEqual({
+        completedUnits: 0,
+        percent: 0,
+        scannedAt: snapshot.scannedAt,
+        state: "unavailable",
+        totalUnits: 1,
+      });
+
+      await expect(
+        hostService.getModLocalizationSnapshot({
+          profileId: "default",
+          snapshotScannedAt: snapshot.scannedAt,
+        }),
+      ).rejects.toThrow("broken localization xml");
+
+      expect(localizationReads).toBe(1);
     } finally {
       repository.close();
     }

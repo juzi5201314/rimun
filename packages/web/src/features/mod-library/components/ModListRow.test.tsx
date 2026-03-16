@@ -26,6 +26,18 @@ function createItem(
     enabled: false,
     isOfficial: false,
     hasAboutXml: true,
+    localizationStatus: {
+      kind: "missing",
+      isSupported: false,
+      matchedFolderName: null,
+      providerPackageIds: [],
+      coverage: {
+        completeness: "unknown",
+        coveredEntries: 0,
+        totalEntries: null,
+        percent: null,
+      },
+    },
     dependencyMetadata: {
       packageIdNormalized: "unlimitedhugs.hugslib",
       dependencies: [],
@@ -60,6 +72,7 @@ describe("ModListRowCard", () => {
             isDragging={false}
             isSelected={false}
             item={createItem()}
+            localizationStatusState="ready"
             onSelect={() => {}}
             showDropAfter={false}
             showDropBefore={false}
@@ -95,6 +108,7 @@ describe("ModListRowCard", () => {
                 supportedVersions: ["1.4"],
               },
             })}
+            localizationStatusState="ready"
             onSelect={() => {}}
             showDropAfter={false}
             showDropBefore={false}
@@ -105,5 +119,39 @@ describe("ModListRowCard", () => {
 
     expect(await screen.findByText("Unsupported")).toBeInTheDocument();
     expect(screen.getByText("version mismatch")).toBeInTheDocument();
+  });
+
+  it("shows partial translation coverage in the row badge", async () => {
+    render(
+      <HostApiProvider hostApi={createTestHostApi()}>
+        <I18nProvider>
+          <ModListRowCard
+            dragHandle={<span aria-hidden="true" />}
+            isDragging={false}
+            isSelected={false}
+            item={createItem({
+              localizationStatus: {
+                kind: "translated",
+                isSupported: true,
+                matchedFolderName: "ChineseSimplified",
+                providerPackageIds: ["unlimitedhugs.hugslib"],
+                coverage: {
+                  completeness: "partial",
+                  coveredEntries: 3,
+                  totalEntries: 4,
+                  percent: 75,
+                },
+              },
+            })}
+            localizationStatusState="ready"
+            onSelect={() => {}}
+            showDropAfter={false}
+            showDropBefore={false}
+          />
+        </I18nProvider>
+      </HostApiProvider>,
+    );
+
+    expect(await screen.findByText("75%")).toBeInTheDocument();
   });
 });

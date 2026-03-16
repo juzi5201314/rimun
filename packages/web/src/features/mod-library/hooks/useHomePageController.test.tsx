@@ -5,8 +5,43 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import type { PropsWithChildren } from "react";
 import { useHomePageController } from "./useHomePageController";
 
-function createRescannedSnapshot(): ModSourceSnapshot {
+const defaultLocalizationStatus = {
+  kind: "missing" as const,
+  isSupported: false,
+  matchedFolderName: null,
+  providerPackageIds: [],
+  coverage: {
+    completeness: "unknown" as const,
+    coveredEntries: 0,
+    totalEntries: null,
+    percent: null,
+  },
+};
+
+function createSnapshotEntry(
+  entry: Omit<ModSourceSnapshot["entries"][number], "localizationStatus">,
+): ModSourceSnapshot["entries"][number] {
   return {
+    ...entry,
+    localizationStatus: defaultLocalizationStatus,
+  };
+}
+
+function withSnapshotDefaults(
+  snapshot: Omit<ModSourceSnapshot, "currentGameLanguage">,
+): ModSourceSnapshot {
+  return {
+    ...snapshot,
+    currentGameLanguage: {
+      folderName: "English",
+      normalizedFolderName: "english",
+      source: "prefs",
+    },
+  };
+}
+
+function createRescannedSnapshot(): ModSourceSnapshot {
+  return withSnapshotDefaults({
     environment: {
       platform: "linux",
       isWsl: true,
@@ -33,7 +68,7 @@ function createRescannedSnapshot(): ModSourceSnapshot {
     gameVersion: "1.5.4104 rev435",
     activePackageIds: ["ludeon.rimworld", "unlimitedhugs.hugslib"],
     entries: [
-      {
+      createSnapshotEntry({
         entryName: "Core",
         source: "installation",
         modWindowsPath:
@@ -51,8 +86,8 @@ function createRescannedSnapshot(): ModSourceSnapshot {
           </ModMetaData>
         `,
         notes: [],
-      },
-      {
+      }),
+      createSnapshotEntry({
         entryName: "818773962",
         source: "workshop",
         modWindowsPath:
@@ -70,15 +105,15 @@ function createRescannedSnapshot(): ModSourceSnapshot {
           </ModMetaData>
         `,
         notes: [],
-      },
+      }),
     ],
     errors: [],
     requiresConfiguration: false,
-  };
+  });
 }
 
 function createOptimalHarmonySnapshot(): ModSourceSnapshot {
-  return {
+  return withSnapshotDefaults({
     environment: {
       platform: "linux",
       isWsl: true,
@@ -109,7 +144,7 @@ function createOptimalHarmonySnapshot(): ModSourceSnapshot {
       "oskarpotocki.vanillafactionsexpanded.core",
     ],
     entries: [
-      {
+      createSnapshotEntry({
         entryName: "2009463077",
         source: "workshop",
         modWindowsPath:
@@ -128,8 +163,8 @@ function createOptimalHarmonySnapshot(): ModSourceSnapshot {
           </ModMetaData>
         `,
         notes: [],
-      },
-      {
+      }),
+      createSnapshotEntry({
         entryName: "Core",
         source: "installation",
         modWindowsPath:
@@ -147,8 +182,8 @@ function createOptimalHarmonySnapshot(): ModSourceSnapshot {
           </ModMetaData>
         `,
         notes: [],
-      },
-      {
+      }),
+      createSnapshotEntry({
         entryName: "2023507013",
         source: "workshop",
         modWindowsPath:
@@ -175,15 +210,15 @@ function createOptimalHarmonySnapshot(): ModSourceSnapshot {
           </ModMetaData>
         `,
         notes: [],
-      },
+      }),
     ],
     errors: [],
     requiresConfiguration: false,
-  };
+  });
 }
 
 function createMisorderedHarmonySnapshot(): ModSourceSnapshot {
-  return {
+  return withSnapshotDefaults({
     environment: {
       platform: "linux",
       isWsl: true,
@@ -216,11 +251,11 @@ function createMisorderedHarmonySnapshot(): ModSourceSnapshot {
     entries: createOptimalHarmonySnapshot().entries,
     errors: [],
     requiresConfiguration: false,
-  };
+  });
 }
 
 function createUnsupportedVersionSnapshot(): ModSourceSnapshot {
-  return {
+  return withSnapshotDefaults({
     environment: {
       platform: "linux",
       isWsl: true,
@@ -247,7 +282,7 @@ function createUnsupportedVersionSnapshot(): ModSourceSnapshot {
     gameVersion: "1.5.4104 rev435",
     activePackageIds: ["ludeon.rimworld", "example.legacy"],
     entries: [
-      {
+      createSnapshotEntry({
         entryName: "Core",
         source: "installation",
         modWindowsPath:
@@ -265,8 +300,8 @@ function createUnsupportedVersionSnapshot(): ModSourceSnapshot {
           </ModMetaData>
         `,
         notes: [],
-      },
-      {
+      }),
+      createSnapshotEntry({
         entryName: "333333333",
         source: "workshop",
         modWindowsPath:
@@ -285,11 +320,11 @@ function createUnsupportedVersionSnapshot(): ModSourceSnapshot {
           </ModMetaData>
         `,
         notes: [],
-      },
+      }),
     ],
     errors: [],
     requiresConfiguration: false,
-  };
+  });
 }
 
 function createDeferred<T>() {
@@ -541,6 +576,48 @@ describe("useHomePageController", () => {
         )?.hasUnsupportedGameVersion,
       ).toBe(true);
       expect(result.current.selectedMod?.currentGameVersion).toBe("1.5");
+    });
+  });
+
+  it("exposes real localization analysis progress while the snapshot is still pending", async () => {
+    const snapshot = createRescannedSnapshot();
+    const deferredLocalization = createDeferred<{
+      currentGameLanguage: ModSourceSnapshot["currentGameLanguage"];
+      entries: {
+        localizationStatus: ModSourceSnapshot["entries"][number]["localizationStatus"];
+        modWindowsPath: string;
+      }[];
+      scannedAt: string;
+    }>();
+    const hostApi = createTestHostApi({
+      modSourceSnapshot: snapshot,
+      onGetModLocalizationSnapshot: async () => deferredLocalization.promise,
+      onGetModLocalizationProgress: async ({ snapshotScannedAt }) => ({
+        completedUnits: 2,
+        percent: 42,
+        scannedAt: snapshotScannedAt,
+        state: "pending",
+        totalUnits: 5,
+      }),
+    });
+    const wrapper = ({ children }: PropsWithChildren) => (
+      <AppProviders hostApi={hostApi}>{children}</AppProviders>
+    );
+    const { result } = renderHook(() => useHomePageController(), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.currentProfileId).toBe("default");
+      expect(result.current.isLocalizationStatusPending).toBe(true);
+      expect(result.current.localizationAnalysisProgressPercent).toBe(42);
+    });
+
+    deferredLocalization.resolve({
+      currentGameLanguage: snapshot.currentGameLanguage,
+      entries: snapshot.entries.map((entry) => ({
+        localizationStatus: entry.localizationStatus,
+        modWindowsPath: entry.modWindowsPath,
+      })),
+      scannedAt: snapshot.scannedAt,
     });
   });
 });
