@@ -10,6 +10,19 @@ import type {
 } from "@rimun/shared";
 import pLimit from "p-limit";
 import {
+  cloneTranslationEntryVectors,
+  createEmptyTranslationEntryVectors,
+  type TranslationBucket,
+  type TranslationEntryVectors,
+  internTranslationEntrySets,
+  internTranslationIdsForBucket,
+  loadCachedDefsBaseline,
+  loadCachedDescriptorArtifacts,
+  resetLocalizationIndexStateForTests,
+  saveCachedDefsBaseline,
+  saveCachedDescriptorArtifacts,
+} from "./mod-localization-index";
+import {
   collectDefInjectedIdsFromXml,
   collectDefsBaselineIdsFromXml,
   collectKeyedIdsFromXml,
@@ -17,10 +30,17 @@ import {
   getXmlRecoveryStatsForTests,
   resetXmlRecoveryStatsForTests,
 } from "./mod-localization/parser";
+import type {
+  DefsWorkerParseResult,
+  DefsWorkerParseTask,
+  LocalizationWorkerParseResult,
+  LocalizationWorkerParseTask,
+  LocalizationWorkerRequest,
+  LocalizationWorkerResponse,
+  WorkerBucketedLocalizationInventory,
+} from "./mod-localization.worker";
 
-type TranslationBucket = "defInjected" | "keyed" | "strings";
-
-type TranslationEntrySets = Record<TranslationBucket, Set<string>>;
+type TranslationEntrySets = TranslationEntryVectors;
 
 type LanguageContribution = {
   hasAnyLanguagesRoot: boolean;
@@ -31,6 +51,7 @@ type LanguageContribution = {
 type ModLocalizationDescriptor = {
   baselineEntries: TranslationEntrySets;
   currentLanguageContribution: LanguageContribution;
+  descriptorFingerprint: string;
   dependencyTargets: Set<string>;
   entry: ModSourceSnapshotEntry;
   hasSelfTranslation: boolean;
@@ -42,6 +63,7 @@ type FileInventoryEntry = {
   absolutePath: string;
   fingerprintToken: string;
   relativePath: string;
+  size: number;
 };
 
 type MutableBucketedFileInventory = {
@@ -66,16 +88,9 @@ type LanguageContributionInventory = {
   matchedFolderName: string | null;
 };
 
-type CachedDescriptorArtifacts = {
-  baselineEntries: TranslationEntrySets;
-  currentLanguageContribution: LanguageContribution;
-  fingerprint: string;
-  hasSelfTranslation: boolean;
-};
-
 type CachedDefsBaseline = {
   fingerprint: string;
-  ids: Set<string>;
+  ids: number[];
 };
 
 type AnalysisRuntime = {
@@ -83,12 +98,45 @@ type AnalysisRuntime = {
   descriptorLimit: ReturnType<typeof pLimit>;
   fileConcurrency: number;
   fileLimit: ReturnType<typeof pLimit>;
+  workerPoolSize: number;
 };
 
 type ProviderIndex = {
-  byDependencyTarget: Map<string, Set<string>>;
-  byTranslationId: Record<TranslationBucket, Map<string, Set<string>>>;
-  providersByPackageId: Map<string, ModLocalizationDescriptor>;
+  byDependencyTarget: Map<string, number[]>;
+  byTranslationIdBitmap: Record<TranslationBucket, Map<number, Uint32Array>>;
+  byTranslationIdOrdered: Record<TranslationBucket, Map<number, number[]>>;
+  providerOrdinalsByPackageId: Map<string, number>;
+  providerWordCount: number;
+  providersByOrdinal: ModLocalizationDescriptor[];
+};
+
+type PreparedDescriptorMiss = {
+  cacheKey: string;
+  entry: ModSourceSnapshotEntry;
+  index: number;
+  languageInventory: LanguageContributionInventory;
+  metadata: ReturnType<typeof collectDependencyTargets>;
+  relativeRoots: string[];
+};
+
+type DescriptorCacheMiss = Omit<PreparedDescriptorMiss, "index">;
+
+type PreparedDescriptorResolution =
+  | {
+      kind: "hit";
+      descriptor: ModLocalizationDescriptor;
+    }
+  | ({
+      kind: "miss";
+    } & DescriptorCacheMiss);
+
+type PreparedDefsBaselineMiss = {
+  cacheKey: string;
+  descriptor: ModLocalizationDescriptor;
+  fingerprint: string;
+  indexGroups: number[][];
+  inventoryFiles: FileInventoryEntry[];
+  modReadablePath: string;
 };
 
 export type ModLocalizationAnalysisProgress = {
@@ -98,8 +146,12 @@ export type ModLocalizationAnalysisProgress = {
 };
 
 export type ModLocalizationPerfStats = {
+  defsDbHits: number;
+  defsDbMisses: number;
   defsCacheHits: number;
   defsCacheMisses: number;
+  descriptorDbHits: number;
+  descriptorDbMisses: number;
   descriptorBuildMs: number;
   descriptorCacheHits: number;
   descriptorCacheMisses: number;
@@ -108,7 +160,9 @@ export type ModLocalizationPerfStats = {
   finalStatusBuildMs: number;
   initialStatusBuildMs: number;
   lastAnalyzeMs: number;
+  providerBitmapBuildMs: number;
   recoveredFiles: number;
+  statusComputeMs: number;
   strictParseFailures: number;
   unrecoverableFiles: number;
 };
@@ -134,13 +188,30 @@ const LOCALIZATION_STATUS_MISSING: ModLocalizationStatus = {
 
 const MAX_LOCALIZATION_DESCRIPTOR_CONCURRENCY = 8;
 const MAX_LOCALIZATION_FILE_CONCURRENCY = 32;
+const MAX_LOCALIZATION_WORKERS = 8;
+const LOCALIZATION_WORKER_CHUNK_SIZE = 12;
+const LOCALIZATION_WORKER_MIN_TOTAL_BYTES = 32 * 1024 * 1024;
+const LOCALIZATION_WORKER_MIN_SINGLE_MOD_BYTES = 512 * 1024;
+const LOCALIZATION_WORKER_MIN_SINGLE_MOD_FILES = 8;
 
-const descriptorArtifactsCache = new Map<string, CachedDescriptorArtifacts>();
+const descriptorArtifactsCache = new Map<
+  string,
+  {
+    baselineEntries: TranslationEntrySets;
+    currentLanguageContribution: LanguageContribution;
+    fingerprint: string;
+    hasSelfTranslation: boolean;
+  }
+>();
 const defsBaselineCache = new Map<string, CachedDefsBaseline>();
 
 const modLocalizationPerfStats: ModLocalizationPerfStats = {
+  defsDbHits: 0,
+  defsDbMisses: 0,
   defsCacheHits: 0,
   defsCacheMisses: 0,
+  descriptorDbHits: 0,
+  descriptorDbMisses: 0,
   descriptorBuildMs: 0,
   descriptorCacheHits: 0,
   descriptorCacheMisses: 0,
@@ -149,7 +220,9 @@ const modLocalizationPerfStats: ModLocalizationPerfStats = {
   finalStatusBuildMs: 0,
   initialStatusBuildMs: 0,
   lastAnalyzeMs: 0,
+  providerBitmapBuildMs: 0,
   recoveredFiles: 0,
+  statusComputeMs: 0,
   strictParseFailures: 0,
   unrecoverableFiles: 0,
 };
@@ -255,11 +328,7 @@ class LocalizationAnalysisProgressTracker {
 }
 
 function createEmptyTranslationEntrySets(): TranslationEntrySets {
-  return {
-    defInjected: new Set<string>(),
-    keyed: new Set<string>(),
-    strings: new Set<string>(),
-  };
+  return createEmptyTranslationEntryVectors();
 }
 
 function createUnknownGameLanguage(): CurrentGameLanguage {
@@ -613,6 +682,221 @@ async function resolveModRelativeRoots(args: {
   return createDefaultRelativeRoots(args.gameVersion);
 }
 
+function getLocalizationWorkerPoolSize() {
+  return Math.max(
+    2,
+    Math.min(MAX_LOCALIZATION_WORKERS, Math.ceil(availableParallelism() / 2)),
+  );
+}
+
+function chunkTasks<TTask>(tasks: TTask[], chunkSize: number) {
+  const chunks: TTask[][] = [];
+
+  for (let index = 0; index < tasks.length; index += chunkSize) {
+    chunks.push(tasks.slice(index, index + chunkSize));
+  }
+
+  return chunks;
+}
+
+class ReusableLocalizationWorkerPool {
+  private queuedRun: Promise<void> = Promise.resolve();
+  private workerUrl: string | null = null;
+  private workers: Worker[] = [];
+
+  reset() {
+    for (const worker of this.workers) {
+      worker.terminate();
+    }
+
+    this.workers = [];
+    this.workerUrl = null;
+  }
+
+  async runLocalizationChunks(args: {
+    poolSize: number;
+    tasks: LocalizationWorkerParseTask[];
+  }) {
+    const execute = async () =>
+      this.runChunksNow<LocalizationWorkerParseResult>({
+        kind: "parse-localization",
+        poolSize: args.poolSize,
+        tasks: args.tasks,
+      });
+    const result = this.queuedRun.then(execute, execute);
+
+    this.queuedRun = result.then(
+      () => undefined,
+      () => undefined,
+    );
+
+    return result;
+  }
+
+  async runDefsChunks(args: {
+    poolSize: number;
+    tasks: DefsWorkerParseTask[];
+  }) {
+    const execute = async () =>
+      this.runChunksNow<DefsWorkerParseResult>({
+        kind: "parse-defs",
+        poolSize: args.poolSize,
+        tasks: args.tasks,
+      });
+    const result = this.queuedRun.then(execute, execute);
+
+    this.queuedRun = result.then(
+      () => undefined,
+      () => undefined,
+    );
+
+    return result;
+  }
+
+  private ensureWorkerUrl() {
+    if (this.workerUrl) {
+      return this.workerUrl;
+    }
+
+    this.workerUrl = new URL(
+      "./mod-localization.worker.ts",
+      import.meta.url,
+    ).href;
+
+    return this.workerUrl;
+  }
+
+  private ensureWorkers(workerCount: number) {
+    const workerUrl = this.ensureWorkerUrl();
+
+    while (this.workers.length < workerCount) {
+      this.workers.push(new Worker(workerUrl));
+    }
+
+    return this.workers.slice(0, workerCount);
+  }
+
+  private async runChunksNow<TResult>(args: {
+    kind: LocalizationWorkerRequest["kind"];
+    poolSize: number;
+    tasks: LocalizationWorkerParseTask[] | DefsWorkerParseTask[];
+  }) {
+    if (args.tasks.length === 0) {
+      return [] as TResult[];
+    }
+
+    const chunkedTasks =
+      args.kind === "parse-localization"
+        ? chunkTasks(
+            args.tasks as LocalizationWorkerParseTask[],
+            LOCALIZATION_WORKER_CHUNK_SIZE,
+          )
+        : chunkTasks(
+            args.tasks as DefsWorkerParseTask[],
+            LOCALIZATION_WORKER_CHUNK_SIZE,
+          );
+    const workerCount = Math.min(args.poolSize, chunkedTasks.length);
+    const workers = this.ensureWorkers(workerCount);
+
+    return new Promise<TResult[]>((resolve, reject) => {
+      const results = new Array<TResult[]>(chunkedTasks.length);
+      let idleWorkers = 0;
+      let nextChunkIndex = 0;
+      let completedChunks = 0;
+      let settled = false;
+
+      const clearHandlers = () => {
+        for (const worker of workers) {
+          worker.onmessage = null;
+          worker.onerror = null;
+        }
+      };
+
+      const resolveIfDone = () => {
+        if (
+          settled ||
+          completedChunks !== chunkedTasks.length ||
+          idleWorkers !== workers.length
+        ) {
+          return;
+        }
+
+        settled = true;
+        clearHandlers();
+        resolve(results.flat());
+      };
+
+      const fail = (message: string) => {
+        if (settled) {
+          return;
+        }
+
+        settled = true;
+        clearHandlers();
+        this.reset();
+        reject(new Error(message));
+      };
+
+      const assignNextChunk = (worker: Worker) => {
+        if (settled) {
+          return;
+        }
+
+        const chunkId = nextChunkIndex;
+        const tasks = chunkedTasks[chunkId];
+
+        if (!tasks) {
+          idleWorkers += 1;
+          resolveIfDone();
+          return;
+        }
+
+        nextChunkIndex += 1;
+        if (args.kind === "parse-localization") {
+          worker.postMessage({
+            chunkId,
+            kind: args.kind,
+            tasks: tasks as LocalizationWorkerParseTask[],
+          } satisfies LocalizationWorkerRequest);
+          return;
+        }
+
+        worker.postMessage({
+          chunkId,
+          kind: args.kind,
+          tasks: tasks as DefsWorkerParseTask[],
+        } satisfies LocalizationWorkerRequest);
+      };
+
+      for (const worker of workers) {
+        worker.onmessage = (event: MessageEvent<LocalizationWorkerResponse>) => {
+          const response = event.data;
+
+          if (response.error) {
+            fail(
+              `Localization worker chunk ${response.chunkId} failed: ${response.error}`,
+            );
+            return;
+          }
+
+          results[response.chunkId] = response.results as TResult[];
+          completedChunks += 1;
+          assignNextChunk(worker);
+          resolveIfDone();
+        };
+
+        worker.onerror = (event) => {
+          fail(event.message || "Localization worker crashed.");
+        };
+
+        assignNextChunk(worker);
+      }
+    });
+  }
+}
+
+const reusableLocalizationWorkerPool = new ReusableLocalizationWorkerPool();
+
 function createAnalysisRuntime(): AnalysisRuntime {
   const parallelism = Math.max(2, availableParallelism());
   const descriptorConcurrency = Math.max(
@@ -632,6 +916,7 @@ function createAnalysisRuntime(): AnalysisRuntime {
     descriptorLimit: pLimit(descriptorConcurrency),
     fileConcurrency,
     fileLimit: pLimit(fileConcurrency),
+    workerPoolSize: getLocalizationWorkerPoolSize(),
   };
 }
 
@@ -652,16 +937,21 @@ async function collectFileInventory(args: {
   return Promise.all(
     filteredFilePaths.map((absolutePath) =>
       args.runtime.fileLimit(async () => {
-        const fileStats = await stat(absolutePath);
+        const fileStats = await stat(absolutePath, { bigint: true });
         const relativePath = normalizePathForId(
           relative(args.rootPath, absolutePath),
         );
-        const fingerprintToken = `${relativePath}:${fileStats.size}:${Math.trunc(fileStats.mtimeMs)}`;
+        const mtimeToken = String(
+          (fileStats as { mtimeNs?: bigint }).mtimeNs ??
+            BigInt(Number(fileStats.mtimeMs)),
+        );
+        const fingerprintToken = `${relativePath}:${fileStats.size}:${mtimeToken}`;
 
         return {
           absolutePath,
           fingerprintToken,
           relativePath,
+          size: Number(fileStats.size),
         } satisfies FileInventoryEntry;
       }),
     ),
@@ -822,13 +1112,34 @@ function collectStringsIdsFromText(text: string, relativeFilePath: string) {
   return ids;
 }
 
-function unionInto(target: Set<string>, source: Set<string>) {
-  source.forEach((id) => target.add(id));
+function mergeOrderedNumbers(left: number[], right: number[]) {
+  const seen = new Set<number>();
+  const merged: number[] = [];
+
+  for (const value of left) {
+    if (seen.has(value)) {
+      continue;
+    }
+
+    seen.add(value);
+    merged.push(value);
+  }
+
+  for (const value of right) {
+    if (seen.has(value)) {
+      continue;
+    }
+
+    seen.add(value);
+    merged.push(value);
+  }
+
+  return merged;
 }
 
 function countEntries(entries: TranslationEntrySets) {
   return TRANSLATION_BUCKETS.reduce(
-    (count, bucket) => count + entries[bucket].size,
+    (count, bucket) => count + entries[bucket].length,
     0,
   );
 }
@@ -837,11 +1148,11 @@ function hasAnyEntries(entries: TranslationEntrySets) {
   return countEntries(entries) > 0;
 }
 
-function createDefInjectedBaselineEntries(defInjectedIds: Set<string>) {
+function createDefInjectedBaselineEntries(defInjectedIds: number[]) {
   return {
-    defInjected: defInjectedIds,
-    keyed: new Set<string>(),
-    strings: new Set<string>(),
+    defInjected: [...defInjectedIds],
+    keyed: [],
+    strings: [],
   } satisfies TranslationEntrySets;
 }
 
@@ -852,8 +1163,7 @@ function mergeTranslationEntries(
   const merged = createEmptyTranslationEntrySets();
 
   for (const bucket of TRANSLATION_BUCKETS) {
-    unionInto(merged[bucket], left[bucket]);
-    unionInto(merged[bucket], right[bucket]);
+    merged[bucket] = mergeOrderedNumbers(left[bucket], right[bucket]);
   }
 
   return merged;
@@ -875,16 +1185,19 @@ async function parseBucketedLocalizationEntries(args: {
   inventory: BucketedFileInventory;
   runtime: AnalysisRuntime;
 }) {
-  const entries = createEmptyTranslationEntrySets();
+  const rawEntries = {
+    defInjected: new Set<string>(),
+    keyed: new Set<string>(),
+    strings: new Set<string>(),
+  };
 
   await Promise.all([
     ...args.inventory.keyed.map((file) =>
       args.runtime.fileLimit(async () => {
         try {
           const xml = await readDecodedXmlFile(file.absolutePath);
-          unionInto(
-            entries.keyed,
-            collectKeyedIdsFromXml(xml, file.relativePath),
+          collectKeyedIdsFromXml(xml, file.relativePath).forEach((id) =>
+            rawEntries.keyed.add(id),
           );
         } catch {
           // Ignore unrecoverable malformed files so one bad translation file
@@ -902,9 +1215,8 @@ async function parseBucketedLocalizationEntries(args: {
             return;
           }
 
-          unionInto(
-            entries.defInjected,
-            collectDefInjectedIdsFromXml(xml, defType),
+          collectDefInjectedIdsFromXml(xml, defType).forEach((id) =>
+            rawEntries.defInjected.add(id),
           );
         } catch {
           // Ignore unrecoverable malformed files so one bad translation file
@@ -915,15 +1227,144 @@ async function parseBucketedLocalizationEntries(args: {
     ...args.inventory.strings.map((file) =>
       args.runtime.fileLimit(async () => {
         const text = await readUtf8TextFile(file.absolutePath);
-        unionInto(
-          entries.strings,
-          collectStringsIdsFromText(text, file.relativePath),
+        collectStringsIdsFromText(text, file.relativePath).forEach((id) =>
+          rawEntries.strings.add(id),
         );
       }),
     ),
   ]);
 
-  return entries;
+  return internTranslationEntrySets(rawEntries);
+}
+
+function toWorkerBucketedInventory(
+  inventory: BucketedFileInventory,
+): WorkerBucketedLocalizationInventory {
+  return {
+    defInjected: inventory.defInjected.map((file) => ({
+      absolutePath: file.absolutePath,
+      relativePath: file.relativePath,
+    })),
+    keyed: inventory.keyed.map((file) => ({
+      absolutePath: file.absolutePath,
+      relativePath: file.relativePath,
+    })),
+    strings: inventory.strings.map((file) => ({
+      absolutePath: file.absolutePath,
+      relativePath: file.relativePath,
+    })),
+  };
+}
+
+function countInventoryFiles(inventory: BucketedFileInventory) {
+  return (
+    inventory.keyed.length +
+    inventory.defInjected.length +
+    inventory.strings.length
+  );
+}
+
+function countInventoryBytes(inventory: BucketedFileInventory) {
+  return [...inventory.keyed, ...inventory.defInjected, ...inventory.strings].reduce(
+    (total, file) => total + file.size,
+    0,
+  );
+}
+
+function shouldUseLocalizationWorkers(misses: PreparedDescriptorMiss[]) {
+  if (misses.length === 0) {
+    return false;
+  }
+
+  let totalBytes = 0;
+
+  for (const miss of misses) {
+    const englishFiles = countInventoryFiles(miss.languageInventory.english);
+    const currentFiles =
+      miss.languageInventory.current.fingerprint ===
+      miss.languageInventory.english.fingerprint
+        ? 0
+        : countInventoryFiles(miss.languageInventory.current);
+    const modFiles = englishFiles + currentFiles;
+    const modBytes =
+      countInventoryBytes(miss.languageInventory.english) +
+      (miss.languageInventory.current.fingerprint ===
+      miss.languageInventory.english.fingerprint
+        ? 0
+        : countInventoryBytes(miss.languageInventory.current));
+
+    totalBytes += modBytes;
+
+    if (
+      modFiles >= LOCALIZATION_WORKER_MIN_SINGLE_MOD_FILES ||
+      modBytes >= LOCALIZATION_WORKER_MIN_SINGLE_MOD_BYTES
+    ) {
+      return true;
+    }
+  }
+
+  return totalBytes >= LOCALIZATION_WORKER_MIN_TOTAL_BYTES;
+}
+
+function shouldUseDefsWorkers(misses: PreparedDefsBaselineMiss[]) {
+  if (misses.length === 0) {
+    return false;
+  }
+
+  let totalBytes = 0;
+
+  for (const miss of misses) {
+    const modBytes = miss.inventoryFiles.reduce(
+      (sum, file) => sum + file.size,
+      0,
+    );
+
+    totalBytes += modBytes;
+
+    if (
+      miss.inventoryFiles.length >= LOCALIZATION_WORKER_MIN_SINGLE_MOD_FILES ||
+      modBytes >= LOCALIZATION_WORKER_MIN_SINGLE_MOD_BYTES
+    ) {
+      return true;
+    }
+  }
+
+  return totalBytes >= LOCALIZATION_WORKER_MIN_TOTAL_BYTES;
+}
+
+async function parseLocalizationMissesWithWorkers(args: {
+  misses: PreparedDescriptorMiss[];
+  runtime: AnalysisRuntime;
+}) {
+  const workerTasks = args.misses.map((miss) => ({
+    baseline: toWorkerBucketedInventory(miss.languageInventory.english),
+    current:
+      miss.languageInventory.current.fingerprint ===
+      miss.languageInventory.english.fingerprint
+        ? null
+        : toWorkerBucketedInventory(miss.languageInventory.current),
+    taskId: String(miss.index),
+  })) satisfies LocalizationWorkerParseTask[];
+
+  return reusableLocalizationWorkerPool.runLocalizationChunks({
+    poolSize: args.runtime.workerPoolSize,
+    tasks: workerTasks,
+  });
+}
+
+async function parseDefsMissesWithWorkers(args: {
+  misses: PreparedDefsBaselineMiss[];
+  runtime: AnalysisRuntime;
+}) {
+  const workerTasks = args.misses.map((miss) => ({
+    files: miss.inventoryFiles.map((file) => file.absolutePath),
+    taskId: miss.modReadablePath,
+  })) satisfies DefsWorkerParseTask[];
+
+  return reusableLocalizationWorkerPool.runDefsChunks({
+    poolSize: args.runtime.workerPoolSize,
+    tasks: workerTasks,
+  });
 }
 
 function collectDependencyTargets(entry: ModSourceSnapshotEntry) {
@@ -953,13 +1394,13 @@ function collectDependencyTargets(entry: ModSourceSnapshotEntry) {
   };
 }
 
-async function buildDescriptorFromCache(args: {
+async function prepareDescriptorFromCache(args: {
   currentGameLanguage: CurrentGameLanguage;
   entry: ModSourceSnapshotEntry;
   metadata: ReturnType<typeof collectDependencyTargets>;
   relativeRoots: string[];
   runtime: AnalysisRuntime;
-}) {
+}): Promise<PreparedDescriptorResolution> {
   const languageInventory = await collectLanguageContributionInventory({
     currentLanguageFolderName: args.currentGameLanguage.normalizedFolderName,
     modReadablePath: args.entry.modReadablePath,
@@ -977,46 +1418,112 @@ async function buildDescriptorFromCache(args: {
     modLocalizationPerfStats.descriptorCacheHits += 1;
 
     return {
-      baselineEntries: cached.baselineEntries,
-      currentLanguageContribution: cached.currentLanguageContribution,
-      dependencyTargets: args.metadata.dependencyTargets,
-      entry: args.entry,
-      hasSelfTranslation: cached.hasSelfTranslation,
-      packageIdNormalized: args.metadata.packageIdNormalized,
-      relativeRoots: args.relativeRoots,
-    } satisfies ModLocalizationDescriptor;
+      kind: "hit",
+      descriptor: {
+        baselineEntries: cached.baselineEntries,
+        currentLanguageContribution: cached.currentLanguageContribution,
+        descriptorFingerprint: cached.fingerprint,
+        dependencyTargets: args.metadata.dependencyTargets,
+        entry: args.entry,
+        hasSelfTranslation: cached.hasSelfTranslation,
+        packageIdNormalized: args.metadata.packageIdNormalized,
+        relativeRoots: args.relativeRoots,
+      } satisfies ModLocalizationDescriptor,
+    };
+  }
+
+  const persisted = loadCachedDescriptorArtifacts({
+    cacheKey,
+    fingerprint: languageInventory.fingerprint,
+  });
+
+  if (persisted) {
+    modLocalizationPerfStats.descriptorCacheHits += 1;
+    modLocalizationPerfStats.descriptorDbHits += 1;
+
+    const currentLanguageContribution = {
+      entries: cloneTranslationEntryVectors(
+        persisted.currentLanguageContribution.entries,
+      ),
+      hasAnyLanguagesRoot: persisted.currentLanguageContribution.hasAnyLanguagesRoot,
+      matchedFolderName: persisted.currentLanguageContribution.matchedFolderName,
+    } satisfies LanguageContribution;
+    const baselineEntries = cloneTranslationEntryVectors(
+      persisted.baselineEntries,
+    );
+
+    descriptorArtifactsCache.set(cacheKey, {
+      baselineEntries,
+      currentLanguageContribution,
+      fingerprint: persisted.fingerprint,
+      hasSelfTranslation: persisted.hasSelfTranslation,
+    });
+
+    return {
+      kind: "hit",
+      descriptor: {
+        baselineEntries,
+        currentLanguageContribution,
+        descriptorFingerprint: persisted.fingerprint,
+        dependencyTargets: args.metadata.dependencyTargets,
+        entry: args.entry,
+        hasSelfTranslation: persisted.hasSelfTranslation,
+        packageIdNormalized: args.metadata.packageIdNormalized,
+        relativeRoots: args.relativeRoots,
+      } satisfies ModLocalizationDescriptor,
+    };
   }
 
   modLocalizationPerfStats.descriptorCacheMisses += 1;
-  const baselineEntries = await parseBucketedLocalizationEntries({
-    inventory: languageInventory.english,
-    runtime: args.runtime,
-  });
-  const currentEntries =
-    languageInventory.current.fingerprint ===
-    languageInventory.english.fingerprint
-      ? baselineEntries
-      : await parseBucketedLocalizationEntries({
-          inventory: languageInventory.current,
-          runtime: args.runtime,
-        });
-  const currentLanguageContribution = {
-    entries: currentEntries,
-    hasAnyLanguagesRoot: languageInventory.hasAnyLanguagesRoot,
-    matchedFolderName: languageInventory.matchedFolderName,
-  } satisfies LanguageContribution;
-  const hasSelfTranslation = hasAnyEntries(currentEntries);
+  modLocalizationPerfStats.descriptorDbMisses += 1;
+  return {
+    entry: args.entry,
+    kind: "miss",
+    languageInventory,
+    metadata: args.metadata,
+    relativeRoots: args.relativeRoots,
+    cacheKey,
+  };
+}
 
-  descriptorArtifactsCache.set(cacheKey, {
-    baselineEntries,
+function buildDescriptorFromParsedArtifacts(args: {
+  baselineEntries: TranslationEntrySets;
+  cacheKey: string;
+  currentEntries: TranslationEntrySets;
+  entry: ModSourceSnapshotEntry;
+  fingerprint: string;
+  hasAnyLanguagesRoot: boolean;
+  matchedFolderName: string | null;
+  metadata: ReturnType<typeof collectDependencyTargets>;
+  relativeRoots: string[];
+}) {
+  const currentLanguageContribution = {
+    entries: args.currentEntries,
+    hasAnyLanguagesRoot: args.hasAnyLanguagesRoot,
+    matchedFolderName: args.matchedFolderName,
+  } satisfies LanguageContribution;
+  const hasSelfTranslation = hasAnyEntries(args.currentEntries);
+
+  descriptorArtifactsCache.set(args.cacheKey, {
+    baselineEntries: args.baselineEntries,
     currentLanguageContribution,
-    fingerprint: languageInventory.fingerprint,
+    fingerprint: args.fingerprint,
     hasSelfTranslation,
+  });
+  saveCachedDescriptorArtifacts({
+    artifacts: {
+      baselineEntries: args.baselineEntries,
+      currentLanguageContribution,
+      fingerprint: args.fingerprint,
+      hasSelfTranslation,
+    },
+    cacheKey: args.cacheKey,
   });
 
   return {
-    baselineEntries,
+    baselineEntries: args.baselineEntries,
     currentLanguageContribution,
+    descriptorFingerprint: args.fingerprint,
     dependencyTargets: args.metadata.dependencyTargets,
     entry: args.entry,
     hasSelfTranslation,
@@ -1070,10 +1577,10 @@ async function collectDefsInventory(args: {
   };
 }
 
-async function collectDefsBaselineIdsCached(args: {
+async function prepareDefsBaselineIdsCached(args: {
   descriptor: ModLocalizationDescriptor;
   runtime: AnalysisRuntime;
-}) {
+}): Promise<number[] | PreparedDefsBaselineMiss> {
   const inventory = await collectDefsInventory({
     modReadablePath: args.descriptor.entry.modReadablePath,
     relativeRoots: args.descriptor.relativeRoots,
@@ -1087,128 +1594,288 @@ async function collectDefsBaselineIdsCached(args: {
     return cached.ids;
   }
 
-  modLocalizationPerfStats.defsCacheMisses += 1;
-  const ids = new Set<string>();
-
-  await Promise.all(
-    inventory.files.map((file) =>
-      args.runtime.fileLimit(async () => {
-        try {
-          const xml = await readDecodedXmlFile(file.absolutePath);
-          unionInto(ids, collectDefsBaselineIdsFromXml(xml));
-        } catch {
-          // Ignore unrecoverable malformed files so one bad defs file
-          // cannot take down the whole analysis.
-        }
-      }),
-    ),
-  );
-
-  defsBaselineCache.set(cacheKey, {
+  const persisted = loadCachedDefsBaseline({
+    cacheKey,
     fingerprint: inventory.fingerprint,
-    ids,
   });
 
-  return ids;
+  if (persisted) {
+    modLocalizationPerfStats.defsCacheHits += 1;
+    modLocalizationPerfStats.defsDbHits += 1;
+    defsBaselineCache.set(cacheKey, {
+      fingerprint: persisted.fingerprint,
+      ids: [...persisted.ids],
+    });
+
+    return persisted.ids;
+  }
+
+  modLocalizationPerfStats.defsCacheMisses += 1;
+  modLocalizationPerfStats.defsDbMisses += 1;
+
+  return {
+    cacheKey,
+    descriptor: args.descriptor,
+    fingerprint: inventory.fingerprint,
+    indexGroups: [],
+    inventoryFiles: inventory.files,
+    modReadablePath: args.descriptor.entry.modReadablePath,
+  } satisfies PreparedDefsBaselineMiss;
 }
 
-function addMapSetValue<T>(map: Map<string, Set<T>>, key: string, value: T) {
+function addMapArrayValue<TKey, TValue>(
+  map: Map<TKey, TValue[]>,
+  key: TKey,
+  value: TValue,
+) {
   const existing = map.get(key);
 
   if (existing) {
-    existing.add(value);
+    existing.push(value);
     return;
   }
 
-  map.set(key, new Set([value]));
+  map.set(key, [value]);
+}
+
+function setProviderBit(bitset: Uint32Array, ordinal: number) {
+  bitset[ordinal >>> 5] |= 1 << (ordinal & 31);
+}
+
+function bitsetsIntersect(left: Uint32Array, right: Uint32Array) {
+  const length = Math.min(left.length, right.length);
+
+  for (let index = 0; index < length; index += 1) {
+    if ((left[index] & right[index]) !== 0) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function createSortedNumbers(values: number[]) {
+  if (values.length <= 1) {
+    return values;
+  }
+
+  return [...values].sort((left, right) => left - right);
+}
+
+function hasSortedNumber(values: number[], target: number) {
+  let low = 0;
+  let high = values.length - 1;
+
+  while (low <= high) {
+    const middle = (low + high) >>> 1;
+    const value = values[middle];
+
+    if (value === target) {
+      return true;
+    }
+
+    if (value < target) {
+      low = middle + 1;
+      continue;
+    }
+
+    high = middle - 1;
+  }
+
+  return false;
 }
 
 function buildProviderIndex(descriptors: ModLocalizationDescriptor[]) {
-  const byDependencyTarget = new Map<string, Set<string>>();
-  const byTranslationId = {
-    defInjected: new Map<string, Set<string>>(),
-    keyed: new Map<string, Set<string>>(),
-    strings: new Map<string, Set<string>>(),
-  } satisfies Record<TranslationBucket, Map<string, Set<string>>>;
-  const providersByPackageId = new Map<string, ModLocalizationDescriptor>();
+  const byDependencyTarget = new Map<string, number[]>();
+  const providerWordCount = Math.ceil(descriptors.length / 32);
+  const byTranslationIdBitmap = {
+    defInjected: new Map<number, Uint32Array>(),
+    keyed: new Map<number, Uint32Array>(),
+    strings: new Map<number, Uint32Array>(),
+  } satisfies Record<TranslationBucket, Map<number, Uint32Array>>;
+  const byTranslationIdOrdered = {
+    defInjected: new Map<number, number[]>(),
+    keyed: new Map<number, number[]>(),
+    strings: new Map<number, number[]>(),
+  } satisfies Record<TranslationBucket, Map<number, number[]>>;
+  const providerOrdinalsByPackageId = new Map<string, number>();
 
-  for (const descriptor of descriptors) {
+  for (const [ordinal, descriptor] of descriptors.entries()) {
     const packageId = descriptor.packageIdNormalized;
 
     if (!packageId) {
       continue;
     }
 
-    providersByPackageId.set(packageId, descriptor);
+    providerOrdinalsByPackageId.set(packageId, ordinal);
 
     for (const targetPackageId of descriptor.dependencyTargets) {
-      addMapSetValue(byDependencyTarget, targetPackageId, packageId);
+      addMapArrayValue(byDependencyTarget, targetPackageId, ordinal);
     }
 
     for (const bucket of TRANSLATION_BUCKETS) {
-      for (const translationId of descriptor.currentLanguageContribution
-        .entries[bucket]) {
-        addMapSetValue(byTranslationId[bucket], translationId, packageId);
+      for (const translationId of descriptor.currentLanguageContribution.entries[
+        bucket
+      ]) {
+        addMapArrayValue(byTranslationIdOrdered[bucket], translationId, ordinal);
+        const bitmap = byTranslationIdBitmap[bucket].get(translationId);
+
+        if (bitmap) {
+          setProviderBit(bitmap, ordinal);
+          continue;
+        }
+
+        const nextBitmap = new Uint32Array(providerWordCount);
+        setProviderBit(nextBitmap, ordinal);
+        byTranslationIdBitmap[bucket].set(translationId, nextBitmap);
       }
     }
   }
 
   return {
     byDependencyTarget,
-    byTranslationId,
-    providersByPackageId,
+    byTranslationIdBitmap,
+    byTranslationIdOrdered,
+    providerOrdinalsByPackageId,
+    providerWordCount,
+    providersByOrdinal: descriptors,
   } satisfies ProviderIndex;
 }
 
-function collectCandidateProviderIds(args: {
+function collectCandidateProviders(args: {
   descriptor: ModLocalizationDescriptor;
   providerIndex: ProviderIndex;
 }) {
-  const candidateProviderIds = new Set<string>();
+  const candidateProviderBits = new Uint32Array(
+    args.providerIndex.providerWordCount,
+  );
+  const candidateProviderOrdinals: number[] = [];
+  const seenOrdinals = new Uint8Array(args.providerIndex.providersByOrdinal.length);
+  const selfOrdinal =
+    args.descriptor.packageIdNormalized === null
+      ? undefined
+      : args.providerIndex.providerOrdinalsByPackageId.get(
+          args.descriptor.packageIdNormalized,
+        );
+
+  const pushOrdinal = (ordinal: number) => {
+    if (ordinal < 0 || ordinal >= seenOrdinals.length) {
+      return;
+    }
+
+    if (selfOrdinal === ordinal || seenOrdinals[ordinal] === 1) {
+      return;
+    }
+
+    seenOrdinals[ordinal] = 1;
+    candidateProviderOrdinals.push(ordinal);
+    setProviderBit(candidateProviderBits, ordinal);
+  };
 
   if (args.descriptor.packageIdNormalized) {
     const dependencyProviders = args.providerIndex.byDependencyTarget.get(
       args.descriptor.packageIdNormalized,
     );
 
-    dependencyProviders?.forEach((packageId) =>
-      candidateProviderIds.add(packageId),
-    );
+    dependencyProviders?.forEach(pushOrdinal);
   }
 
   for (const bucket of TRANSLATION_BUCKETS) {
     for (const translationId of args.descriptor.baselineEntries[bucket]) {
       const overlapProviders =
-        args.providerIndex.byTranslationId[bucket].get(translationId);
+        args.providerIndex.byTranslationIdOrdered[bucket].get(translationId);
 
-      overlapProviders?.forEach((packageId) =>
-        candidateProviderIds.add(packageId),
-      );
+      overlapProviders?.forEach(pushOrdinal);
     }
   }
 
-  if (args.descriptor.packageIdNormalized) {
-    candidateProviderIds.delete(args.descriptor.packageIdNormalized);
-  }
-
-  return candidateProviderIds;
+  return {
+    candidateProviderBits,
+    candidateProviderOrdinals,
+  };
 }
 
 function computeCoveredEntries(args: {
   baselineEntries: TranslationEntrySets;
-  translatedEntries: TranslationEntrySets;
+  candidateProviderBits: Uint32Array;
+  providerIndex: ProviderIndex;
+  selfEntries: TranslationEntrySets | null;
 }) {
+  const sortedSelfEntries = args.selfEntries
+    ? {
+        defInjected: createSortedNumbers(args.selfEntries.defInjected),
+        keyed: createSortedNumbers(args.selfEntries.keyed),
+        strings: createSortedNumbers(args.selfEntries.strings),
+      }
+    : null;
   let coveredEntries = 0;
 
   for (const bucket of TRANSLATION_BUCKETS) {
-    for (const translationId of args.translatedEntries[bucket]) {
-      if (args.baselineEntries[bucket].has(translationId)) {
+    for (const translationId of args.baselineEntries[bucket]) {
+      if (
+        sortedSelfEntries &&
+        hasSortedNumber(sortedSelfEntries[bucket], translationId)
+      ) {
+        coveredEntries += 1;
+        continue;
+      }
+
+      const bitmap = args.providerIndex.byTranslationIdBitmap[bucket].get(
+        translationId,
+      );
+
+      if (bitmap && bitsetsIntersect(bitmap, args.candidateProviderBits)) {
         coveredEntries += 1;
       }
     }
   }
 
   return coveredEntries;
+}
+
+function countTranslatedEntriesWithoutBaseline(args: {
+  candidateProviderOrdinals: number[];
+  descriptor: ModLocalizationDescriptor;
+  memo: Map<string, number>;
+  providerIndex: ProviderIndex;
+}) {
+  const memoKey = `${args.descriptor.descriptorFingerprint}::${args.candidateProviderOrdinals.join(",")}`;
+  const cached = args.memo.get(memoKey);
+
+  if (cached !== undefined) {
+    return cached;
+  }
+
+  const translatedEntries = new Set<number>();
+
+  if (args.descriptor.hasSelfTranslation) {
+    for (const bucket of TRANSLATION_BUCKETS) {
+      for (const translationId of args.descriptor.currentLanguageContribution
+        .entries[bucket]) {
+        translatedEntries.add(translationId);
+      }
+    }
+  }
+
+  for (const ordinal of args.candidateProviderOrdinals) {
+    const provider = args.providerIndex.providersByOrdinal[ordinal];
+
+    if (!provider) {
+      continue;
+    }
+
+    for (const bucket of TRANSLATION_BUCKETS) {
+      for (const translationId of provider.currentLanguageContribution.entries[
+        bucket
+      ]) {
+        translatedEntries.add(translationId);
+      }
+    }
+  }
+
+  const translatedEntryCount = translatedEntries.size;
+  args.memo.set(memoKey, translatedEntryCount);
+  return translatedEntryCount;
 }
 
 function buildCoverage(args: {
@@ -1242,61 +1909,63 @@ function buildLocalizationStatus(args: {
   currentGameLanguage: CurrentGameLanguage;
   descriptor: ModLocalizationDescriptor;
   providerIndex: ProviderIndex;
+  translatedEntryCountMemo: Map<string, number>;
 }) {
-  const translatedEntries = createEmptyTranslationEntrySets();
   const providerPackageIds: string[] = [];
   let matchedFolderName: string | null =
     args.descriptor.currentLanguageContribution.matchedFolderName;
+  const { candidateProviderBits, candidateProviderOrdinals } =
+    collectCandidateProviders(args);
 
   if (args.descriptor.hasSelfTranslation) {
-    for (const bucket of TRANSLATION_BUCKETS) {
-      unionInto(
-        translatedEntries[bucket],
-        args.descriptor.currentLanguageContribution.entries[bucket],
-      );
-    }
-
     if (args.descriptor.packageIdNormalized) {
       providerPackageIds.push(args.descriptor.packageIdNormalized);
     }
   }
 
-  for (const providerPackageId of collectCandidateProviderIds(args)) {
-    const provider =
-      args.providerIndex.providersByPackageId.get(providerPackageId);
+  for (const providerOrdinal of candidateProviderOrdinals) {
+    const provider = args.providerIndex.providersByOrdinal[providerOrdinal];
 
-    if (!provider) {
+    if (!provider?.packageIdNormalized) {
       continue;
     }
 
-    providerPackageIds.push(providerPackageId);
+    providerPackageIds.push(provider.packageIdNormalized);
     matchedFolderName ??=
       provider.currentLanguageContribution.matchedFolderName;
-
-    for (const bucket of TRANSLATION_BUCKETS) {
-      unionInto(
-        translatedEntries[bucket],
-        provider.currentLanguageContribution.entries[bucket],
-      );
-    }
   }
 
-  const translatedEntryCount = countEntries(translatedEntries);
+  const hasTranslatedEntries =
+    args.descriptor.hasSelfTranslation || candidateProviderOrdinals.length > 0;
   const baselineEntryCount = countEntries(args.descriptor.baselineEntries);
 
-  if (translatedEntryCount > 0) {
+  if (hasTranslatedEntries) {
+    const coveredEntries =
+      baselineEntryCount > 0
+        ? computeCoveredEntries({
+            baselineEntries: args.descriptor.baselineEntries,
+            candidateProviderBits,
+            providerIndex: args.providerIndex,
+            selfEntries: args.descriptor.hasSelfTranslation
+              ? args.descriptor.currentLanguageContribution.entries
+              : null,
+          })
+        : countTranslatedEntriesWithoutBaseline({
+            candidateProviderOrdinals,
+            descriptor: args.descriptor,
+            memo: args.translatedEntryCountMemo,
+            providerIndex: args.providerIndex,
+          });
+
     return {
       kind: "translated",
       isSupported: true,
       matchedFolderName,
-      providerPackageIds: [...new Set(providerPackageIds)],
+      providerPackageIds,
       coverage: buildCoverage({
-        coveredEntries: computeCoveredEntries({
-          baselineEntries: args.descriptor.baselineEntries,
-          translatedEntries,
-        }),
+        coveredEntries,
         totalEntries: baselineEntryCount,
-        translatedEntryCount,
+        translatedEntryCount: baselineEntryCount > 0 ? 0 : coveredEntries,
       }),
     } satisfies ModLocalizationStatus;
   }
@@ -1339,11 +2008,13 @@ async function buildDescriptors(args: {
   const metadataByEntry = args.entries.map((entry) =>
     collectDependencyTargets(entry),
   );
+  const descriptors = new Array<ModLocalizationDescriptor>(args.entries.length);
+  const misses: PreparedDescriptorMiss[] = [];
 
-  return Promise.all(
+  await Promise.all(
     args.entries.map((entry, index) =>
       args.runtime.descriptorLimit(async () => {
-        const descriptor = await buildDescriptorFromCache({
+        const resolution = await prepareDescriptorFromCache({
           currentGameLanguage: args.currentGameLanguage,
           entry,
           metadata: metadataByEntry[index] ?? collectDependencyTargets(entry),
@@ -1355,11 +2026,131 @@ async function buildDescriptors(args: {
           runtime: args.runtime,
         });
 
-        args.onDescriptorIndicesResolved?.([index]);
-        return descriptor;
+        if (resolution.kind === "hit") {
+          descriptors[index] = resolution.descriptor;
+          args.onDescriptorIndicesResolved?.([index]);
+          return;
+        }
+
+        misses.push({
+          ...resolution,
+          index,
+        });
       }),
     ),
   );
+
+  if (misses.length === 0) {
+    return descriptors.map((descriptor, index) => {
+      if (!descriptor) {
+        throw new Error(`Expected localization descriptor at index ${index}.`);
+      }
+
+      return descriptor;
+    });
+  }
+
+  const missesByIndex = new Map(
+    misses.map((miss) => [miss.index, miss] satisfies [number, PreparedDescriptorMiss]),
+  );
+
+  try {
+    if (shouldUseLocalizationWorkers(misses)) {
+      const workerResults = await parseLocalizationMissesWithWorkers({
+        misses,
+        runtime: args.runtime,
+      });
+
+      for (const result of workerResults) {
+        const index = Number.parseInt(result.taskId, 10);
+        const miss = missesByIndex.get(index);
+
+        if (!miss) {
+          continue;
+        }
+
+        const baselineEntries = internTranslationEntrySets({
+          defInjected: new Set(result.baseline.defInjected),
+          keyed: new Set(result.baseline.keyed),
+          strings: new Set(result.baseline.strings),
+        });
+        const currentEntries =
+          result.current === null
+            ? cloneTranslationEntryVectors(baselineEntries)
+            : internTranslationEntrySets({
+                defInjected: new Set(result.current.defInjected),
+                keyed: new Set(result.current.keyed),
+                strings: new Set(result.current.strings),
+              });
+
+        descriptors[index] = buildDescriptorFromParsedArtifacts({
+          baselineEntries,
+          cacheKey: miss.cacheKey,
+          currentEntries,
+          entry: miss.entry,
+          fingerprint: miss.languageInventory.fingerprint,
+          hasAnyLanguagesRoot: miss.languageInventory.hasAnyLanguagesRoot,
+          matchedFolderName: miss.languageInventory.matchedFolderName,
+          metadata: miss.metadata,
+          relativeRoots: miss.relativeRoots,
+        });
+      }
+
+      args.onDescriptorIndicesResolved?.(misses.map((miss) => miss.index));
+      return descriptors.map((descriptor, index) => {
+        if (!descriptor) {
+          throw new Error(`Expected localization descriptor at index ${index}.`);
+        }
+
+        return descriptor;
+      });
+    }
+  } catch {
+    // Fall back to the main thread parser when workers are unavailable
+    // or when the worker request itself fails.
+  }
+
+  {
+    await Promise.all(
+      misses.map((miss) =>
+        args.runtime.descriptorLimit(async () => {
+          const baselineEntries = await parseBucketedLocalizationEntries({
+            inventory: miss.languageInventory.english,
+            runtime: args.runtime,
+          });
+          const currentEntries =
+            miss.languageInventory.current.fingerprint ===
+            miss.languageInventory.english.fingerprint
+              ? cloneTranslationEntryVectors(baselineEntries)
+              : await parseBucketedLocalizationEntries({
+                  inventory: miss.languageInventory.current,
+                  runtime: args.runtime,
+                });
+
+          descriptors[miss.index] = buildDescriptorFromParsedArtifacts({
+            baselineEntries,
+            cacheKey: miss.cacheKey,
+            currentEntries,
+            entry: miss.entry,
+            fingerprint: miss.languageInventory.fingerprint,
+            hasAnyLanguagesRoot: miss.languageInventory.hasAnyLanguagesRoot,
+            matchedFolderName: miss.languageInventory.matchedFolderName,
+            metadata: miss.metadata,
+            relativeRoots: miss.relativeRoots,
+          });
+        }),
+      ),
+    );
+  }
+
+  args.onDescriptorIndicesResolved?.(misses.map((miss) => miss.index));
+  return descriptors.map((descriptor, index) => {
+    if (!descriptor) {
+      throw new Error(`Expected localization descriptor at index ${index}.`);
+    }
+
+    return descriptor;
+  });
 }
 
 async function hydrateDescriptorsWithDefsBaselines(args: {
@@ -1368,8 +2159,8 @@ async function hydrateDescriptorsWithDefsBaselines(args: {
   onDefsIndicesResolved?: (indices: number[]) => void;
   runtime: AnalysisRuntime;
 }) {
-  const pendingIndicesByPath = new Map<string, number[]>();
   const skippedIndices: number[] = [];
+  const pendingDescriptorIndicesByPath = new Map<string, number[]>();
 
   for (const [index, descriptor] of args.descriptors.entries()) {
     const initialStatus = args.initialStatuses[index];
@@ -1384,23 +2175,28 @@ async function hydrateDescriptorsWithDefsBaselines(args: {
     }
 
     const existingIndices =
-      pendingIndicesByPath.get(descriptor.entry.modReadablePath) ?? [];
+      pendingDescriptorIndicesByPath.get(descriptor.entry.modReadablePath) ?? [];
     existingIndices.push(index);
-    pendingIndicesByPath.set(descriptor.entry.modReadablePath, existingIndices);
+    pendingDescriptorIndicesByPath.set(
+      descriptor.entry.modReadablePath,
+      existingIndices,
+    );
   }
 
   if (skippedIndices.length > 0) {
     args.onDefsIndicesResolved?.(skippedIndices);
   }
 
-  if (pendingIndicesByPath.size === 0) {
+  if (pendingDescriptorIndicesByPath.size === 0) {
     return args.descriptors;
   }
 
-  const defsBaselineByPath = new Map<string, Set<string>>();
+  const defsBaselineByPath = new Map<string, number[]>();
+  const missByPath = new Map<string, PreparedDefsBaselineMiss>();
 
   await Promise.all(
-    [...pendingIndicesByPath.entries()].map(([modReadablePath, indices]) =>
+    [...pendingDescriptorIndicesByPath.entries()].map(
+      ([modReadablePath, indices]) =>
       args.runtime.descriptorLimit(async () => {
         const descriptor = args.descriptors[indices[0] ?? -1];
 
@@ -1408,17 +2204,137 @@ async function hydrateDescriptorsWithDefsBaselines(args: {
           return;
         }
 
-        defsBaselineByPath.set(
-          modReadablePath,
-          await collectDefsBaselineIdsCached({
+          const prepared = await prepareDefsBaselineIdsCached({
             descriptor,
             runtime: args.runtime,
-          }),
-        );
-        args.onDefsIndicesResolved?.(indices);
-      }),
+          });
+
+          if (Array.isArray(prepared)) {
+            defsBaselineByPath.set(modReadablePath, prepared);
+            args.onDefsIndicesResolved?.(indices);
+            return;
+          }
+
+          missByPath.set(modReadablePath, {
+            ...prepared,
+            indexGroups: [indices],
+          });
+        }),
     ),
   );
+
+  const misses = [...missByPath.values()];
+
+  if (misses.length > 0) {
+    try {
+      if (shouldUseDefsWorkers(misses)) {
+        const workerResults = await parseDefsMissesWithWorkers({
+          misses,
+          runtime: args.runtime,
+        });
+
+        for (const result of workerResults) {
+          const miss = missByPath.get(result.taskId);
+
+          if (!miss) {
+            continue;
+          }
+
+          const ids = internTranslationIdsForBucket(
+            "defInjected",
+            new Set(result.ids),
+          );
+
+          defsBaselineCache.set(miss.cacheKey, {
+            fingerprint: miss.fingerprint,
+            ids,
+          });
+          saveCachedDefsBaseline({
+            cacheKey: miss.cacheKey,
+            record: {
+              fingerprint: miss.fingerprint,
+              ids,
+            },
+          });
+          defsBaselineByPath.set(miss.modReadablePath, ids);
+          args.onDefsIndicesResolved?.(miss.indexGroups.flat());
+        }
+
+        return args.descriptors.map((descriptor, index) => {
+          const initialStatus = args.initialStatuses[index];
+
+          if (
+            !initialStatus ||
+            initialStatus.kind !== "translated" ||
+            countEntries(descriptor.baselineEntries) > 0
+          ) {
+            return descriptor;
+          }
+
+          const defsBaselineEntries = defsBaselineByPath.get(
+            descriptor.entry.modReadablePath,
+          );
+
+          if (!defsBaselineEntries || defsBaselineEntries.length === 0) {
+            return descriptor;
+          }
+
+          return {
+            ...descriptor,
+            baselineEntries: mergeTranslationEntries(
+              descriptor.baselineEntries,
+              createDefInjectedBaselineEntries(defsBaselineEntries),
+            ),
+          } satisfies ModLocalizationDescriptor;
+        });
+      }
+    } catch {
+      // Fall back to the main thread parser when workers are unavailable
+      // or when the worker request itself fails.
+    }
+
+    {
+      await Promise.all(
+        misses.map((miss) =>
+          args.runtime.descriptorLimit(async () => {
+            const rawIds = new Set<string>();
+
+            await Promise.all(
+              miss.inventoryFiles.map((file) =>
+                args.runtime.fileLimit(async () => {
+                  try {
+                    const xml = await readDecodedXmlFile(file.absolutePath);
+                    collectDefsBaselineIdsFromXml(xml).forEach((id) =>
+                      rawIds.add(id),
+                    );
+                  } catch {
+                    // Ignore unrecoverable malformed files so one bad defs file
+                    // cannot take down the whole analysis.
+                  }
+                }),
+              ),
+            );
+
+            const ids = internTranslationIdsForBucket("defInjected", rawIds);
+
+            defsBaselineCache.set(miss.cacheKey, {
+              fingerprint: miss.fingerprint,
+              ids,
+            });
+            saveCachedDefsBaseline({
+              cacheKey: miss.cacheKey,
+              record: {
+                fingerprint: miss.fingerprint,
+                ids,
+              },
+            });
+            defsBaselineByPath.set(miss.modReadablePath, ids);
+            args.onDefsIndicesResolved?.(miss.indexGroups.flat());
+          }),
+        ),
+      );
+    }
+  }
 
   return args.descriptors.map((descriptor, index) => {
     const initialStatus = args.initialStatuses[index];
@@ -1435,7 +2351,7 @@ async function hydrateDescriptorsWithDefsBaselines(args: {
       descriptor.entry.modReadablePath,
     );
 
-    if (!defsBaselineEntries || defsBaselineEntries.size === 0) {
+    if (!defsBaselineEntries || defsBaselineEntries.length === 0) {
       return descriptor;
     }
 
@@ -1463,8 +2379,13 @@ export function getModLocalizationPerfStatsForTests() {
 export function resetModLocalizationPerfStateForTests() {
   descriptorArtifactsCache.clear();
   defsBaselineCache.clear();
+  reusableLocalizationWorkerPool.reset();
+  modLocalizationPerfStats.defsDbHits = 0;
+  modLocalizationPerfStats.defsDbMisses = 0;
   modLocalizationPerfStats.defsCacheHits = 0;
   modLocalizationPerfStats.defsCacheMisses = 0;
+  modLocalizationPerfStats.descriptorDbHits = 0;
+  modLocalizationPerfStats.descriptorDbMisses = 0;
   modLocalizationPerfStats.descriptorBuildMs = 0;
   modLocalizationPerfStats.descriptorCacheHits = 0;
   modLocalizationPerfStats.descriptorCacheMisses = 0;
@@ -1473,9 +2394,12 @@ export function resetModLocalizationPerfStateForTests() {
   modLocalizationPerfStats.finalStatusBuildMs = 0;
   modLocalizationPerfStats.initialStatusBuildMs = 0;
   modLocalizationPerfStats.lastAnalyzeMs = 0;
+  modLocalizationPerfStats.providerBitmapBuildMs = 0;
   modLocalizationPerfStats.recoveredFiles = 0;
+  modLocalizationPerfStats.statusComputeMs = 0;
   modLocalizationPerfStats.strictParseFailures = 0;
   modLocalizationPerfStats.unrecoverableFiles = 0;
+  resetLocalizationIndexStateForTests();
   resetXmlRecoveryStatsForTests();
 }
 
@@ -1581,7 +2505,11 @@ export async function analyzeModLocalizations(args: {
       descriptor.packageIdNormalized !== null &&
       activePackageIds.has(descriptor.packageIdNormalized),
   );
+  const providerIndexStart = performance.now();
   const providerIndex = buildProviderIndex(activeProviders);
+  modLocalizationPerfStats.providerBitmapBuildMs =
+    performance.now() - providerIndexStart;
+  const translatedEntryCountMemo = new Map<string, number>();
 
   const initialStatusStart = performance.now();
   const initialStatuses = descriptors.map((descriptor) =>
@@ -1589,6 +2517,7 @@ export async function analyzeModLocalizations(args: {
       currentGameLanguage,
       descriptor,
       providerIndex,
+      translatedEntryCountMemo,
     }),
   );
   modLocalizationPerfStats.initialStatusBuildMs =
@@ -1610,10 +2539,14 @@ export async function analyzeModLocalizations(args: {
       currentGameLanguage,
       descriptor,
       providerIndex,
+      translatedEntryCountMemo,
     }),
   }));
   modLocalizationPerfStats.finalStatusBuildMs =
     performance.now() - finalStatusStart;
+  modLocalizationPerfStats.statusComputeMs =
+    modLocalizationPerfStats.initialStatusBuildMs +
+    modLocalizationPerfStats.finalStatusBuildMs;
   modLocalizationPerfStats.lastAnalyzeMs = performance.now() - totalStart;
 
   return {

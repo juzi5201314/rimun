@@ -9,6 +9,8 @@ import {
   resetModLocalizationPerfStateForTests,
 } from "./mod-localization";
 
+const originalAppDataDir = process.env["RIMUN_APP_DATA_DIR"] ?? null;
+
 function createSandboxLayout() {
   const sandboxRoot = createRimunTempDir("rimun-localization-perf-");
   const modsRoot = join(sandboxRoot, "Mods");
@@ -20,7 +22,12 @@ function createSandboxLayout() {
   return {
     configRoot,
     modsRoot,
+    sandboxRoot,
   };
+}
+
+function setTestAppDataDir(sandboxRoot: string) {
+  process.env["RIMUN_APP_DATA_DIR"] = join(sandboxRoot, "app-data");
 }
 
 function writePrefs(configRoot: string, folderName = "ChineseSimplified") {
@@ -101,6 +108,25 @@ function writeSyntheticMod(modsRoot: string, index: number) {
   } satisfies ModSourceSnapshotEntry;
 }
 
+function rewriteSyntheticTranslation(modsRoot: string, index: number, suffix: string) {
+  const folderName = `PerfMod${index}`;
+  writeFileSync(
+    join(
+      modsRoot,
+      folderName,
+      "Languages",
+      "ChineseSimplified",
+      "Keyed",
+      "Main.xml",
+    ),
+    `<LanguageData>${Array.from(
+      { length: 120 },
+      (_, keyedIndex) =>
+        `<perf_key_${keyedIndex}>值 ${keyedIndex} ${suffix}</perf_key_${keyedIndex}>`,
+    ).join("")}</LanguageData>`,
+  );
+}
+
 function createReadablePathResolver(configRoot: string) {
   return (windowsPath: string) =>
     windowsPath.endsWith("\\Prefs.xml") ? join(configRoot, "Prefs.xml") : null;
@@ -108,15 +134,23 @@ function createReadablePathResolver(configRoot: string) {
 
 beforeEach(() => {
   resetModLocalizationPerfStateForTests();
+  delete process.env["RIMUN_APP_DATA_DIR"];
 });
 
 afterEach(() => {
   resetModLocalizationPerfStateForTests();
+  if (originalAppDataDir === null) {
+    delete process.env["RIMUN_APP_DATA_DIR"];
+    return;
+  }
+
+  process.env["RIMUN_APP_DATA_DIR"] = originalAppDataDir;
 });
 
 describe("mod localization perf", () => {
   it("reuses descriptor caches on warm rescans", async () => {
-    const { configRoot, modsRoot } = createSandboxLayout();
+    const { configRoot, modsRoot, sandboxRoot } = createSandboxLayout();
+    setTestAppDataDir(sandboxRoot);
     writePrefs(configRoot);
     const entries = Array.from({ length: 120 }, (_, index) =>
       writeSyntheticMod(modsRoot, index),
@@ -154,5 +188,79 @@ describe("mod localization perf", () => {
       entries.length,
     );
     expect(warmMs).toBeLessThan(coldMs);
+  });
+
+  it("VAL-LOCALIZATION-PERF-002 cold request for mods=600 completes under 2000ms", async () => {
+    const { configRoot, modsRoot, sandboxRoot } = createSandboxLayout();
+    setTestAppDataDir(sandboxRoot);
+    writePrefs(configRoot);
+    const entries = Array.from({ length: 600 }, (_, index) =>
+      writeSyntheticMod(modsRoot, index),
+    );
+    const args = {
+      activePackageIds: entries.map(
+        (entry) =>
+          /<packageId>([^<]+)<\/packageId>/.exec(
+            entry.aboutXmlText ?? "",
+          )?.[1] ?? "",
+      ),
+      configPath:
+        "C:\\Users\\alice\\AppData\\LocalLow\\Ludeon Studios\\RimWorld by Ludeon Studios\\Config",
+      entries,
+      gameVersion: "1.5.4104 rev435",
+      toReadablePath: createReadablePathResolver(configRoot),
+    };
+
+    const coldStart = performance.now();
+    const analysis = await analyzeModLocalizations(args);
+    const coldMs = performance.now() - coldStart;
+    const stats = getModLocalizationPerfStatsForTests();
+
+    console.log(
+      `VAL-LOCALIZATION-PERF-002 mods=600 coldMs=${coldMs.toFixed(1)} descriptorHits=${stats.descriptorCacheHits} descriptorMisses=${stats.descriptorCacheMisses} descriptorDbHits=${stats.descriptorDbHits} descriptorDbMisses=${stats.descriptorDbMisses} providerBitmapMs=${stats.providerBitmapBuildMs.toFixed(1)} statusComputeMs=${stats.statusComputeMs.toFixed(1)}`,
+    );
+
+    expect(analysis.entries).toHaveLength(entries.length);
+    expect(coldMs).toBeLessThan(2000);
+  });
+
+  it("VAL-LOCALIZATION-PERF-003 incremental request for mods=600 completes under 2000ms", async () => {
+    const { configRoot, modsRoot, sandboxRoot } = createSandboxLayout();
+    setTestAppDataDir(sandboxRoot);
+    writePrefs(configRoot);
+    const entries = Array.from({ length: 600 }, (_, index) =>
+      writeSyntheticMod(modsRoot, index),
+    );
+    const args = {
+      activePackageIds: entries.map(
+        (entry) =>
+          /<packageId>([^<]+)<\/packageId>/.exec(
+            entry.aboutXmlText ?? "",
+          )?.[1] ?? "",
+      ),
+      configPath:
+        "C:\\Users\\alice\\AppData\\LocalLow\\Ludeon Studios\\RimWorld by Ludeon Studios\\Config",
+      entries,
+      gameVersion: "1.5.4104 rev435",
+      toReadablePath: createReadablePathResolver(configRoot),
+    };
+
+    await analyzeModLocalizations(args);
+
+    for (const index of [3, 17, 88, 233, 511]) {
+      rewriteSyntheticTranslation(modsRoot, index, "changed");
+    }
+
+    const changedStart = performance.now();
+    const analysis = await analyzeModLocalizations(args);
+    const changedMs = performance.now() - changedStart;
+    const stats = getModLocalizationPerfStatsForTests();
+
+    console.log(
+      `VAL-LOCALIZATION-PERF-003 mods=600 changedMs=${changedMs.toFixed(1)} descriptorHits=${stats.descriptorCacheHits} descriptorMisses=${stats.descriptorCacheMisses} descriptorDbHits=${stats.descriptorDbHits} descriptorDbMisses=${stats.descriptorDbMisses} defsHits=${stats.defsCacheHits} defsMisses=${stats.defsCacheMisses}`,
+    );
+
+    expect(analysis.entries).toHaveLength(entries.length);
+    expect(changedMs).toBeLessThan(2000);
   });
 });

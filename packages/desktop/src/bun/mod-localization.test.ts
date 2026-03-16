@@ -9,6 +9,8 @@ import {
   resetModLocalizationPerfStateForTests,
 } from "./mod-localization";
 
+const originalAppDataDir = process.env["RIMUN_APP_DATA_DIR"] ?? null;
+
 function createSandboxLayout() {
   const sandboxRoot = createRimunTempDir("rimun-localization-");
   const modsRoot = join(sandboxRoot, "Mods");
@@ -22,6 +24,10 @@ function createSandboxLayout() {
     modsRoot,
     sandboxRoot,
   };
+}
+
+function setTestAppDataDir(sandboxRoot: string) {
+  process.env["RIMUN_APP_DATA_DIR"] = join(sandboxRoot, "app-data");
 }
 
 function writePrefs(configRoot: string, folderName = "ChineseSimplified") {
@@ -170,15 +176,23 @@ function createReadablePathResolver(configRoot: string) {
 
 beforeEach(() => {
   resetModLocalizationPerfStateForTests();
+  delete process.env["RIMUN_APP_DATA_DIR"];
 });
 
 afterEach(() => {
   resetModLocalizationPerfStateForTests();
+  if (originalAppDataDir === null) {
+    delete process.env["RIMUN_APP_DATA_DIR"];
+    return;
+  }
+
+  process.env["RIMUN_APP_DATA_DIR"] = originalAppDataDir;
 });
 
 describe("mod localization analyzer", () => {
   it("matches translation providers through the reverse translation index", async () => {
-    const { configRoot, modsRoot } = createSandboxLayout();
+    const { configRoot, modsRoot, sandboxRoot } = createSandboxLayout();
+    setTestAppDataDir(sandboxRoot);
     writePrefs(configRoot);
     const baseAbout = writeAboutXml(modsRoot, "BaseMod", "example.base");
     const translatorAbout = writeAboutXml(
@@ -228,7 +242,8 @@ describe("mod localization analyzer", () => {
   });
 
   it("accepts XML declarations with leading whitespace in translation files", async () => {
-    const { configRoot, modsRoot } = createSandboxLayout();
+    const { configRoot, modsRoot, sandboxRoot } = createSandboxLayout();
+    setTestAppDataDir(sandboxRoot);
     writePrefs(configRoot);
     const aboutXmlText = writeAboutXml(
       modsRoot,
@@ -273,7 +288,8 @@ describe("mod localization analyzer", () => {
   });
 
   it("recovers malformed translation xml files and keeps them effective", async () => {
-    const { configRoot, modsRoot } = createSandboxLayout();
+    const { configRoot, modsRoot, sandboxRoot } = createSandboxLayout();
+    setTestAppDataDir(sandboxRoot);
     writePrefs(configRoot);
     const baseAbout = writeAboutXml(modsRoot, "BaseMod", "example.base");
     const translatorAbout = writeAboutXml(
@@ -339,7 +355,8 @@ describe("mod localization analyzer", () => {
   });
 
   it("recovers malformed defs xml files when deriving def-injected baseline coverage", async () => {
-    const { configRoot, modsRoot } = createSandboxLayout();
+    const { configRoot, modsRoot, sandboxRoot } = createSandboxLayout();
+    setTestAppDataDir(sandboxRoot);
     writePrefs(configRoot);
     const aboutXmlText = writeAboutXml(
       modsRoot,
@@ -391,7 +408,8 @@ describe("mod localization analyzer", () => {
   });
 
   it("reuses descriptor and defs caches and invalidates only changed inputs", async () => {
-    const { configRoot, modsRoot } = createSandboxLayout();
+    const { configRoot, modsRoot, sandboxRoot } = createSandboxLayout();
+    setTestAppDataDir(sandboxRoot);
     writePrefs(configRoot);
     const aboutXmlText = writeAboutXml(modsRoot, "LazyDefsMod", "example.lazy");
 

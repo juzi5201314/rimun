@@ -216,11 +216,7 @@ function toProfileInsert(
   };
 }
 
-function createDatabase() {
-  const appDataDirectory = resolveAppDataDirectory();
-  mkdirSync(appDataDirectory, { recursive: true });
-
-  const sqlite = new Database(resolveDatabasePath(), { create: true });
+export function ensureAppDatabaseSchema(sqlite: Database) {
   sqlite.exec(`
     CREATE TABLE IF NOT EXISTS app_settings (
       id TEXT PRIMARY KEY NOT NULL,
@@ -255,7 +251,44 @@ function createDatabase() {
       id TEXT PRIMARY KEY NOT NULL,
       current_profile_id TEXT
     );
+
+    CREATE TABLE IF NOT EXISTS localization_terms (
+      term_id INTEGER PRIMARY KEY AUTOINCREMENT,
+      bucket TEXT NOT NULL,
+      normalized_translation_id TEXT NOT NULL,
+      UNIQUE(bucket, normalized_translation_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS localization_descriptor_cache (
+      cache_key TEXT PRIMARY KEY NOT NULL,
+      analyzer_version INTEGER NOT NULL,
+      fingerprint TEXT NOT NULL,
+      has_any_languages_root INTEGER NOT NULL,
+      matched_folder_name TEXT,
+      has_self_translation INTEGER NOT NULL,
+      baseline_keyed BLOB NOT NULL,
+      baseline_def_injected BLOB NOT NULL,
+      baseline_strings BLOB NOT NULL,
+      current_keyed BLOB NOT NULL,
+      current_def_injected BLOB NOT NULL,
+      current_strings BLOB NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS localization_defs_cache (
+      cache_key TEXT PRIMARY KEY NOT NULL,
+      analyzer_version INTEGER NOT NULL,
+      fingerprint TEXT NOT NULL,
+      ids_blob BLOB NOT NULL
+    );
   `);
+}
+
+function createDatabase() {
+  const appDataDirectory = resolveAppDataDirectory();
+  mkdirSync(appDataDirectory, { recursive: true });
+
+  const sqlite = new Database(resolveDatabasePath(), { create: true });
+  ensureAppDatabaseSchema(sqlite);
 
   return {
     sqlite,
