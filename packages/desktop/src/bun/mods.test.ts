@@ -680,6 +680,49 @@ describe("mod scanner", () => {
     expect(result.mods[0]?.localizationStatus.isSupported).toBe(false);
   });
 
+  it("marks a mod with other language folders but no current language as missing current language", async () => {
+    const { configRoot, installationDataRoot, installationModsRoot } =
+      createSandboxLayout();
+    writePrefsXml(configRoot, "ChineseSimplified");
+    writeAboutXml(
+      installationModsRoot,
+      "EnglishOnly",
+      `
+        <ModMetaData>
+          <name>English Only</name>
+          <packageId>example.englishonly</packageId>
+        </ModMetaData>
+      `,
+    );
+    writeLanguageFile(
+      installationModsRoot,
+      "EnglishOnly",
+      "English",
+      "Keyed/Main.xml",
+      "<LanguageData><example_key>Example Value</example_key></LanguageData>",
+    );
+    writeModsConfigXml(configRoot, ["example.englishonly"]);
+
+    const result = await scanModLibrary(
+      createSelection({
+        workshopPath: null,
+      }),
+      {
+        environment: testEnvironment,
+        toReadablePath: createReadablePathResolver({
+          configRoot,
+          installationDataRoot,
+          installationModsRoot,
+        }),
+      },
+    );
+
+    expect(result.currentGameLanguage.folderName).toBe("ChineseSimplified");
+    expect(result.mods[0]?.localizationStatus.kind).toBe("missing_language");
+    expect(result.mods[0]?.localizationStatus.isSupported).toBe(false);
+    expect(result.mods[0]?.localizationStatus.matchedFolderName).toBeNull();
+  });
+
   it("aggregates active translation mods and reports partial coverage", async () => {
     const { configRoot, installationDataRoot, installationModsRoot } =
       createSandboxLayout();

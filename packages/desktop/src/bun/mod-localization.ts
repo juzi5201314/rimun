@@ -186,6 +186,19 @@ const LOCALIZATION_STATUS_MISSING: ModLocalizationStatus = {
   },
 };
 
+const LOCALIZATION_STATUS_MISSING_LANGUAGE: ModLocalizationStatus = {
+  kind: "missing_language",
+  isSupported: false,
+  matchedFolderName: null,
+  providerPackageIds: [],
+  coverage: {
+    completeness: "unknown",
+    coveredEntries: 0,
+    totalEntries: null,
+    percent: null,
+  },
+};
+
 const MAX_LOCALIZATION_DESCRIPTOR_CONCURRENCY = 8;
 const MAX_LOCALIZATION_FILE_CONCURRENCY = 32;
 const MAX_LOCALIZATION_WORKERS = 8;
@@ -1986,6 +1999,20 @@ function buildLocalizationStatus(args: {
         percent: null,
       },
     } satisfies ModLocalizationStatus;
+  }
+
+  if (
+    args.currentGameLanguage.normalizedFolderName &&
+    args.descriptor.currentLanguageContribution.hasAnyLanguagesRoot &&
+    args.descriptor.currentLanguageContribution.matchedFolderName === null
+  ) {
+    return {
+      ...LOCALIZATION_STATUS_MISSING_LANGUAGE,
+      coverage: {
+        ...LOCALIZATION_STATUS_MISSING_LANGUAGE.coverage,
+        totalEntries: baselineEntryCount > 0 ? baselineEntryCount : null,
+      },
+    };
   }
 
   return {

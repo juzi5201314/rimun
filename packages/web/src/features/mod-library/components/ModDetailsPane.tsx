@@ -99,6 +99,7 @@ function renderPackageList(items: string[], noneText: string) {
 function formatLocalizationStatus(
   renderState: LocalizationStatusRenderState,
   status: HomePageController["selectedMod"]["localizationStatus"],
+  currentGameLanguage: string,
   t: TranslateFn,
 ) {
   if (renderState === "loading") {
@@ -123,6 +124,12 @@ function formatLocalizationStatus(
 
   if (status.kind === "unknown") {
     return t("mod_details.translation_unknown");
+  }
+
+  if (status.kind === "missing_language") {
+    return t("mod_details.translation_missing_language", {
+      language: currentGameLanguage,
+    });
   }
 
   return t("mod_details.translation_missing");
@@ -658,6 +665,7 @@ export function ModDetailsPane({
                       {formatLocalizationStatus(
                         localizationStatusState,
                         controller.selectedMod.localizationStatus,
+                        currentGameLanguage,
                         t,
                       )}
                     </p>

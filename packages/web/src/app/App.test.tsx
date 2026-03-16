@@ -353,6 +353,80 @@ function createUnsupportedVersionSnapshot(): ModSourceSnapshot {
   });
 }
 
+function createMissingCurrentLanguageSnapshot(): ModSourceSnapshot {
+  const snapshot = withSnapshotDefaults({
+    environment: {
+      platform: "linux" as const,
+      isWsl: true,
+      wslDistro: "Ubuntu",
+    },
+    selection: {
+      channel: "steam" as const,
+      installationPath:
+        "C:\\Program Files (x86)\\Steam\\steamapps\\common\\RimWorld",
+      workshopPath:
+        "C:\\Program Files (x86)\\Steam\\steamapps\\workshop\\content\\294100",
+      configPath:
+        "C:\\Users\\player\\AppData\\LocalLow\\Ludeon Studios\\RimWorld by Ludeon Studios\\Config",
+    },
+    scannedAt: "2026-03-16T00:45:00.000Z",
+    scannedRoots: {
+      installationModsPath:
+        "C:\\Program Files (x86)\\Steam\\steamapps\\common\\RimWorld\\Mods",
+      workshopPath:
+        "C:\\Program Files (x86)\\Steam\\steamapps\\workshop\\content\\294100",
+      modsConfigPath:
+        "C:\\Users\\player\\AppData\\LocalLow\\Ludeon Studios\\RimWorld by Ludeon Studios\\Config\\ModsConfig.xml",
+    },
+    gameVersion: "1.5.4104 rev435",
+    activePackageIds: ["example.englishonly"],
+    entries: [
+      createSnapshotEntry({
+        entryName: "777777777",
+        source: "workshop" as const,
+        modWindowsPath:
+          "C:\\Program Files (x86)\\Steam\\steamapps\\workshop\\content\\294100\\777777777",
+        modReadablePath:
+          "/mnt/c/Program Files (x86)/Steam/steamapps/workshop/content/294100/777777777",
+        manifestPath:
+          "C:\\Program Files (x86)\\Steam\\steamapps\\workshop\\content\\294100\\777777777\\About\\About.xml",
+        hasAboutXml: true,
+        aboutXmlText: `
+          <ModMetaData>
+            <name>English Only</name>
+            <packageId>example.englishonly</packageId>
+            <author>Translator</author>
+            <description>Only ships an English localization folder.</description>
+          </ModMetaData>
+        `,
+        notes: [],
+      }),
+    ],
+    errors: [],
+    requiresConfiguration: false,
+  });
+
+  snapshot.currentGameLanguage = {
+    folderName: "ChineseSimplified",
+    normalizedFolderName: "chinesesimplified",
+    source: "prefs",
+  };
+  snapshot.entries[0]!.localizationStatus = {
+    kind: "missing_language",
+    isSupported: false,
+    matchedFolderName: null,
+    providerPackageIds: [],
+    coverage: {
+      completeness: "unknown",
+      coveredEntries: 0,
+      totalEntries: null,
+      percent: null,
+    },
+  };
+
+  return snapshot;
+}
+
 function createDeferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
   let reject!: (reason?: unknown) => void;
@@ -546,6 +620,20 @@ describe("App", () => {
     expect(
       screen.getByText(
         /^It is currently enabled, but it does not declare support for RimWorld 1\.5\.$/i,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("shows the current game language in translation details when that language is missing", async () => {
+    renderApp({
+      hostApi: createTestHostApi({
+        modSourceSnapshot: createMissingCurrentLanguageSnapshot(),
+      }),
+    });
+
+    expect(
+      await screen.findByText(
+        "This mod provides other languages, but does not include ChineseSimplified.",
       ),
     ).toBeInTheDocument();
   });

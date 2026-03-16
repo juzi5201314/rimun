@@ -211,6 +211,7 @@ export const currentGameLanguageSchema = z.object({
 export const modLocalizationKindSchema = z.enum([
   "translated",
   "missing",
+  "missing_language",
   "unknown",
 ]);
 

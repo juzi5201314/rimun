@@ -263,6 +263,15 @@ function getLocalizationBadge(
     };
   }
 
+  if (status.kind === "missing_language") {
+    return {
+      className:
+        "bg-amber-500/10 text-amber-700 ring-amber-500/25 dark:text-amber-300",
+      label: t("mod_list_row.translation_missing_language_badge"),
+      title: t("mod_list_row.translation_missing_language_title"),
+    };
+  }
+
   return {
     className:
       "bg-zinc-500/10 text-zinc-700 ring-zinc-500/25 dark:text-zinc-300",

@@ -142,6 +142,18 @@ describe("shared schemas", () => {
           hasAboutXml: true,
           aboutXmlText:
             "<ModMetaData><name>Core</name><packageId>ludeon.rimworld</packageId></ModMetaData>",
+          localizationStatus: {
+            kind: "missing_language",
+            isSupported: false,
+            matchedFolderName: null,
+            providerPackageIds: [],
+            coverage: {
+              completeness: "unknown",
+              coveredEntries: 0,
+              totalEntries: null,
+              percent: null,
+            },
+          },
           notes: [],
         },
       ],

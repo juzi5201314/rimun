@@ -154,4 +154,38 @@ describe("ModListRowCard", () => {
 
     expect(await screen.findByText("75%")).toBeInTheDocument();
   });
+
+  it("shows a dedicated badge when translations exist but not for the current game language", async () => {
+    render(
+      <HostApiProvider hostApi={createTestHostApi()}>
+        <I18nProvider>
+          <ModListRowCard
+            dragHandle={<span aria-hidden="true" />}
+            isDragging={false}
+            isSelected={false}
+            item={createItem({
+              localizationStatus: {
+                kind: "missing_language",
+                isSupported: false,
+                matchedFolderName: null,
+                providerPackageIds: [],
+                coverage: {
+                  completeness: "unknown",
+                  coveredEntries: 0,
+                  totalEntries: null,
+                  percent: null,
+                },
+              },
+            })}
+            localizationStatusState="ready"
+            onSelect={() => {}}
+            showDropAfter={false}
+            showDropBefore={false}
+          />
+        </I18nProvider>
+      </HostApiProvider>,
+    );
+
+    expect(await screen.findByText("Language Missing")).toBeInTheDocument();
+  });
 });
