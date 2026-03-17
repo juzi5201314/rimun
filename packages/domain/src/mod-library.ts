@@ -1,11 +1,13 @@
 import type {
+  ModDependencyMetadata,
   ModLibraryResult,
+  ModManifestMetadata,
   ModRecord,
   ModSourceSnapshot,
 } from "@rimun/shared";
 import { getEntryReadableWslPath, isOfficialMod, parseAboutXml } from "./xml";
 
-function createEmptyDependencyMetadata() {
+export function createEmptyDependencyMetadata(): ModDependencyMetadata {
   return {
     packageIdNormalized: null,
     dependencies: [] as string[],
@@ -18,32 +20,53 @@ function createEmptyDependencyMetadata() {
   };
 }
 
-function buildModRecord(
-  entry: ModSourceSnapshot["entries"][number],
-  activePackageIds: Set<string>,
-): ModRecord {
-  const parsedAbout = entry.aboutXmlText
-    ? parseAboutXml(entry.aboutXmlText)
+export function createManifestMetadata(args: {
+  aboutXmlText: string | null | undefined;
+  entryName: string;
+}): ModManifestMetadata {
+  const parsedAbout = args.aboutXmlText
+    ? parseAboutXml(args.aboutXmlText)
     : null;
 
   return {
-    id: `${entry.source}:${parsedAbout?.packageId ?? entry.entryName}`,
-    name: parsedAbout?.name ?? entry.entryName,
+    name: parsedAbout?.name ?? args.entryName,
     packageId: parsedAbout?.packageId ?? null,
     author: parsedAbout?.author ?? null,
     version: parsedAbout?.version ?? null,
     description: parsedAbout?.description ?? null,
+    dependencyMetadata:
+      parsedAbout?.dependencyMetadata ?? createEmptyDependencyMetadata(),
+  };
+}
+
+function buildModRecord(
+  entry: ModSourceSnapshot["entries"][number],
+  activePackageIds: Set<string>,
+): ModRecord {
+  const manifestMetadata =
+    entry.manifestMetadata ??
+    createManifestMetadata({
+      aboutXmlText: entry.aboutXmlText,
+      entryName: entry.entryName,
+    });
+
+  return {
+    id: `${entry.source}:${manifestMetadata.packageId ?? entry.entryName}`,
+    name: manifestMetadata.name,
+    packageId: manifestMetadata.packageId,
+    author: manifestMetadata.author,
+    version: manifestMetadata.version,
+    description: manifestMetadata.description,
     source: entry.source,
     windowsPath: entry.modWindowsPath,
     wslPath: getEntryReadableWslPath(entry),
     manifestPath: entry.manifestPath,
-    enabled: parsedAbout?.packageId
-      ? activePackageIds.has(parsedAbout.packageId.toLowerCase())
+    enabled: manifestMetadata.packageId
+      ? activePackageIds.has(manifestMetadata.packageId.toLowerCase())
       : false,
-    isOfficial: isOfficialMod(entry.source, parsedAbout?.packageId ?? null),
+    isOfficial: isOfficialMod(entry.source, manifestMetadata.packageId),
     hasAboutXml: entry.hasAboutXml,
-    dependencyMetadata:
-      parsedAbout?.dependencyMetadata ?? createEmptyDependencyMetadata(),
+    dependencyMetadata: manifestMetadata.dependencyMetadata,
     localizationStatus: entry.localizationStatus,
     notes: entry.notes,
   };

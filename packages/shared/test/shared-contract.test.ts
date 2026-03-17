@@ -142,6 +142,23 @@ describe("shared schemas", () => {
           hasAboutXml: true,
           aboutXmlText:
             "<ModMetaData><name>Core</name><packageId>ludeon.rimworld</packageId></ModMetaData>",
+          manifestMetadata: {
+            name: "Core",
+            packageId: "ludeon.rimworld",
+            author: null,
+            version: null,
+            description: null,
+            dependencyMetadata: {
+              packageIdNormalized: "ludeon.rimworld",
+              dependencies: [],
+              loadAfter: [],
+              loadBefore: [],
+              forceLoadAfter: [],
+              forceLoadBefore: [],
+              incompatibleWith: [],
+              supportedVersions: [],
+            },
+          },
           localizationStatus: {
             kind: "missing_language",
             isSupported: false,
@@ -163,8 +180,87 @@ describe("shared schemas", () => {
 
     expect(parsed.entries).toHaveLength(1);
     expect(parsed.entries[0]?.source).toBe("installation");
+    expect(parsed.entries[0]?.manifestMetadata?.packageId).toBe(
+      "ludeon.rimworld",
+    );
     expect(parsed.activePackageIds).toEqual(["ludeon.rimworld"]);
     expect(parsed.gameVersion).toBe("1.5.4104 rev435");
+  });
+
+  it("accepts a mod source snapshot payload without raw About.xml text", () => {
+    const parsed = modSourceSnapshotSchema.parse({
+      environment: {
+        platform: "linux",
+        isWsl: true,
+        wslDistro: "Ubuntu",
+      },
+      selection: {
+        channel: "steam",
+        installationPath:
+          "C:\\Program Files (x86)\\Steam\\steamapps\\common\\RimWorld",
+        workshopPath:
+          "C:\\Program Files (x86)\\Steam\\steamapps\\workshop\\content\\294100",
+        configPath: null,
+      },
+      scannedAt: "2026-03-12T10:00:00.000Z",
+      scannedRoots: {
+        installationModsPath:
+          "C:\\Program Files (x86)\\Steam\\steamapps\\common\\RimWorld\\Mods",
+        workshopPath:
+          "C:\\Program Files (x86)\\Steam\\steamapps\\workshop\\content\\294100",
+        modsConfigPath: null,
+      },
+      gameVersion: "1.5.4104 rev435",
+      activePackageIds: ["ludeon.rimworld"],
+      entries: [
+        {
+          entryName: "Core",
+          source: "installation",
+          modWindowsPath:
+            "C:\\Program Files (x86)\\Steam\\steamapps\\common\\RimWorld\\Mods\\Core",
+          modReadablePath:
+            "/mnt/c/Program Files (x86)/Steam/steamapps/common/RimWorld/Mods/Core",
+          manifestPath:
+            "C:\\Program Files (x86)\\Steam\\steamapps\\common\\RimWorld\\Mods\\Core\\About\\About.xml",
+          hasAboutXml: true,
+          manifestMetadata: {
+            name: "Core",
+            packageId: "ludeon.rimworld",
+            author: null,
+            version: null,
+            description: null,
+            dependencyMetadata: {
+              packageIdNormalized: "ludeon.rimworld",
+              dependencies: [],
+              loadAfter: [],
+              loadBefore: [],
+              forceLoadAfter: [],
+              forceLoadBefore: [],
+              incompatibleWith: [],
+              supportedVersions: [],
+            },
+          },
+          localizationStatus: {
+            kind: "missing_language",
+            isSupported: false,
+            matchedFolderName: null,
+            providerPackageIds: [],
+            coverage: {
+              completeness: "unknown",
+              coveredEntries: 0,
+              totalEntries: null,
+              percent: null,
+            },
+          },
+          notes: [],
+        },
+      ],
+      errors: [],
+      requiresConfiguration: false,
+    });
+
+    expect(parsed.entries[0]?.aboutXmlText).toBeUndefined();
+    expect(parsed.entries[0]?.manifestMetadata?.name).toBe("Core");
   });
 
   it("accepts a mod library payload with an explicit game version", () => {

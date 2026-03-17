@@ -91,12 +91,29 @@ async function ensureProfileCatalog(
   repository: SettingsRepository,
   toReadablePath: (windowsPath: string) => string | null,
 ) {
+  if (repository.hasAnyProfiles()) {
+    return repository.getProfileCatalog();
+  }
+
   const initialActivePackageIds = await resolveInitialProfileActivePackageIds(
     repository,
     toReadablePath,
   );
 
   return repository.getProfileCatalog(initialActivePackageIds);
+}
+
+function toPublicModSourceSnapshot(
+  snapshot: ModSourceSnapshot,
+): ModSourceSnapshot {
+  return {
+    ...snapshot,
+    entries: snapshot.entries.map(
+      ({ aboutXmlText: _aboutXmlText, ...entry }) => ({
+        ...entry,
+      }),
+    ),
+  };
 }
 
 async function resolveStoredProfile(
@@ -169,7 +186,9 @@ function createMonotonicIsoTimestamp(previousIso: string) {
   return new Date(Math.max(nextMs, safePreviousMs + 1)).toISOString();
 }
 
-function createRefreshedSnapshot(snapshot: ModSourceSnapshot): ModSourceSnapshot {
+function createRefreshedSnapshot(
+  snapshot: ModSourceSnapshot,
+): ModSourceSnapshot {
   return {
     ...snapshot,
     scannedAt: createMonotonicIsoTimestamp(snapshot.scannedAt),
@@ -278,13 +297,21 @@ function areSnapshotsLocalizationEquivalent(
   }
 
   if (
-    previousSnapshot.activePackageIds.length !== nextSnapshot.activePackageIds.length
+    previousSnapshot.activePackageIds.length !==
+    nextSnapshot.activePackageIds.length
   ) {
     return false;
   }
 
-  for (let index = 0; index < previousSnapshot.activePackageIds.length; index += 1) {
-    if (previousSnapshot.activePackageIds[index] !== nextSnapshot.activePackageIds[index]) {
+  for (
+    let index = 0;
+    index < previousSnapshot.activePackageIds.length;
+    index += 1
+  ) {
+    if (
+      previousSnapshot.activePackageIds[index] !==
+      nextSnapshot.activePackageIds[index]
+    ) {
       return false;
     }
   }
@@ -324,7 +351,9 @@ function createRefreshedLocalizationProgress(args: {
 }): ModLocalizationProgress {
   return {
     completedUnits:
-      args.progress?.completedUnits ?? args.progress?.totalUnits ?? args.totalUnits,
+      args.progress?.completedUnits ??
+      args.progress?.totalUnits ??
+      args.totalUnits,
     percent: args.progress?.percent ?? 100,
     scannedAt: args.scannedAt,
     state: args.progress?.state ?? "complete",
@@ -548,8 +577,9 @@ export function createRimunHostService(
       }
 
       if (
-        extractSnapshotScannedAtFromLocalizationRequestKey(localizationRequestKey) !==
-        args.scannedAt
+        extractSnapshotScannedAtFromLocalizationRequestKey(
+          localizationRequestKey,
+        ) !== args.scannedAt
       ) {
         latestLocalizations.delete(localizationRequestKey);
       }
@@ -566,8 +596,9 @@ export function createRimunHostService(
       }
 
       if (
-        extractSnapshotScannedAtFromLocalizationRequestKey(localizationRequestKey) !==
-        args.scannedAt
+        extractSnapshotScannedAtFromLocalizationRequestKey(
+          localizationRequestKey,
+        ) !== args.scannedAt
       ) {
         latestLocalizationFailures.delete(localizationRequestKey);
       }
@@ -584,8 +615,9 @@ export function createRimunHostService(
       }
 
       if (
-        extractSnapshotScannedAtFromLocalizationRequestKey(localizationRequestKey) !==
-        args.scannedAt
+        extractSnapshotScannedAtFromLocalizationRequestKey(
+          localizationRequestKey,
+        ) !== args.scannedAt
       ) {
         latestLocalizationProgress.delete(localizationRequestKey);
       }
@@ -610,11 +642,17 @@ export function createRimunHostService(
       args.selection?.workshopPath
         ? toReadablePath(args.selection.workshopPath)
         : null,
-      args.selection?.configPath ? toReadablePath(args.selection.configPath) : null,
+      args.selection?.configPath
+        ? toReadablePath(args.selection.configPath)
+        : null,
     ].filter((path): path is string => Boolean(path));
     const aboutWatchGroups = args.snapshot.entries.map((entry) =>
       createWatchGroup(
-        [entry.hasAboutXml ? join(entry.modReadablePath, "About") : entry.modReadablePath],
+        [
+          entry.hasAboutXml
+            ? join(entry.modReadablePath, "About")
+            : entry.modReadablePath,
+        ],
         () => {
           const state = snapshotWatchStates.get(args.requestKey);
 
@@ -627,15 +665,19 @@ export function createRimunHostService(
         },
       ),
     );
-    const rootWatchGroup = createWatchGroup(rootWatchPaths, () => {
-      const state = snapshotWatchStates.get(args.requestKey);
+    const rootWatchGroup = createWatchGroup(
+      rootWatchPaths,
+      () => {
+        const state = snapshotWatchStates.get(args.requestKey);
 
-      if (state) {
-        state.isDirty = true;
-      }
-    }, {
-      label: "snapshot-roots",
-    });
+        if (state) {
+          state.isDirty = true;
+        }
+      },
+      {
+        label: "snapshot-roots",
+      },
+    );
 
     const nextState: SnapshotWatchState = {
       aboutWatchGroups,
@@ -683,7 +725,8 @@ export function createRimunHostService(
     const modReadablePaths = args.previousSnapshot.entries.map(
       (entry) => entry.modReadablePath,
     );
-    const hasDirtyInputs = hasDirtyModLocalizationSessionState(modReadablePaths);
+    const hasDirtyInputs =
+      hasDirtyModLocalizationSessionState(modReadablePaths);
 
     if (hasDirtyInputs) {
       if (debugLocalizationCarryForward) {
@@ -751,7 +794,8 @@ export function createRimunHostService(
       return true;
     }
 
-    const previousRequest = localizationRequestsInFlight.get(previousRequestKey);
+    const previousRequest =
+      localizationRequestsInFlight.get(previousRequestKey);
 
     if (!previousRequest) {
       if (debugLocalizationCarryForward) {
@@ -780,10 +824,11 @@ export function createRimunHostService(
 
     const refreshedRequest = previousRequest
       .then((localizationSnapshot) => {
-        const refreshedLocalizationSnapshot = createRefreshedLocalizationSnapshot({
-          localization: localizationSnapshot,
-          scannedAt: args.refreshedSnapshot.scannedAt,
-        });
+        const refreshedLocalizationSnapshot =
+          createRefreshedLocalizationSnapshot({
+            localization: localizationSnapshot,
+            scannedAt: args.refreshedSnapshot.scannedAt,
+          });
 
         latestLocalizations.set(
           refreshedRequestKey,
@@ -1327,7 +1372,9 @@ export function createRimunHostService(
       );
 
       return rimunRpcSchemas.bun.requests.getModSourceSnapshot.response.parse(
-        await getModSourceSnapshotSingleFlight(input.profileId),
+        toPublicModSourceSnapshot(
+          await getModSourceSnapshotSingleFlight(input.profileId),
+        ),
       );
     },
     getModLocalizationSnapshot: async (

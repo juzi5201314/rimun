@@ -609,6 +609,10 @@ export class SettingsRepository {
     return this.requireCurrentProfileId();
   }
 
+  public hasAnyProfiles() {
+    return this.listProfileRows().length > 0;
+  }
+
   public close() {
     this.sqlite.close(false);
   }

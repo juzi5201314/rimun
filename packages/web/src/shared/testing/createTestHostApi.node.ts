@@ -1,6 +1,7 @@
 import enUsRaw from "@/shared/i18n/locales/en-us.toml?raw";
 import zhCnRaw from "@/shared/i18n/locales/zh-cn.toml?raw";
 import * as toml from "@iarna/toml";
+import { createManifestMetadata } from "@rimun/domain";
 import type {
   AppSettings,
   ApplyActivePackageIdsInput,
@@ -142,8 +143,20 @@ const defaultLocalizationStatus = {
   },
 };
 
+function withManifestMetadata(
+  entry: ModSourceSnapshot["entries"][number],
+): ModSourceSnapshot["entries"][number] {
+  return {
+    ...entry,
+    manifestMetadata: createManifestMetadata({
+      aboutXmlText: entry.aboutXmlText,
+      entryName: entry.entryName,
+    }),
+  };
+}
+
 const baseEntries: ModSourceSnapshot["entries"] = [
-  {
+  withManifestMetadata({
     entryName: "Core",
     source: "installation",
     modWindowsPath:
@@ -164,8 +177,8 @@ const baseEntries: ModSourceSnapshot["entries"] = [
     `,
     localizationStatus: defaultLocalizationStatus,
     notes: [],
-  },
-  {
+  }),
+  withManifestMetadata({
     entryName: "818773962",
     source: "workshop",
     modWindowsPath:
@@ -186,8 +199,8 @@ const baseEntries: ModSourceSnapshot["entries"] = [
     `,
     localizationStatus: defaultLocalizationStatus,
     notes: [],
-  },
-  {
+  }),
+  withManifestMetadata({
     entryName: "999999999",
     source: "workshop",
     modWindowsPath:
@@ -209,7 +222,7 @@ const baseEntries: ModSourceSnapshot["entries"] = [
     `,
     localizationStatus: defaultLocalizationStatus,
     notes: [],
-  },
+  }),
 ];
 
 const defaultProfiles: ModProfileSummary[] = [

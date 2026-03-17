@@ -399,6 +399,93 @@ describe("rimun host service", () => {
     }
   });
 
+  it("omits raw About.xml text from the public mod source snapshot payload", async () => {
+    const {
+      configRoot,
+      installationDataRoot,
+      installationModsRoot,
+      workshopRoot,
+    } = createSandboxLayout();
+    writeModsConfigXml(configRoot, ["example.camera"]);
+    writeAboutXml(
+      installationModsRoot,
+      "CameraPlus",
+      `
+        <ModMetaData>
+          <name>Camera+</name>
+          <packageId>example.camera</packageId>
+          <author>Tester</author>
+        </ModMetaData>
+      `,
+    );
+    process.env["RIMUN_APP_DATA_DIR"] = createRimunTempDir("rimun-app-data-");
+
+    const repository = new SettingsRepository();
+
+    try {
+      repository.saveSettings(createSelection());
+      const hostService = createRimunHostService(repository, {
+        toReadablePath: createReadablePathResolver({
+          configRoot,
+          installationDataRoot,
+          installationModsRoot,
+          workshopRoot,
+        }),
+      });
+
+      const snapshot = await hostService.getModSourceSnapshot({
+        profileId: "default",
+      });
+
+      expect(snapshot.entries).toHaveLength(1);
+      expect(snapshot.entries[0]?.aboutXmlText).toBeUndefined();
+      expect(snapshot.entries[0]?.manifestMetadata?.packageId).toBe(
+        "example.camera",
+      );
+    } finally {
+      repository.close();
+    }
+  });
+
+  it("loads the profile catalog without rereading ModsConfig once profiles exist", async () => {
+    const {
+      configRoot,
+      installationDataRoot,
+      installationModsRoot,
+      workshopRoot,
+    } = createSandboxLayout();
+    writeModsConfigXml(configRoot, ["ludeon.rimworld"]);
+    process.env["RIMUN_APP_DATA_DIR"] = createRimunTempDir("rimun-app-data-");
+
+    const repository = new SettingsRepository();
+
+    try {
+      repository.saveSettings(createSelection());
+      const initialHostService = createRimunHostService(repository, {
+        toReadablePath: createReadablePathResolver({
+          configRoot,
+          installationDataRoot,
+          installationModsRoot,
+          workshopRoot,
+        }),
+      });
+
+      await initialHostService.getProfileCatalog();
+
+      const cachedCatalogHostService = createRimunHostService(repository, {
+        toReadablePath: () => null,
+      });
+      const catalog = await cachedCatalogHostService.getProfileCatalog();
+
+      expect(catalog.currentProfileId).toBe("default");
+      expect(catalog.profiles.map((profile) => profile.id)).toContain(
+        "default",
+      );
+    } finally {
+      repository.close();
+    }
+  });
+
   it("reuses the latest snapshot when watched roots stay unchanged", async () => {
     const { configRoot } = createSandboxLayout();
     writeModsConfigXml(configRoot, ["ludeon.rimworld"]);
@@ -450,11 +537,7 @@ describe("rimun host service", () => {
           <packageId>example.translator</packageId>
         </ModMetaData>
       `;
-    writeAboutXml(
-      installationModsRoot,
-      "TranslatorMod",
-      aboutXmlText,
-    );
+    writeAboutXml(installationModsRoot, "TranslatorMod", aboutXmlText);
     writeKeyedXml(
       installationModsRoot,
       "TranslatorMod",
@@ -555,11 +638,7 @@ describe("rimun host service", () => {
           <packageId>example.translator</packageId>
         </ModMetaData>
       `;
-    writeAboutXml(
-      installationModsRoot,
-      "TranslatorMod",
-      aboutXmlText,
-    );
+    writeAboutXml(installationModsRoot, "TranslatorMod", aboutXmlText);
     writeKeyedXml(
       installationModsRoot,
       "TranslatorMod",

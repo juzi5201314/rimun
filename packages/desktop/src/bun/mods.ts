@@ -4,6 +4,7 @@ import { availableParallelism } from "node:os";
 import { join, win32 } from "node:path";
 import {
   buildModLibraryFromSnapshot,
+  createManifestMetadata,
   parseModsConfigXml,
   replaceActiveModsBlock,
 } from "@rimun/domain";
@@ -1387,9 +1388,15 @@ export async function readModSourceSnapshot(
   );
   const workerMs = performance.now() - workerStart;
   const buildStart = performance.now();
-  const entries = [...fragments].sort((left, right) =>
-    left.entryName.localeCompare(right.entryName),
-  );
+  const entries = [...fragments]
+    .sort((left, right) => left.entryName.localeCompare(right.entryName))
+    .map((entry) => ({
+      ...entry,
+      manifestMetadata: createManifestMetadata({
+        aboutXmlText: entry.aboutXmlText,
+        entryName: entry.entryName,
+      }),
+    }));
   const currentGameLanguage = await readCurrentGameLanguage({
     configPath: selection.configPath,
     toReadablePath,

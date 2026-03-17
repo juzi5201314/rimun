@@ -276,6 +276,15 @@ export const modRecordSchema = z.object({
   notes: z.array(z.string().min(1)).default([]),
 });
 
+export const modManifestMetadataSchema = z.object({
+  name: z.string().trim().min(1),
+  packageId: z.string().trim().min(1).nullable(),
+  author: z.string().trim().min(1).nullable(),
+  version: z.string().trim().min(1).nullable(),
+  description: z.string().trim().min(1).nullable(),
+  dependencyMetadata: modDependencyMetadataSchema,
+});
+
 export const modSourceSnapshotEntrySchema = z.object({
   entryName: z.string().trim().min(1),
   source: modSourceSchema,
@@ -283,7 +292,8 @@ export const modSourceSnapshotEntrySchema = z.object({
   modReadablePath: readableAbsolutePathSchema,
   manifestPath: windowsAbsolutePathSchema.nullable(),
   hasAboutXml: z.boolean(),
-  aboutXmlText: z.string().min(1).nullable(),
+  aboutXmlText: z.string().min(1).nullable().optional(),
+  manifestMetadata: modManifestMetadataSchema.optional(),
   localizationStatus: modLocalizationStatusSchema.default(
     defaultMissingLocalizationStatus,
   ),
@@ -594,6 +604,7 @@ export type ModLocalizationCoverage = z.infer<
   typeof modLocalizationCoverageSchema
 >;
 export type ModLocalizationStatus = z.infer<typeof modLocalizationStatusSchema>;
+export type ModManifestMetadata = z.infer<typeof modManifestMetadataSchema>;
 export type ModRecord = z.infer<typeof modRecordSchema>;
 export type ModSourceSnapshotEntry = z.infer<
   typeof modSourceSnapshotEntrySchema
