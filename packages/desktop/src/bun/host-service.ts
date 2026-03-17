@@ -1,4 +1,4 @@
-import { join, win32 } from "node:path";
+import { win32 } from "node:path";
 import type {
   ApplyActivePackageIdsInput,
   BootstrapPayload,
@@ -367,10 +367,23 @@ function closeSnapshotWatchState(state: SnapshotWatchState | undefined) {
   }
 
   state.rootWatchGroup?.close();
+}
 
-  for (const group of state.aboutWatchGroups) {
-    group.close();
-  }
+function formatProfileDurationMs(value: number) {
+  return `${value.toFixed(1)}ms`;
+}
+
+function logSnapshotRequestProfile(args: {
+  entryCount: number;
+  profileId: string;
+  resolveContextMs: number;
+  scanSnapshotMs: number;
+  totalMs: number;
+  watchSetupMs: number;
+}) {
+  console.log(
+    `[host-snapshot] profile=${args.profileId} entries=${args.entryCount} context=${formatProfileDurationMs(args.resolveContextMs)} scan=${formatProfileDurationMs(args.scanSnapshotMs)} watch=${formatProfileDurationMs(args.watchSetupMs)} total=${formatProfileDurationMs(args.totalMs)}`,
+  );
 }
 
 function createPendingLocalizationProgress(
@@ -423,7 +436,6 @@ type LocalizationAnalysisFailure = {
 };
 
 type SnapshotWatchState = {
-  aboutWatchGroups: WatchGroup[];
   isDirty: boolean;
   rootWatchGroup: WatchGroup | null;
 };
@@ -431,6 +443,7 @@ type SnapshotWatchState = {
 const pendingLocalizationBackgroundTimers = new Set<
   ReturnType<typeof setTimeout>
 >();
+const pendingSnapshotWatchSetupTimers = new Set<ReturnType<typeof setTimeout>>();
 
 export function createRimunHostService(
   repository: SettingsRepository,
@@ -646,13 +659,23 @@ export function createRimunHostService(
         ? toReadablePath(args.selection.configPath)
         : null,
     ].filter((path): path is string => Boolean(path));
-    const aboutWatchGroups = args.snapshot.entries.map((entry) =>
-      createWatchGroup(
-        [
-          entry.hasAboutXml
-            ? join(entry.modReadablePath, "About")
-            : entry.modReadablePath,
-        ],
+    const nextState: SnapshotWatchState = {
+      isDirty: false,
+      rootWatchGroup: null,
+    };
+
+    closeSnapshotWatchState(snapshotWatchStates.get(args.requestKey));
+    snapshotWatchStates.set(args.requestKey, nextState);
+
+    const timer = setTimeout(() => {
+      pendingSnapshotWatchSetupTimers.delete(timer);
+
+      if (snapshotWatchStates.get(args.requestKey) !== nextState) {
+        return;
+      }
+
+      const rootWatchGroup = createWatchGroup(
+        rootWatchPaths,
         () => {
           const state = snapshotWatchStates.get(args.requestKey);
 
@@ -661,34 +684,24 @@ export function createRimunHostService(
           }
         },
         {
-          label: "snapshot-about",
+          label: "snapshot-roots",
         },
-      ),
-    );
-    const rootWatchGroup = createWatchGroup(
-      rootWatchPaths,
-      () => {
-        const state = snapshotWatchStates.get(args.requestKey);
+      );
 
-        if (state) {
-          state.isDirty = true;
-        }
-      },
-      {
-        label: "snapshot-roots",
-      },
-    );
+      if (snapshotWatchStates.get(args.requestKey) !== nextState) {
+        rootWatchGroup.close();
+        return;
+      }
 
-    const nextState: SnapshotWatchState = {
-      aboutWatchGroups,
-      isDirty:
-        rootWatchGroup.hasSetupFailures ||
-        aboutWatchGroups.some((group) => group.hasSetupFailures),
-      rootWatchGroup,
+      nextState.rootWatchGroup = rootWatchGroup;
+      nextState.isDirty = rootWatchGroup.hasSetupFailures;
+    }, 0);
+    pendingSnapshotWatchSetupTimers.add(timer);
+
+    return {
+      isDirty: nextState.isDirty,
+      setupMs: 0,
     };
-
-    closeSnapshotWatchState(snapshotWatchStates.get(args.requestKey));
-    snapshotWatchStates.set(args.requestKey, nextState);
   }
 
   function resolveStoredLocalizationFailure(args: {
@@ -1097,7 +1110,10 @@ export function createRimunHostService(
   }
 
   async function getModSourceSnapshotSingleFlight(profileId: string) {
+    const requestStartedAt = performance.now();
+    const resolveContextStartedAt = requestStartedAt;
     const context = await resolveSnapshotRequestContext(profileId);
+    const resolveContextMs = performance.now() - resolveContextStartedAt;
     const existingRequest = snapshotRequestsInFlight.get(context.requestKey);
 
     if (existingRequest) {
@@ -1132,15 +1148,35 @@ export function createRimunHostService(
         });
       }
 
+      logSnapshotRequestProfile({
+        entryCount: refreshedSnapshot.entries.length,
+        profileId,
+        resolveContextMs,
+        scanSnapshotMs: 0,
+        totalMs: performance.now() - requestStartedAt,
+        watchSetupMs: 0,
+      });
+
       return refreshedSnapshot;
     }
 
-    const request = readModSourceSnapshotImpl(context.selection, {
-      activePackageIdsOverride: context.profileActivePackageIds,
-      toReadablePath,
-    })
-      .then((snapshot) => {
+    const scanSnapshotStartedAt = performance.now();
+    const request = (async () => {
+      const snapshot = await readModSourceSnapshotImpl(context.selection, {
+        activePackageIdsOverride: context.profileActivePackageIds,
+        toReadablePath,
+      });
+      const scanSnapshotMs = performance.now() - scanSnapshotStartedAt;
+
         if (!isSnapshotContextCurrent(context)) {
+          logSnapshotRequestProfile({
+            entryCount: snapshot.entries.length,
+            profileId,
+            resolveContextMs,
+            scanSnapshotMs,
+            totalMs: performance.now() - requestStartedAt,
+            watchSetupMs: 0,
+          });
           return snapshot;
         }
 
@@ -1154,7 +1190,7 @@ export function createRimunHostService(
           requestKey: context.requestKey,
           scannedAt: snapshot.scannedAt,
         });
-        updateSnapshotWatchState({
+        const watchProfile = updateSnapshotWatchState({
           requestKey: context.requestKey,
           selection: context.selection,
           snapshot,
@@ -1169,6 +1205,14 @@ export function createRimunHostService(
             refreshedSnapshot: snapshot,
           })
         ) {
+          logSnapshotRequestProfile({
+            entryCount: snapshot.entries.length,
+            profileId,
+            resolveContextMs,
+            scanSnapshotMs,
+            totalMs: performance.now() - requestStartedAt,
+            watchSetupMs: watchProfile.setupMs,
+          });
           return snapshot;
         }
 
@@ -1176,8 +1220,16 @@ export function createRimunHostService(
           context,
           snapshot,
         });
+        logSnapshotRequestProfile({
+          entryCount: snapshot.entries.length,
+          profileId,
+          resolveContextMs,
+          scanSnapshotMs,
+          totalMs: performance.now() - requestStartedAt,
+          watchSetupMs: watchProfile.setupMs,
+        });
         return snapshot;
-      })
+      })()
       .finally(() => {
         if (snapshotRequestsInFlight.get(context.requestKey) === request) {
           snapshotRequestsInFlight.delete(context.requestKey);
@@ -1537,4 +1589,10 @@ export function resetHostServiceBackgroundStateForTests() {
   }
 
   pendingLocalizationBackgroundTimers.clear();
+
+  for (const timer of pendingSnapshotWatchSetupTimers) {
+    clearTimeout(timer);
+  }
+
+  pendingSnapshotWatchSetupTimers.clear();
 }

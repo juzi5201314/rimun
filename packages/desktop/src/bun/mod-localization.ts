@@ -1000,12 +1000,14 @@ class ReusableLocalizationWorkerPool {
   }
 
   async runLocalizationChunks(args: {
+    onChunkResults?: (results: LocalizationWorkerParseResult[]) => void;
     poolSize: number;
     tasks: LocalizationWorkerParseTask[];
   }) {
     const execute = async () =>
       this.runChunksNow<LocalizationWorkerParseResult>({
         kind: "parse-localization",
+        onChunkResults: args.onChunkResults,
         poolSize: args.poolSize,
         tasks: args.tasks,
       });
@@ -1020,12 +1022,14 @@ class ReusableLocalizationWorkerPool {
   }
 
   async runDefsChunks(args: {
+    onChunkResults?: (results: DefsWorkerParseResult[]) => void;
     poolSize: number;
     tasks: DefsWorkerParseTask[];
   }) {
     const execute = async () =>
       this.runChunksNow<DefsWorkerParseResult>({
         kind: "parse-defs",
+        onChunkResults: args.onChunkResults,
         poolSize: args.poolSize,
         tasks: args.tasks,
       });
@@ -1064,6 +1068,7 @@ class ReusableLocalizationWorkerPool {
 
   private async runChunksNow<TResult>(args: {
     kind: LocalizationWorkerRequest["kind"];
+    onChunkResults?: (results: TResult[]) => void;
     poolSize: number;
     tasks: LocalizationWorkerParseTask[] | DefsWorkerParseTask[];
   }) {
@@ -1166,6 +1171,7 @@ class ReusableLocalizationWorkerPool {
           }
 
           results[response.chunkId] = response.results as TResult[];
+          args.onChunkResults?.(response.results as TResult[]);
           completedChunks += 1;
           assignNextChunk(worker);
           resolveIfDone();
@@ -1643,6 +1649,7 @@ function shouldUseDefsWorkers(misses: PreparedDefsBaselineMiss[]) {
 
 async function parseLocalizationMissesWithWorkers(args: {
   misses: PreparedDescriptorMiss[];
+  onChunkResults?: (results: LocalizationWorkerParseResult[]) => void;
   runtime: AnalysisRuntime;
 }) {
   const workerTasks = args.misses.map((miss) => ({
@@ -1656,6 +1663,7 @@ async function parseLocalizationMissesWithWorkers(args: {
   })) satisfies LocalizationWorkerParseTask[];
 
   return reusableLocalizationWorkerPool.runLocalizationChunks({
+    onChunkResults: args.onChunkResults,
     poolSize: args.runtime.workerPoolSize,
     tasks: workerTasks,
   });
@@ -1663,6 +1671,7 @@ async function parseLocalizationMissesWithWorkers(args: {
 
 async function parseDefsMissesWithWorkers(args: {
   misses: PreparedDefsBaselineMiss[];
+  onChunkResults?: (results: DefsWorkerParseResult[]) => void;
   runtime: AnalysisRuntime;
 }) {
   const workerTasks = args.misses.map((miss) => ({
@@ -1671,6 +1680,7 @@ async function parseDefsMissesWithWorkers(args: {
   })) satisfies DefsWorkerParseTask[];
 
   return reusableLocalizationWorkerPool.runDefsChunks({
+    onChunkResults: args.onChunkResults,
     poolSize: args.runtime.workerPoolSize,
     tasks: workerTasks,
   });
@@ -2492,51 +2502,62 @@ async function buildDescriptors(args: {
   const missesByIndex = new Map(
     misses.map((miss) => [miss.index, miss] satisfies [number, PreparedDescriptorMiss]),
   );
+  const resolveWorkerDescriptorResult = (
+    result: LocalizationWorkerParseResult,
+  ) => {
+    const index = Number.parseInt(result.taskId, 10);
+    const miss = missesByIndex.get(index);
+
+    if (!miss) {
+      return null;
+    }
+
+    const baselineEntries = internTranslationEntrySets({
+      defInjected: new Set(result.baseline.defInjected),
+      keyed: new Set(result.baseline.keyed),
+      strings: new Set(result.baseline.strings),
+    });
+    const currentEntries =
+      result.current === null
+        ? cloneTranslationEntryVectors(baselineEntries)
+        : internTranslationEntrySets({
+            defInjected: new Set(result.current.defInjected),
+            keyed: new Set(result.current.keyed),
+            strings: new Set(result.current.strings),
+          });
+
+    descriptors[index] = buildDescriptorFromParsedArtifacts({
+      baselineEntries,
+      cacheKey: miss.cacheKey,
+      currentEntries,
+      entry: miss.entry,
+      fingerprint: miss.languageInventory.fingerprint,
+      hasAnyLanguagesRoot: miss.languageInventory.hasAnyLanguagesRoot,
+      matchedFolderName: miss.languageInventory.matchedFolderName,
+      metadata: miss.metadata,
+      relativeRoots: miss.relativeRoots,
+      sessionState: miss.sessionState,
+    });
+
+    return index;
+  };
 
   try {
     if (shouldUseLocalizationWorkers(misses)) {
-      const workerResults = await parseLocalizationMissesWithWorkers({
+      await parseLocalizationMissesWithWorkers({
         misses,
+        onChunkResults: (results) => {
+          const resolvedIndices = results.flatMap((result) => {
+            const resolvedIndex = resolveWorkerDescriptorResult(result);
+            return resolvedIndex === null ? [] : [resolvedIndex];
+          });
+
+          if (resolvedIndices.length > 0) {
+            args.onDescriptorIndicesResolved?.(resolvedIndices);
+          }
+        },
         runtime: args.runtime,
       });
-
-      for (const result of workerResults) {
-        const index = Number.parseInt(result.taskId, 10);
-        const miss = missesByIndex.get(index);
-
-        if (!miss) {
-          continue;
-        }
-
-        const baselineEntries = internTranslationEntrySets({
-          defInjected: new Set(result.baseline.defInjected),
-          keyed: new Set(result.baseline.keyed),
-          strings: new Set(result.baseline.strings),
-        });
-        const currentEntries =
-          result.current === null
-            ? cloneTranslationEntryVectors(baselineEntries)
-            : internTranslationEntrySets({
-                defInjected: new Set(result.current.defInjected),
-                keyed: new Set(result.current.keyed),
-                strings: new Set(result.current.strings),
-              });
-
-        descriptors[index] = buildDescriptorFromParsedArtifacts({
-          baselineEntries,
-          cacheKey: miss.cacheKey,
-          currentEntries,
-          entry: miss.entry,
-          fingerprint: miss.languageInventory.fingerprint,
-          hasAnyLanguagesRoot: miss.languageInventory.hasAnyLanguagesRoot,
-          matchedFolderName: miss.languageInventory.matchedFolderName,
-          metadata: miss.metadata,
-          relativeRoots: miss.relativeRoots,
-          sessionState: miss.sessionState,
-        });
-      }
-
-      args.onDescriptorIndicesResolved?.(misses.map((miss) => miss.index));
       return descriptors.map((descriptor, index) => {
         if (!descriptor) {
           throw new Error(`Expected localization descriptor at index ${index}.`);
@@ -2579,12 +2600,11 @@ async function buildDescriptors(args: {
             relativeRoots: miss.relativeRoots,
             sessionState: miss.sessionState,
           });
+          args.onDescriptorIndicesResolved?.([miss.index]);
         }),
       ),
     );
   }
-
-  args.onDescriptorIndicesResolved?.(misses.map((miss) => miss.index));
   return descriptors.map((descriptor, index) => {
     if (!descriptor) {
       throw new Error(`Expected localization descriptor at index ${index}.`);

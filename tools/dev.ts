@@ -1,12 +1,10 @@
 import { setTimeout as sleep } from "node:timers/promises";
+import { resolveAvailableDevServerConfig } from "./dev-server";
 import { createToolEnv } from "./env";
 
 const ROOT_DIR = new URL("..", import.meta.url);
 const WEB_DIR = new URL("../packages/web", import.meta.url);
 const DESKTOP_DIR = new URL("../packages/desktop", import.meta.url);
-const WEB_PORT = process.env["RIMUN_WEB_PORT"] ?? "5173";
-const DEV_SERVER_URL =
-  process.env["RIMUN_DEV_SERVER_URL"] ?? `http://127.0.0.1:${WEB_PORT}`;
 
 type Child = ReturnType<typeof Bun.spawn>;
 
@@ -45,6 +43,9 @@ async function waitForHttpReady(url: string, timeoutMs: number) {
 }
 
 async function main() {
+  const devServer = await resolveAvailableDevServerConfig(process.env);
+  const webPort = String(devServer.port);
+  const devServerUrl = devServer.origin;
   const webProcess = spawnLoggedProcess(
     WEB_DIR,
     [
@@ -55,10 +56,13 @@ async function main() {
       "--host",
       "127.0.0.1",
       "--port",
-      WEB_PORT,
+      webPort,
       "--strictPort",
     ],
-    createToolEnv({}),
+    createToolEnv({
+      RIMUN_WEB_PORT: webPort,
+      RIMUN_DEV_SERVER_URL: devServerUrl,
+    }),
   );
   let desktopProcess: Child | null = null;
 
@@ -70,13 +74,14 @@ async function main() {
   process.on("SIGINT", stopChildren);
   process.on("SIGTERM", stopChildren);
 
-  await waitForHttpReady(DEV_SERVER_URL, 30_000);
+  await waitForHttpReady(devServerUrl, 30_000);
 
   desktopProcess = spawnLoggedProcess(
     DESKTOP_DIR,
     ["bun", "run", "dev"],
     createToolEnv({
-      RIMUN_DEV_SERVER_URL: DEV_SERVER_URL,
+      RIMUN_WEB_PORT: webPort,
+      RIMUN_DEV_SERVER_URL: devServerUrl,
       RIMUN_DEV_WORKSPACE_ROOT: Bun.fileURLToPath(ROOT_DIR),
     }),
   );

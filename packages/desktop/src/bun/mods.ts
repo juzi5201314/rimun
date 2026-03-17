@@ -4,7 +4,6 @@ import { availableParallelism } from "node:os";
 import { join, win32 } from "node:path";
 import {
   buildModLibraryFromSnapshot,
-  createManifestMetadata,
   parseModsConfigXml,
   replaceActiveModsBlock,
 } from "@rimun/domain";
@@ -62,6 +61,7 @@ type ScanChunkResponse = {
 };
 
 type WorkerScanMetrics = {
+  cacheMode: "cold-empty-skip" | "warm-lookup";
   cacheHitCount: number;
   cacheLookupMs: number;
   cacheMissCount: number;
@@ -113,6 +113,7 @@ const DEFAULT_LOCALIZATION_STATUS = {
 
 type ModScanProfile = {
   buildResultMs: number;
+  cacheMode: "cold-empty-skip" | "warm-lookup";
   cacheHitCount: number;
   cacheLookupMs: number;
   cacheMissCount: number;
@@ -133,6 +134,7 @@ type AboutXmlCacheEntry = {
 
 type CachedScanResolution = {
   cachedFragments: ScannedModFragment[];
+  cacheMode: "cold-empty-skip" | "warm-lookup";
   metrics: Pick<
     WorkerScanMetrics,
     "cacheHitCount" | "cacheLookupMs" | "cacheMissCount"
@@ -415,6 +417,278 @@ function createAboutXmlCacheKey(args: { mtimeMs: number; size: number }) {
   return `${args.mtimeMs}:${args.size}`;
 }
 
+function decodeXmlEntities(value: string) {
+  return value
+    .replaceAll("&lt;", "<")
+    .replaceAll("&gt;", ">")
+    .replaceAll("&quot;", '"')
+    .replaceAll("&apos;", "'")
+    .replaceAll("&amp;", "&");
+}
+
+function stripXmlControlCharacters(value: string, replacement: "" | " ") {
+  let normalized = "";
+
+  for (const character of value) {
+    const codePoint = character.codePointAt(0) ?? 0;
+    const isNullCharacter = codePoint === 0;
+    const isBlockedControlCharacter =
+      (codePoint >= 0x01 && codePoint <= 0x08) ||
+      codePoint === 0x0b ||
+      codePoint === 0x0c ||
+      (codePoint >= 0x0e && codePoint <= 0x1f);
+
+    if (isNullCharacter || isBlockedControlCharacter) {
+      normalized += replacement;
+      continue;
+    }
+
+    normalized += character;
+  }
+
+  return normalized;
+}
+
+function normalizeText(value: string) {
+  return stripXmlControlCharacters(
+    decodeXmlEntities(value.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")),
+    " ",
+  )
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function normalizeMultilineText(value: string) {
+  return stripXmlControlCharacters(
+    decodeXmlEntities(value.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")),
+    "",
+  )
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/p>/gi, "\n\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/\r\n/g, "\n")
+    .split("\n")
+    .map((line) => line.trimEnd())
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function normalizePackageId(value: string | null) {
+  return value?.trim().toLowerCase() ?? null;
+}
+
+function getRootInnerXml(xml: string, rootTagName: string) {
+  const match = new RegExp(
+    `<${rootTagName}\\b[^>]*>([\\s\\S]*?)</${rootTagName}>`,
+    "i",
+  ).exec(xml);
+
+  return match?.[1] ?? xml;
+}
+
+function extractDirectChildTagBlocks(
+  xml: string,
+  tagName: string,
+  rootTagName = "ModMetaData",
+) {
+  const rootInnerXml = getRootInnerXml(xml, rootTagName);
+  const tagPattern =
+    /<!--[\s\S]*?-->|<!\[CDATA\[[\s\S]*?\]\]>|<\?[\s\S]*?\?>|<\/?([A-Za-z0-9:_-]+)\b[^>]*\/?>/g;
+  const blocks: string[] = [];
+  const stack: string[] = [];
+  let captureStart: number | null = null;
+
+  for (const match of rootInnerXml.matchAll(tagPattern)) {
+    const fullTag = match[0] ?? "";
+    const matchedTagName = match[1];
+
+    if (!matchedTagName) {
+      continue;
+    }
+
+    const normalizedTagName = matchedTagName.toLowerCase();
+    const targetTagName = tagName.toLowerCase();
+    const isClosingTag = fullTag.startsWith("</");
+    const isSelfClosingTag = !isClosingTag && fullTag.endsWith("/>");
+
+    if (!isClosingTag) {
+      if (stack.length === 0 && normalizedTagName === targetTagName) {
+        if (isSelfClosingTag) {
+          blocks.push("");
+          continue;
+        }
+
+        captureStart = (match.index ?? 0) + fullTag.length;
+      }
+
+      if (!isSelfClosingTag) {
+        stack.push(normalizedTagName);
+      }
+
+      continue;
+    }
+
+    const closedTagName = stack.pop();
+
+    if (
+      closedTagName === targetTagName &&
+      stack.length === 0 &&
+      captureStart !== null
+    ) {
+      blocks.push(rootInnerXml.slice(captureStart, match.index ?? 0));
+      captureStart = null;
+    }
+  }
+
+  return blocks;
+}
+
+function extractDependencyPackageIds(xml: string) {
+  const dependencyXml = extractDirectChildTagBlocks(xml, "modDependencies").at(
+    0,
+  );
+
+  if (!dependencyXml) {
+    return [];
+  }
+
+  return [...dependencyXml.matchAll(/<li>([\s\S]*?)<\/li>/gi)]
+    .map((entry) => {
+      const dependencyItemXml = entry[1] ?? "";
+      const nestedPackageId = extractAboutTagText(dependencyItemXml, "packageId");
+
+      return normalizePackageId(
+        nestedPackageId ?? normalizeText(dependencyItemXml),
+      );
+    })
+    .filter((value): value is string => Boolean(value));
+}
+
+function extractAboutTagText(xml: string, tagName: string) {
+  const block = extractDirectChildTagBlocks(xml, tagName).at(0);
+  return block ? normalizeText(block) || null : null;
+}
+
+function extractAboutTagMultilineText(xml: string, tagName: string) {
+  const block = extractDirectChildTagBlocks(xml, tagName).at(0);
+  return block ? normalizeMultilineText(block) || null : null;
+}
+
+function extractAboutTagList(xml: string, tagName: string) {
+  const block = extractDirectChildTagBlocks(xml, tagName).at(0);
+
+  if (!block) {
+    return [];
+  }
+
+  return [...block.matchAll(/<li>([\s\S]*?)<\/li>/gi)]
+    .map((entry) => normalizeText(entry[1] ?? ""))
+    .filter(Boolean);
+}
+
+function mergeSupportedVersions(
+  targetVersion: string | null,
+  listedSupportedVersions: string[],
+) {
+  const mergedVersions: string[] = [];
+  const seen = new Set<string>();
+
+  const pushVersion = (value: string | null) => {
+    if (!value || seen.has(value)) {
+      return;
+    }
+
+    seen.add(value);
+    mergedVersions.push(value);
+  };
+
+  pushVersion(targetVersion);
+
+  for (const version of listedSupportedVersions) {
+    pushVersion(version);
+  }
+
+  return mergedVersions;
+}
+
+function parseAboutXmlMetadata(xml: string) {
+  const authors = extractAboutTagList(xml, "authors");
+  const authorText = extractAboutTagText(xml, "author");
+  const targetVersion = extractAboutTagText(xml, "targetVersion");
+  const supportedVersions = mergeSupportedVersions(
+    targetVersion,
+    extractAboutTagList(xml, "supportedVersions"),
+  );
+  const packageId = extractAboutTagText(xml, "packageId");
+
+  return {
+    name: extractAboutTagText(xml, "name"),
+    packageId,
+    author:
+      authors.length > 0
+        ? authors.join(", ")
+        : authorText
+          ? normalizeText(authorText)
+          : null,
+    version: extractAboutTagText(xml, "modVersion") ?? null,
+    description: extractAboutTagMultilineText(xml, "description"),
+    dependencyMetadata: {
+      packageIdNormalized: normalizePackageId(packageId),
+      dependencies: extractDependencyPackageIds(xml),
+      loadAfter: extractAboutTagList(xml, "loadAfter").map((value) =>
+        value.toLowerCase(),
+      ),
+      loadBefore: extractAboutTagList(xml, "loadBefore").map((value) =>
+        value.toLowerCase(),
+      ),
+      forceLoadAfter: extractAboutTagList(xml, "forceLoadAfter").map((value) =>
+        value.toLowerCase(),
+      ),
+      forceLoadBefore: extractAboutTagList(xml, "forceLoadBefore").map(
+        (value) => value.toLowerCase(),
+      ),
+      incompatibleWith: extractAboutTagList(xml, "incompatibleWith").map(
+        (value) => value.toLowerCase(),
+      ),
+      supportedVersions,
+    },
+  };
+}
+
+function createEmptyDependencyMetadata() {
+  return {
+    packageIdNormalized: null,
+    dependencies: [] as string[],
+    loadAfter: [] as string[],
+    loadBefore: [] as string[],
+    forceLoadAfter: [] as string[],
+    forceLoadBefore: [] as string[],
+    incompatibleWith: [] as string[],
+    supportedVersions: [] as string[],
+  };
+}
+
+function createManifestMetadataFromAboutXml(args: {
+  aboutXmlText: string | null | undefined;
+  entryName: string;
+}) {
+  const parsedAbout = args.aboutXmlText
+    ? parseAboutXmlMetadata(args.aboutXmlText)
+    : null;
+
+  return {
+    name: parsedAbout?.name ?? args.entryName,
+    packageId: parsedAbout?.packageId ?? null,
+    author: parsedAbout?.author ?? null,
+    version: parsedAbout?.version ?? null,
+    description: parsedAbout?.description ?? null,
+    dependencyMetadata:
+      parsedAbout?.dependencyMetadata ?? createEmptyDependencyMetadata(),
+  };
+}
+
 function createMissingAboutFragment(task: WorkerScanTask): ScannedModFragment {
   return {
     aboutCacheKey: task.aboutCacheKey,
@@ -424,6 +698,10 @@ function createMissingAboutFragment(task: WorkerScanTask): ScannedModFragment {
     manifestPath: null,
     aboutXmlText: null,
     localizationStatus: DEFAULT_LOCALIZATION_STATUS,
+    manifestMetadata: createManifestMetadataFromAboutXml({
+      aboutXmlText: null,
+      entryName: task.entryName,
+    }),
     modReadablePath: task.modReadablePath,
     modWindowsPath: task.modWindowsPath,
     notes: ["About/About.xml was not found."],
@@ -437,7 +715,7 @@ function getWorkerPoolSize(environment: ExecutionEnvironment) {
 
   return Math.max(
     2,
-    Math.min(MAX_MOD_SCAN_WORKERS, Math.ceil(availableParallelism() / 2)),
+    Math.min(MAX_MOD_SCAN_WORKERS, Math.ceil(availableParallelism() * 0.6)),
   );
 }
 
@@ -504,7 +782,7 @@ function logModScanProfile(args: {
     `[mod-scan] config=${formatDurationMs(profile.configMs)} roots=${formatDurationMs(profile.rootEnumMs)} workers=${formatDurationMs(profile.workerMs)} build=${formatDurationMs(profile.buildResultMs)}`,
   );
   console.log(
-    `[mod-scan-cache] lookup=${formatDurationMs(profile.cacheLookupMs)} hits=${profile.cacheHitCount} misses=${profile.cacheMissCount}`,
+    `[mod-scan-cache] mode=${profile.cacheMode} lookup=${formatDurationMs(profile.cacheLookupMs)} hits=${profile.cacheHitCount} misses=${profile.cacheMissCount}`,
   );
   console.log(
     `[mod-scan-worker] startup=${formatDurationMs(profile.workerStartupMs)} read=${formatDurationMs(profile.workerReadMs)} parse=${formatDurationMs(profile.workerParseMs)} overhead=${formatDurationMs(profile.workerOverheadMs)}`,
@@ -520,16 +798,27 @@ async function scanModTask(task: ScanTask | WorkerScanTask) {
     "aboutWindowsPath" in task
       ? task.aboutWindowsPath
       : win32.join(task.modWindowsPath, "About", "About.xml");
-  const aboutCacheKey = "aboutCacheKey" in task ? task.aboutCacheKey : null;
+  const aboutFile = Bun.file(aboutReadablePath);
 
   try {
-    const aboutXmlText = await readXmlFile(aboutReadablePath);
+    const aboutXmlText = decodeXmlFileContent(await aboutFile.bytes());
+    const aboutCacheKey =
+      "aboutCacheKey" in task && task.aboutCacheKey
+        ? task.aboutCacheKey
+        : createAboutXmlCacheKey({
+            mtimeMs: aboutFile.lastModified,
+            size: aboutFile.size,
+          });
 
     return {
       aboutCacheKey,
       aboutReadablePath,
       entryName: task.entryName,
       hasAboutXml: true,
+      manifestMetadata: createManifestMetadataFromAboutXml({
+        aboutXmlText,
+        entryName: task.entryName,
+      }),
       manifestPath: aboutWindowsPath,
       aboutXmlText,
       localizationStatus: DEFAULT_LOCALIZATION_STATUS,
@@ -539,12 +828,18 @@ async function scanModTask(task: ScanTask | WorkerScanTask) {
       source: task.source,
     } satisfies ScannedModFragment;
   } catch (error) {
+    const aboutCacheKey = "aboutCacheKey" in task ? task.aboutCacheKey : null;
+
     if (isMissingFileError(error)) {
       return {
-        aboutCacheKey,
+        aboutCacheKey: aboutCacheKey ?? "missing",
         aboutReadablePath,
         entryName: task.entryName,
         hasAboutXml: false,
+        manifestMetadata: createManifestMetadataFromAboutXml({
+          aboutXmlText: null,
+          entryName: task.entryName,
+        }),
         manifestPath: null,
         aboutXmlText: null,
         localizationStatus: DEFAULT_LOCALIZATION_STATUS,
@@ -560,6 +855,10 @@ async function scanModTask(task: ScanTask | WorkerScanTask) {
       aboutReadablePath,
       entryName: task.entryName,
       hasAboutXml: true,
+      manifestMetadata: createManifestMetadataFromAboutXml({
+        aboutXmlText: null,
+        entryName: task.entryName,
+      }),
       manifestPath: aboutWindowsPath,
       aboutXmlText: null,
       localizationStatus: DEFAULT_LOCALIZATION_STATUS,
@@ -579,6 +878,26 @@ async function resolveCachedScanFragments(
   tasks: ScanTask[],
   environment: ExecutionEnvironment,
 ): Promise<CachedScanResolution> {
+  if (aboutXmlCache.size === 0) {
+    modScanPerfStats.aboutCacheMisses += tasks.length;
+
+    return {
+      cachedFragments: [],
+      cacheMode: "cold-empty-skip",
+      metrics: {
+        cacheHitCount: 0,
+        cacheLookupMs: 0,
+        cacheMissCount: tasks.length,
+      },
+      workerTasks: tasks.map((task) => ({
+        ...task,
+        aboutCacheKey: null,
+        aboutReadablePath: join(task.modReadablePath, "About", "About.xml"),
+        aboutWindowsPath: win32.join(task.modWindowsPath, "About", "About.xml"),
+      })),
+    };
+  }
+
   const lookupStart = performance.now();
   const lookupConcurrency = Math.min(
     getAboutXmlCacheLookupConcurrency(environment),
@@ -697,6 +1016,7 @@ async function resolveCachedScanFragments(
 
   return {
     cachedFragments,
+    cacheMode: "warm-lookup",
     metrics: {
       cacheHitCount,
       cacheLookupMs: performance.now() - lookupStart,
@@ -711,7 +1031,7 @@ function updateAboutXmlCache(fragments: ScannedModFragment[]) {
     if (
       !fragment.aboutReadablePath ||
       !fragment.aboutCacheKey ||
-      fragment.aboutXmlText === null
+      (fragment.aboutXmlText === null && fragment.aboutCacheKey !== "missing")
     ) {
       continue;
     }
@@ -859,6 +1179,21 @@ function buildWorkerSource() {
     ${decodeUtf16Le.toString()}
     ${decodeUtf16Be.toString()}
     ${decodeXmlFileContent.toString()}
+    ${createAboutXmlCacheKey.toString()}
+    ${decodeXmlEntities.toString()}
+    ${stripXmlControlCharacters.toString()}
+    ${normalizeText.toString()}
+    ${normalizeMultilineText.toString()}
+    ${normalizePackageId.toString()}
+    ${getRootInnerXml.toString()}
+    ${extractDirectChildTagBlocks.toString()}
+    ${extractDependencyPackageIds.toString()}
+    ${extractAboutTagText.toString()}
+    ${extractAboutTagMultilineText.toString()}
+    ${extractAboutTagList.toString()}
+    ${mergeSupportedVersions.toString()}
+    ${parseAboutXmlMetadata.toString()}
+    ${createEmptyDependencyMetadata.toString()}
     ${toErrorMessage.toString()}
 
     function isNodeErrorWithCode(error) {
@@ -871,6 +1206,8 @@ function buildWorkerSource() {
 
     const DEFAULT_LOCALIZATION_STATUS = ${JSON.stringify(DEFAULT_LOCALIZATION_STATUS)};
 
+    ${createManifestMetadataFromAboutXml.toString()}
+
     async function readXmlFile(filePath) {
       return decodeXmlFileContent(await Bun.file(filePath).bytes());
     }
@@ -878,41 +1215,61 @@ function buildWorkerSource() {
     async function scanTask(task) {
       const aboutReadablePath = task.aboutReadablePath ?? join(task.modReadablePath, "About", "About.xml");
       const aboutWindowsPath = task.aboutWindowsPath ?? win32.join(task.modWindowsPath, "About", "About.xml");
+      const aboutFile = Bun.file(aboutReadablePath);
       const readStart = performance.now();
 
       try {
-        const aboutXmlText = await readXmlFile(aboutReadablePath);
+        const aboutXmlText = decodeXmlFileContent(await aboutFile.bytes());
         const readMs = performance.now() - readStart;
+        const parseStart = performance.now();
+        const manifestMetadata = createManifestMetadataFromAboutXml({
+          aboutXmlText,
+          entryName: task.entryName,
+        });
+        const parseMs = performance.now() - parseStart;
 
         return {
-          aboutCacheKey: task.aboutCacheKey ?? null,
+          aboutCacheKey: task.aboutCacheKey ?? createAboutXmlCacheKey({
+            mtimeMs: aboutFile.lastModified,
+            size: aboutFile.size,
+          }),
           aboutReadablePath,
           entryName: task.entryName,
           hasAboutXml: true,
+          manifestMetadata,
           manifestPath: aboutWindowsPath,
           aboutXmlText,
           localizationStatus: DEFAULT_LOCALIZATION_STATUS,
           modReadablePath: task.modReadablePath,
           modWindowsPath: task.modWindowsPath,
           notes: [],
+          parseMs,
           readMs,
           source: task.source,
         };
       } catch (error) {
         const readMs = performance.now() - readStart;
+        const parseStart = performance.now();
+        const manifestMetadata = createManifestMetadataFromAboutXml({
+          aboutXmlText: null,
+          entryName: task.entryName,
+        });
+        const parseMs = performance.now() - parseStart;
 
         if (isMissingFileError(error)) {
           return {
-            aboutCacheKey: task.aboutCacheKey ?? null,
+            aboutCacheKey: task.aboutCacheKey ?? "missing",
             aboutReadablePath,
             entryName: task.entryName,
             hasAboutXml: false,
+            manifestMetadata,
             manifestPath: null,
             aboutXmlText: null,
             localizationStatus: DEFAULT_LOCALIZATION_STATUS,
             modReadablePath: task.modReadablePath,
             modWindowsPath: task.modWindowsPath,
             notes: ["About/About.xml was not found."],
+            parseMs,
             readMs,
             source: task.source,
           };
@@ -923,12 +1280,14 @@ function buildWorkerSource() {
           aboutReadablePath,
           entryName: task.entryName,
           hasAboutXml: true,
+          manifestMetadata,
           manifestPath: aboutWindowsPath,
           aboutXmlText: null,
           localizationStatus: DEFAULT_LOCALIZATION_STATUS,
           modReadablePath: task.modReadablePath,
           modWindowsPath: task.modWindowsPath,
           notes: [\`About/About.xml could not be read: \${toErrorMessage(error)}\`],
+          parseMs,
           readMs,
           source: task.source,
         };
@@ -941,10 +1300,13 @@ function buildWorkerSource() {
       try {
         const fragments = [];
         let readMs = 0;
+        let parseMs = 0;
 
         for (const task of request.tasks) {
           const fragment = await scanTask(task);
+          parseMs += fragment.parseMs;
           readMs += fragment.readMs;
+          delete fragment.parseMs;
           delete fragment.readMs;
           fragments.push(fragment);
         }
@@ -954,7 +1316,7 @@ function buildWorkerSource() {
           error: null,
           fragments,
           metrics: {
-            parseMs: 0,
+            parseMs,
             readMs,
           },
         });
@@ -1039,6 +1401,7 @@ class ReusableModScanWorkerPool {
       return {
         fragments: [],
         metrics: {
+          cacheMode: "warm-lookup" as const,
           cacheHitCount: 0,
           cacheLookupMs: 0,
           cacheMissCount: 0,
@@ -1088,6 +1451,7 @@ class ReusableModScanWorkerPool {
         resolve({
           fragments: results.flat(),
           metrics: {
+            cacheMode: "warm-lookup" as const,
             cacheHitCount: 0,
             cacheLookupMs: 0,
             cacheMissCount: 0,
@@ -1186,6 +1550,7 @@ async function runWorkerChunksWithPool(
     return {
       fragments: [],
       metrics: {
+        cacheMode: "warm-lookup" as const,
         cacheHitCount: 0,
         cacheLookupMs: 0,
         cacheMissCount: 0,
@@ -1215,6 +1580,7 @@ async function scanModFragments(
     return {
       fragments: [],
       metrics: {
+        cacheMode: "warm-lookup" as const,
         cacheHitCount: 0,
         cacheLookupMs: 0,
         cacheMissCount: 0,
@@ -1227,6 +1593,7 @@ async function scanModFragments(
 
   const {
     cachedFragments,
+    cacheMode,
     metrics: cacheMetrics,
     workerTasks,
   } = await resolveCachedScanFragments(tasks, environment);
@@ -1237,13 +1604,15 @@ async function scanModFragments(
       chunks,
       getWorkerPoolSize(environment),
     );
+    const { cacheMode: _workerCacheMode, ...workerMetrics } = metrics;
 
     updateAboutXmlCache(workerFragments);
 
     return {
       fragments: [...cachedFragments, ...workerFragments],
       metrics: {
-        ...metrics,
+        ...workerMetrics,
+        cacheMode,
         cacheHitCount: cacheMetrics.cacheHitCount,
         cacheLookupMs: cacheMetrics.cacheLookupMs,
         cacheMissCount: cacheMetrics.cacheMissCount,
@@ -1265,6 +1634,7 @@ async function scanModFragments(
     return {
       fragments: [...cachedFragments, ...workerFragments],
       metrics: {
+        cacheMode,
         cacheHitCount: cacheMetrics.cacheHitCount,
         cacheLookupMs: cacheMetrics.cacheLookupMs,
         cacheMissCount: cacheMetrics.cacheMissCount,
@@ -1388,15 +1758,9 @@ export async function readModSourceSnapshot(
   );
   const workerMs = performance.now() - workerStart;
   const buildStart = performance.now();
-  const entries = [...fragments]
-    .sort((left, right) => left.entryName.localeCompare(right.entryName))
-    .map((entry) => ({
-      ...entry,
-      manifestMetadata: createManifestMetadata({
-        aboutXmlText: entry.aboutXmlText,
-        entryName: entry.entryName,
-      }),
-    }));
+  const entries = [...fragments].sort((left, right) =>
+    left.entryName.localeCompare(right.entryName),
+  );
   const currentGameLanguage = await readCurrentGameLanguage({
     configPath: selection.configPath,
     toReadablePath,
@@ -1415,6 +1779,7 @@ export async function readModSourceSnapshot(
     poolSize,
     profile: {
       buildResultMs,
+      cacheMode: metrics.cacheMode,
       cacheHitCount: metrics.cacheHitCount,
       cacheLookupMs: metrics.cacheLookupMs,
       cacheMissCount: metrics.cacheMissCount,

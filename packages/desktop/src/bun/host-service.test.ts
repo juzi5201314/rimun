@@ -28,6 +28,7 @@ import {
   readModSourceSnapshot,
 } from "./mods";
 import { SettingsRepository } from "./persistence";
+import { getWatchGroupPerfStatsForTests } from "./watch-group";
 
 function createSandboxLayout() {
   const sandboxRoot = createRimunTempDir("rimun-host-service-");
@@ -447,6 +448,77 @@ describe("rimun host service", () => {
     }
   });
 
+  it("installs only root snapshot watchers regardless of mod count", async () => {
+    const { configRoot, installationDataRoot, installationModsRoot } =
+      createSandboxLayout();
+
+    for (let index = 0; index < 12; index += 1) {
+      writeAboutXml(
+        installationModsRoot,
+        `PerfMod${index}`,
+        `
+          <ModMetaData>
+            <name>PerfMod${index}</name>
+            <packageId>example.perf${index}</packageId>
+          </ModMetaData>
+        `,
+      );
+    }
+
+    writeAboutXml(
+      installationDataRoot,
+      "Core",
+      `
+        <ModMetaData>
+          <name>Core</name>
+          <packageId>ludeon.rimworld</packageId>
+        </ModMetaData>
+      `,
+    );
+    writeModsConfigXml(configRoot, ["ludeon.rimworld"]);
+    process.env["RIMUN_APP_DATA_DIR"] = createRimunTempDir("rimun-app-data-");
+
+    const repository = new SettingsRepository();
+
+    try {
+      repository.saveSettings(
+        createSelection({
+          workshopPath: null,
+        }),
+      );
+      const hostService = createRimunHostService(repository, {
+        toReadablePath: createReadablePathResolver({
+          configRoot,
+          installationDataRoot,
+          installationModsRoot,
+        }),
+      });
+
+      const snapshot = await hostService.getModSourceSnapshot({
+        profileId: "default",
+      });
+
+      expect(snapshot.entries).toHaveLength(13);
+      await Bun.sleep(50);
+
+      const watchStats = getWatchGroupPerfStatsForTests();
+      const snapshotAboutStats = watchStats.find(
+        (stats) => stats.label === "snapshot-about",
+      );
+      const snapshotRootStats = watchStats.find(
+        (stats) => stats.label === "snapshot-roots",
+      );
+
+      expect(snapshotAboutStats).toBeUndefined();
+      expect(snapshotRootStats?.groups ?? 0).toBeLessThanOrEqual(1);
+      expect(snapshotRootStats?.pathCount ?? 0).toBeLessThanOrEqual(2);
+
+      resetHostServiceBackgroundStateForTests();
+    } finally {
+      repository.close();
+    }
+  });
+
   it("loads the profile catalog without rereading ModsConfig once profiles exist", async () => {
     const {
       configRoot,
@@ -585,27 +657,11 @@ describe("rimun host service", () => {
         snapshotScannedAt: firstSnapshot.scannedAt,
       });
       const firstStats = getModLocalizationPerfStatsForTests();
-      writeAboutXml(installationModsRoot, "TranslatorMod", aboutXmlText);
-      let secondSnapshot: ModSourceSnapshot | null = null;
+      await hostService.saveSettings(createSelection({ workshopPath: null }));
 
-      await waitForCondition(async () => {
-        const nextSnapshot = await hostService.getModSourceSnapshot({
-          profileId: "default",
-        });
-
-        if (snapshotReads < 2) {
-          return false;
-        }
-
-        secondSnapshot = nextSnapshot;
-        return true;
+      const refreshedSnapshot = await hostService.getModSourceSnapshot({
+        profileId: "default",
       });
-
-      if (secondSnapshot === null) {
-        throw new Error("Expected the refreshed snapshot to be captured.");
-      }
-
-      const refreshedSnapshot: ModSourceSnapshot = secondSnapshot;
 
       const secondLocalization = await hostService.getModLocalizationSnapshot({
         profileId: "default",

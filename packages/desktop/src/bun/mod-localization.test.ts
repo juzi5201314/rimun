@@ -98,6 +98,28 @@ function writeKeyedXml(
   );
 }
 
+function writeRepeatedKeyedXmlFiles(args: {
+  fileCount: number;
+  folderName: string;
+  languageFolderName: string;
+  modsRoot: string;
+}) {
+  for (let fileIndex = 0; fileIndex < args.fileCount; fileIndex += 1) {
+    writeKeyedXml(
+      args.modsRoot,
+      args.folderName,
+      args.languageFolderName,
+      `Main${fileIndex}.xml`,
+      [
+        {
+          key: `key_${fileIndex}`,
+          value: `${args.languageFolderName}_${fileIndex}`,
+        },
+      ],
+    );
+  }
+}
+
 function writeDefInjectedXml(
   modsRoot: string,
   folderName: string,
@@ -173,6 +195,22 @@ function createEntry(args: {
 function createReadablePathResolver(configRoot: string) {
   return (windowsPath: string) =>
     windowsPath.endsWith("\\Prefs.xml") ? join(configRoot, "Prefs.xml") : null;
+}
+
+function expectIntermediateDescriptorProgress(
+  progressEvents: Array<{ completedUnits: number; percent: number }>,
+  entryCount: number,
+) {
+  const initialCompletedUnits = 1;
+  const maxDescriptorCompletedUnits = entryCount;
+  const intermediateEvent = progressEvents.find(
+    (event) =>
+      event.completedUnits > initialCompletedUnits &&
+      event.completedUnits < initialCompletedUnits + maxDescriptorCompletedUnits,
+  );
+
+  expect(progressEvents.some((event) => event.percent === 4)).toBe(true);
+  expect(intermediateEvent).toBeDefined();
 }
 
 beforeEach(() => {
@@ -526,5 +564,109 @@ describe("mod localization analyzer", () => {
       changedDefsStats.defsCacheMisses -
         changedTranslationStats.defsCacheMisses,
     ).toBe(1);
+  });
+
+  it("reports intermediate descriptor progress for cold-start descriptor misses", async () => {
+    const { configRoot, modsRoot, sandboxRoot } = createSandboxLayout();
+    setTestAppDataDir(sandboxRoot);
+    writePrefs(configRoot);
+    const entryCount = 12;
+    const entries = Array.from({ length: entryCount }, (_, index) => {
+      const folderName = `ColdStartMod${index}`;
+      const packageId = `example.coldstart.${index}`;
+      const aboutXmlText = writeAboutXml(modsRoot, folderName, packageId);
+
+      writeKeyedXml(modsRoot, folderName, "English", "Main.xml", [
+        { key: `cold_key_${index}`, value: `Value ${index}` },
+      ]);
+      writeKeyedXml(modsRoot, folderName, "ChineseSimplified", "Main.xml", [
+        { key: `cold_key_${index}`, value: `值 ${index}` },
+      ]);
+
+      return createEntry({
+        aboutXmlText,
+        folderName,
+        modsRoot,
+      });
+    });
+    const progressEvents: Array<{ completedUnits: number; percent: number }> =
+      [];
+
+    await analyzeModLocalizations({
+      activePackageIds: entries.map(
+        (entry) =>
+          /<packageId>([^<]+)<\/packageId>/.exec(entry.aboutXmlText ?? "")?.[1] ??
+          "",
+      ),
+      configPath:
+        "C:\\Users\\alice\\AppData\\LocalLow\\Ludeon Studios\\RimWorld by Ludeon Studios\\Config",
+      entries,
+      gameVersion: "1.5.4104 rev435",
+      onProgress: (progress) => {
+        progressEvents.push({
+          completedUnits: progress.completedUnits,
+          percent: progress.percent,
+        });
+      },
+      toReadablePath: createReadablePathResolver(configRoot),
+    });
+
+    expectIntermediateDescriptorProgress(progressEvents, entryCount);
+    expect(progressEvents.at(-1)?.percent).toBe(100);
+  });
+
+  it("reports intermediate descriptor progress when localization workers are used", async () => {
+    const { configRoot, modsRoot, sandboxRoot } = createSandboxLayout();
+    setTestAppDataDir(sandboxRoot);
+    writePrefs(configRoot);
+    const entryCount = 13;
+    const entries = Array.from({ length: entryCount }, (_, index) => {
+      const folderName = `WorkerMod${index}`;
+      const packageId = `example.worker.${index}`;
+      const aboutXmlText = writeAboutXml(modsRoot, folderName, packageId);
+
+      writeRepeatedKeyedXmlFiles({
+        fileCount: 4,
+        folderName,
+        languageFolderName: "English",
+        modsRoot,
+      });
+      writeRepeatedKeyedXmlFiles({
+        fileCount: 4,
+        folderName,
+        languageFolderName: "ChineseSimplified",
+        modsRoot,
+      });
+
+      return createEntry({
+        aboutXmlText,
+        folderName,
+        modsRoot,
+      });
+    });
+    const progressEvents: Array<{ completedUnits: number; percent: number }> =
+      [];
+
+    await analyzeModLocalizations({
+      activePackageIds: entries.map(
+        (entry) =>
+          /<packageId>([^<]+)<\/packageId>/.exec(entry.aboutXmlText ?? "")?.[1] ??
+          "",
+      ),
+      configPath:
+        "C:\\Users\\alice\\AppData\\LocalLow\\Ludeon Studios\\RimWorld by Ludeon Studios\\Config",
+      entries,
+      gameVersion: "1.5.4104 rev435",
+      onProgress: (progress) => {
+        progressEvents.push({
+          completedUnits: progress.completedUnits,
+          percent: progress.percent,
+        });
+      },
+      toReadablePath: createReadablePathResolver(configRoot),
+    });
+
+    expectIntermediateDescriptorProgress(progressEvents, entryCount);
+    expect(progressEvents.at(-1)?.percent).toBe(100);
   });
 });

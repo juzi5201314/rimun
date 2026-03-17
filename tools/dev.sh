@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 # shellcheck source=./common-env.sh
 source "${ROOT_DIR}/tools/common-env.sh"
+eval "$(cd "${ROOT_DIR}" && bun run ./tools/print-dev-server-env.ts)"
 WEB_PID=""
 DESKTOP_PID=""
 HOST_PID=""
