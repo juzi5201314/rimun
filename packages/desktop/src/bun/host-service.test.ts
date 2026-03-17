@@ -8,9 +8,25 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import { analyzeModOrder, buildModLibraryFromSnapshot } from "@rimun/domain";
-import type { ModSourceSnapshot, PathSelection } from "@rimun/shared";
+import type {
+  ModLocalizationSnapshot,
+  ModSourceSnapshot,
+  PathSelection,
+} from "@rimun/shared";
 import { createRimunTempDir } from "../../../shared/test/tmp-path";
-import { createRimunHostService } from "./host-service";
+import {
+  createRimunHostService,
+  resetHostServiceBackgroundStateForTests,
+} from "./host-service";
+import {
+  getModLocalizationSessionDebugStateForTests,
+  getModLocalizationPerfStatsForTests,
+  resetModLocalizationPerfStateForTests,
+} from "./mod-localization";
+import {
+  readModLocalizationSnapshotForSnapshot,
+  readModSourceSnapshot,
+} from "./mods";
 import { SettingsRepository } from "./persistence";
 
 function createSandboxLayout() {
@@ -85,6 +101,14 @@ function createReadablePathResolver(paths: {
       return join(paths.configRoot, "ModsConfig.xml");
     }
 
+    if (
+      paths.configRoot &&
+      windowsPath ===
+        "C:\\Users\\alice\\AppData\\LocalLow\\Ludeon Studios\\RimWorld by Ludeon Studios\\Config\\Prefs.xml"
+    ) {
+      return join(paths.configRoot, "Prefs.xml");
+    }
+
     return null;
   };
 }
@@ -125,6 +149,37 @@ function writeModsConfigXml(
         }
       </ModsConfigData>
     `,
+  );
+}
+
+function writePrefs(configRoot: string, folderName = "ChineseSimplified") {
+  writeFileSync(
+    join(configRoot, "Prefs.xml"),
+    `<Prefs><langFolderName>${folderName}</langFolderName></Prefs>`,
+  );
+}
+
+function writeKeyedXml(
+  modsRoot: string,
+  folderName: string,
+  languageFolderName: string,
+  fileName: string,
+  pairs: Array<{ key: string; value: string }>,
+) {
+  const directoryPath = join(
+    modsRoot,
+    folderName,
+    "Languages",
+    languageFolderName,
+    "Keyed",
+  );
+
+  mkdirSync(directoryPath, { recursive: true });
+  writeFileSync(
+    join(directoryPath, fileName),
+    `<LanguageData>${pairs
+      .map((pair) => `<${pair.key}>${pair.value}</${pair.key}>`)
+      .join("")}</LanguageData>`,
   );
 }
 
@@ -193,9 +248,28 @@ async function settleMicrotasks() {
   await Promise.resolve();
 }
 
+async function waitForCondition(
+  predicate: () => boolean | Promise<boolean>,
+  timeoutMs = 1_000,
+) {
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < timeoutMs) {
+    if (await predicate()) {
+      return;
+    }
+
+    await Bun.sleep(5);
+  }
+
+  throw new Error("Timed out waiting for condition.");
+}
+
 const originalAppDataDirectory = process.env["RIMUN_APP_DATA_DIR"];
 
 afterEach(() => {
+  resetHostServiceBackgroundStateForTests();
+  resetModLocalizationPerfStateForTests();
   if (originalAppDataDirectory) {
     process.env["RIMUN_APP_DATA_DIR"] = originalAppDataDirectory;
     return;
@@ -256,7 +330,10 @@ describe("rimun host service", () => {
         secondRequest,
       ]);
 
-      expect(firstResult).toEqual(secondResult);
+      expect({
+        ...firstResult,
+        scannedAt: secondResult.scannedAt,
+      }).toEqual(secondResult);
     } finally {
       deferredSnapshot.resolve(createSnapshot(["ludeon.rimworld"]));
       await Promise.allSettled([firstRequest, secondRequest].filter(Boolean));
@@ -317,6 +394,393 @@ describe("rimun host service", () => {
 
       expect(readFileSync(modsConfigPath, "utf8")).toBe(beforeContents);
       expect(statSync(modsConfigPath).mtimeMs).toBe(beforeModifiedTime);
+    } finally {
+      repository.close();
+    }
+  });
+
+  it("reuses the latest snapshot when watched roots stay unchanged", async () => {
+    const { configRoot } = createSandboxLayout();
+    writeModsConfigXml(configRoot, ["ludeon.rimworld"]);
+    process.env["RIMUN_APP_DATA_DIR"] = createRimunTempDir("rimun-app-data-");
+
+    const repository = new SettingsRepository();
+    let snapshotReads = 0;
+
+    try {
+      repository.saveSettings(
+        createSelection({
+          workshopPath: null,
+        }),
+      );
+
+      const hostService = createRimunHostService(repository, {
+        readModSourceSnapshot: async () => {
+          snapshotReads += 1;
+          return createSnapshot(["ludeon.rimworld"]);
+        },
+        toReadablePath: createReadablePathResolver({ configRoot }),
+      });
+
+      const firstSnapshot = await hostService.getModSourceSnapshot({
+        profileId: "default",
+      });
+      const secondSnapshot = await hostService.getModSourceSnapshot({
+        profileId: "default",
+      });
+
+      expect(snapshotReads).toBe(1);
+      expect(secondSnapshot.scannedAt).not.toBe(firstSnapshot.scannedAt);
+      expect({
+        ...secondSnapshot,
+        scannedAt: firstSnapshot.scannedAt,
+      }).toEqual(firstSnapshot);
+    } finally {
+      repository.close();
+    }
+  });
+
+  it("reuses the latest localization snapshot when refreshed inputs stay clean", async () => {
+    const { configRoot, installationDataRoot, installationModsRoot } =
+      createSandboxLayout();
+    writePrefs(configRoot);
+    const aboutXmlText = `
+        <ModMetaData>
+          <name>TranslatorMod</name>
+          <packageId>example.translator</packageId>
+        </ModMetaData>
+      `;
+    writeAboutXml(
+      installationModsRoot,
+      "TranslatorMod",
+      aboutXmlText,
+    );
+    writeKeyedXml(
+      installationModsRoot,
+      "TranslatorMod",
+      "English",
+      "TranslatorMod.xml",
+      [{ key: "TranslatorMod.Hello", value: "Hello" }],
+    );
+    writeKeyedXml(
+      installationModsRoot,
+      "TranslatorMod",
+      "ChineseSimplified",
+      "TranslatorMod.xml",
+      [{ key: "TranslatorMod.Hello", value: "你好" }],
+    );
+    writeModsConfigXml(configRoot, ["example.translator"]);
+    process.env["RIMUN_APP_DATA_DIR"] = createRimunTempDir("rimun-app-data-");
+
+    const repository = new SettingsRepository();
+    let snapshotReads = 0;
+
+    try {
+      repository.saveSettings(
+        createSelection({
+          workshopPath: null,
+        }),
+      );
+      resetModLocalizationPerfStateForTests();
+
+      const hostService = createRimunHostService(repository, {
+        readModSourceSnapshot: async (selection, options) => {
+          snapshotReads += 1;
+          return readModSourceSnapshot(selection, options);
+        },
+        toReadablePath: createReadablePathResolver({
+          configRoot,
+          installationDataRoot,
+          installationModsRoot,
+        }),
+      });
+      const firstSnapshot = await hostService.getModSourceSnapshot({
+        profileId: "default",
+      });
+      const firstLocalization = await hostService.getModLocalizationSnapshot({
+        profileId: "default",
+        snapshotScannedAt: firstSnapshot.scannedAt,
+      });
+      const firstStats = getModLocalizationPerfStatsForTests();
+      writeAboutXml(installationModsRoot, "TranslatorMod", aboutXmlText);
+      let secondSnapshot: ModSourceSnapshot | null = null;
+
+      await waitForCondition(async () => {
+        const nextSnapshot = await hostService.getModSourceSnapshot({
+          profileId: "default",
+        });
+
+        if (snapshotReads < 2) {
+          return false;
+        }
+
+        secondSnapshot = nextSnapshot;
+        return true;
+      });
+
+      if (secondSnapshot === null) {
+        throw new Error("Expected the refreshed snapshot to be captured.");
+      }
+
+      const refreshedSnapshot: ModSourceSnapshot = secondSnapshot;
+
+      const secondLocalization = await hostService.getModLocalizationSnapshot({
+        profileId: "default",
+        snapshotScannedAt: refreshedSnapshot.scannedAt,
+      });
+      const secondStats = getModLocalizationPerfStatsForTests();
+
+      expect(refreshedSnapshot.scannedAt).not.toBe(firstSnapshot.scannedAt);
+      expect(snapshotReads).toBe(2);
+      expect({
+        ...secondLocalization,
+        scannedAt: firstLocalization.scannedAt,
+      }).toEqual(firstLocalization);
+      expect(secondStats.descriptorCacheMisses).toBe(
+        firstStats.descriptorCacheMisses,
+      );
+      expect(secondStats.defsCacheMisses).toBe(firstStats.defsCacheMisses);
+    } finally {
+      repository.close();
+    }
+  });
+
+  it("reruns localization analysis instead of carrying forward dirty session state", async () => {
+    const { configRoot, installationDataRoot, installationModsRoot } =
+      createSandboxLayout();
+    writePrefs(configRoot);
+    const aboutXmlText = `
+        <ModMetaData>
+          <name>TranslatorMod</name>
+          <packageId>example.translator</packageId>
+        </ModMetaData>
+      `;
+    writeAboutXml(
+      installationModsRoot,
+      "TranslatorMod",
+      aboutXmlText,
+    );
+    writeKeyedXml(
+      installationModsRoot,
+      "TranslatorMod",
+      "English",
+      "TranslatorMod.xml",
+      [{ key: "TranslatorMod.Hello", value: "Hello" }],
+    );
+    writeKeyedXml(
+      installationModsRoot,
+      "TranslatorMod",
+      "ChineseSimplified",
+      "TranslatorMod.xml",
+      [{ key: "TranslatorMod.Hello", value: "你好" }],
+    );
+    writeModsConfigXml(configRoot, ["example.translator"]);
+    process.env["RIMUN_APP_DATA_DIR"] = createRimunTempDir("rimun-app-data-");
+
+    const repository = new SettingsRepository();
+    let localizationReads = 0;
+    const translatorModPath = join(installationModsRoot, "TranslatorMod");
+
+    try {
+      repository.saveSettings(
+        createSelection({
+          workshopPath: null,
+        }),
+      );
+
+      const hostService = createRimunHostService(repository, {
+        readModLocalizationSnapshotForSnapshot: async (snapshot, options) => {
+          localizationReads += 1;
+          return readModLocalizationSnapshotForSnapshot(snapshot, options);
+        },
+        toReadablePath: createReadablePathResolver({
+          configRoot,
+          installationDataRoot,
+          installationModsRoot,
+        }),
+      });
+      const firstSnapshot = await hostService.getModSourceSnapshot({
+        profileId: "default",
+      });
+
+      await hostService.getModLocalizationSnapshot({
+        profileId: "default",
+        snapshotScannedAt: firstSnapshot.scannedAt,
+      });
+
+      writeKeyedXml(
+        installationModsRoot,
+        "TranslatorMod",
+        "ChineseSimplified",
+        "TranslatorMod.xml",
+        [{ key: "TranslatorMod.Hello", value: "您好" }],
+      );
+
+      await waitForCondition(() => {
+        const [debugState] = getModLocalizationSessionDebugStateForTests([
+          translatorModPath,
+        ]);
+        return debugState?.languagesDirty === true;
+      });
+
+      const secondSnapshot = await hostService.getModSourceSnapshot({
+        profileId: "default",
+      });
+
+      await hostService.getModLocalizationSnapshot({
+        profileId: "default",
+        snapshotScannedAt: secondSnapshot.scannedAt,
+      });
+
+      expect(localizationReads).toBe(2);
+    } finally {
+      repository.close();
+    }
+  });
+
+  it("bridges an in-flight localization request to the refreshed snapshot", async () => {
+    const { configRoot } = createSandboxLayout();
+    writeModsConfigXml(configRoot, ["ludeon.rimworld"]);
+    process.env["RIMUN_APP_DATA_DIR"] = createRimunTempDir("rimun-app-data-");
+
+    const repository = new SettingsRepository();
+    const deferredLocalization = createDeferred<ModLocalizationSnapshot>();
+    const localizationStarted = createDeferred<void>();
+    let localizationReads = 0;
+
+    try {
+      repository.saveSettings(
+        createSelection({
+          workshopPath: null,
+        }),
+      );
+
+      const hostService = createRimunHostService(repository, {
+        readModLocalizationSnapshotForSnapshot: async () => {
+          localizationReads += 1;
+          localizationStarted.resolve();
+          return deferredLocalization.promise;
+        },
+        readModSourceSnapshot: async () => createSnapshot(["ludeon.rimworld"]),
+        toReadablePath: createReadablePathResolver({ configRoot }),
+      });
+      const firstSnapshot = await hostService.getModSourceSnapshot({
+        profileId: "default",
+      });
+      const firstLocalizationPromise = hostService.getModLocalizationSnapshot({
+        profileId: "default",
+        snapshotScannedAt: firstSnapshot.scannedAt,
+      });
+
+      await localizationStarted.promise;
+      await settleMicrotasks();
+
+      const secondSnapshot = await hostService.getModSourceSnapshot({
+        profileId: "default",
+      });
+      const secondLocalizationPromise = hostService.getModLocalizationSnapshot({
+        profileId: "default",
+        snapshotScannedAt: secondSnapshot.scannedAt,
+      });
+
+      deferredLocalization.resolve({
+        currentGameLanguage: {
+          folderName: "English",
+          normalizedFolderName: "english",
+          source: "prefs",
+        },
+        entries: [],
+        scannedAt: firstSnapshot.scannedAt,
+      });
+
+      const [firstLocalization, secondLocalization] = await Promise.all([
+        firstLocalizationPromise,
+        secondLocalizationPromise,
+      ]);
+
+      expect(localizationReads).toBe(1);
+      expect(firstLocalization.scannedAt).toBe(firstSnapshot.scannedAt);
+      expect(secondLocalization.scannedAt).toBe(secondSnapshot.scannedAt);
+    } finally {
+      repository.close();
+    }
+  });
+
+  it("does not reuse a stale snapshot context after settings change mid-request", async () => {
+    const { configRoot } = createSandboxLayout();
+    const nextConfigRoot = createRimunTempDir("rimun-host-service-config-");
+    writeModsConfigXml(configRoot, ["ludeon.rimworld"]);
+    writeModsConfigXml(nextConfigRoot, ["example.changed"]);
+    process.env["RIMUN_APP_DATA_DIR"] = createRimunTempDir("rimun-app-data-");
+
+    const repository = new SettingsRepository();
+    const releaseFirstRead = createDeferred<void>();
+    const firstReadStarted = createDeferred<void>();
+    let snapshotReads = 0;
+
+    try {
+      repository.saveSettings(
+        createSelection({
+          configPath:
+            "C:\\Users\\alice\\AppData\\LocalLow\\Ludeon Studios\\RimWorld by Ludeon Studios\\Config",
+          workshopPath: null,
+        }),
+      );
+
+      const hostService = createRimunHostService(repository, {
+        readModSourceSnapshot: async (selection) => {
+          snapshotReads += 1;
+
+          if (snapshotReads === 1) {
+            firstReadStarted.resolve();
+            await releaseFirstRead.promise;
+          }
+
+          return createSnapshot(
+            selection?.configPath?.includes("ChangedConfig")
+              ? ["example.changed"]
+              : ["ludeon.rimworld"],
+          );
+        },
+        toReadablePath: (windowsPath) => {
+          if (
+            windowsPath ===
+            "C:\\Users\\alice\\AppData\\LocalLow\\Ludeon Studios\\RimWorld by Ludeon Studios\\Config\\ModsConfig.xml"
+          ) {
+            return join(configRoot, "ModsConfig.xml");
+          }
+
+          if (windowsPath === "C:\\ChangedConfig\\ModsConfig.xml") {
+            return join(nextConfigRoot, "ModsConfig.xml");
+          }
+
+          return null;
+        },
+      });
+      const firstSnapshotPromise = hostService.getModSourceSnapshot({
+        profileId: "default",
+      });
+
+      await firstReadStarted.promise;
+
+      await hostService.saveSettings(
+        createSelection({
+          configPath: "C:\\ChangedConfig",
+          workshopPath: null,
+        }),
+      );
+
+      const secondSnapshotPromise = hostService.getModSourceSnapshot({
+        profileId: "default",
+      });
+      const secondSnapshot = await secondSnapshotPromise;
+
+      releaseFirstRead.resolve(undefined);
+      const firstSnapshot = await firstSnapshotPromise;
+
+      expect(snapshotReads).toBe(2);
+      expect(secondSnapshot.activePackageIds).toEqual(["example.changed"]);
+      expect(firstSnapshot.activePackageIds).toEqual(["ludeon.rimworld"]);
     } finally {
       repository.close();
     }

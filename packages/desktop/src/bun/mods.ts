@@ -1463,6 +1463,7 @@ export async function readModLocalizationSnapshotForSnapshot(
   return readModLocalizationSnapshot({
     activePackageIds: snapshot.activePackageIds,
     configPath: snapshot.selection?.configPath ?? null,
+    currentGameLanguage: snapshot.currentGameLanguage,
     entries: snapshot.entries,
     gameVersion: snapshot.gameVersion,
     onProgress: options.onProgress,

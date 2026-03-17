@@ -39,6 +39,11 @@ import type {
   LocalizationWorkerResponse,
   WorkerBucketedLocalizationInventory,
 } from "./mod-localization.worker";
+import {
+  createWatchGroup,
+  resetWatchGroupPerfStatsForTests,
+  type WatchGroup,
+} from "./watch-group";
 
 type TranslationEntrySets = TranslationEntryVectors;
 
@@ -71,6 +76,7 @@ type MutableBucketedFileInventory = {
   keyed: FileInventoryEntry[];
   strings: FileInventoryEntry[];
   tokens: string[];
+  watchDirectories: string[];
 };
 
 type BucketedFileInventory = {
@@ -78,6 +84,7 @@ type BucketedFileInventory = {
   fingerprint: string;
   keyed: FileInventoryEntry[];
   strings: FileInventoryEntry[];
+  watchDirectories: string[];
 };
 
 type LanguageContributionInventory = {
@@ -86,11 +93,19 @@ type LanguageContributionInventory = {
   fingerprint: string;
   hasAnyLanguagesRoot: boolean;
   matchedFolderName: string | null;
+  watchDirectories: string[];
 };
 
 type CachedDefsBaseline = {
   fingerprint: string;
   ids: number[];
+};
+
+type CachedDescriptorArtifacts = {
+  baselineEntries: TranslationEntrySets;
+  currentLanguageContribution: LanguageContribution;
+  fingerprint: string;
+  hasSelfTranslation: boolean;
 };
 
 type AnalysisRuntime = {
@@ -117,6 +132,7 @@ type PreparedDescriptorMiss = {
   languageInventory: LanguageContributionInventory;
   metadata: ReturnType<typeof collectDependencyTargets>;
   relativeRoots: string[];
+  sessionState: ModLocalizationSessionState;
 };
 
 type DescriptorCacheMiss = Omit<PreparedDescriptorMiss, "index">;
@@ -133,10 +149,31 @@ type PreparedDescriptorResolution =
 type PreparedDefsBaselineMiss = {
   cacheKey: string;
   descriptor: ModLocalizationDescriptor;
+  defsDirtyVersion: number;
   fingerprint: string;
   indexGroups: number[][];
   inventoryFiles: FileInventoryEntry[];
   modReadablePath: string;
+  sessionState: ModLocalizationSessionState;
+  watchDirectories: string[];
+};
+
+type ModLocalizationSessionState = {
+  currentLanguageFolderName: string | null;
+  defsBaseline: CachedDefsBaseline | null;
+  defsDirty: boolean;
+  defsDirtyVersion: number;
+  defsWatchGroup: WatchGroup | null;
+  descriptorArtifacts: CachedDescriptorArtifacts | null;
+  languageInventory: LanguageContributionInventory | null;
+  languageWatchGroup: WatchGroup | null;
+  languagesDirty: boolean;
+  languagesDirtyVersion: number;
+  relativeRoots: string[] | null;
+  relativeRootsArgsKey: string | null;
+  rootWatchGroup: WatchGroup | null;
+  rootsDirty: boolean;
+  rootsDirtyVersion: number;
 };
 
 export type ModLocalizationAnalysisProgress = {
@@ -207,16 +244,12 @@ const LOCALIZATION_WORKER_MIN_TOTAL_BYTES = 32 * 1024 * 1024;
 const LOCALIZATION_WORKER_MIN_SINGLE_MOD_BYTES = 512 * 1024;
 const LOCALIZATION_WORKER_MIN_SINGLE_MOD_FILES = 8;
 
-const descriptorArtifactsCache = new Map<
-  string,
-  {
-    baselineEntries: TranslationEntrySets;
-    currentLanguageContribution: LanguageContribution;
-    fingerprint: string;
-    hasSelfTranslation: boolean;
-  }
->();
+const descriptorArtifactsCache = new Map<string, CachedDescriptorArtifacts>();
 const defsBaselineCache = new Map<string, CachedDefsBaseline>();
+const modLocalizationSessionStates = new Map<
+  string,
+  ModLocalizationSessionState
+>();
 
 const modLocalizationPerfStats: ModLocalizationPerfStats = {
   defsDbHits: 0,
@@ -358,7 +391,96 @@ function createEmptyMutableBucketedInventory(): MutableBucketedFileInventory {
     keyed: [],
     strings: [],
     tokens: [],
+    watchDirectories: [],
   };
+}
+
+function createModLocalizationSessionState(): ModLocalizationSessionState {
+  return {
+    currentLanguageFolderName: null,
+    defsBaseline: null,
+    defsDirty: true,
+    defsDirtyVersion: 0,
+    defsWatchGroup: null,
+    descriptorArtifacts: null,
+    languageInventory: null,
+    languageWatchGroup: null,
+    languagesDirty: true,
+    languagesDirtyVersion: 0,
+    relativeRoots: null,
+    relativeRootsArgsKey: null,
+    rootWatchGroup: null,
+    rootsDirty: true,
+    rootsDirtyVersion: 0,
+  };
+}
+
+function getModLocalizationSessionState(modReadablePath: string) {
+  const existing = modLocalizationSessionStates.get(modReadablePath);
+
+  if (existing) {
+    return existing;
+  }
+
+  const next = createModLocalizationSessionState();
+  modLocalizationSessionStates.set(modReadablePath, next);
+  return next;
+}
+
+function closeWatchGroup(group: WatchGroup | null) {
+  group?.close();
+}
+
+function replaceWatchGroup(args: {
+  current: WatchGroup | null;
+  label: string;
+  markDirty: () => void;
+  paths: string[];
+}) {
+  const next = createWatchGroup(args.paths, () => {
+    args.markDirty();
+  }, {
+    label: args.label,
+  });
+
+  args.current?.close();
+  return next;
+}
+
+function closeModLocalizationSessionState(state: ModLocalizationSessionState) {
+  closeWatchGroup(state.languageWatchGroup);
+  closeWatchGroup(state.defsWatchGroup);
+  closeWatchGroup(state.rootWatchGroup);
+}
+
+function markLanguagesDirty(sessionState: ModLocalizationSessionState) {
+  sessionState.languagesDirty = true;
+  sessionState.languagesDirtyVersion += 1;
+}
+
+function markDefsDirty(sessionState: ModLocalizationSessionState) {
+  sessionState.defsDirty = true;
+  sessionState.defsDirtyVersion += 1;
+}
+
+function markRootsDirty(sessionState: ModLocalizationSessionState) {
+  sessionState.rootsDirty = true;
+  sessionState.rootsDirtyVersion += 1;
+  markLanguagesDirty(sessionState);
+  markDefsDirty(sessionState);
+}
+
+function pruneModLocalizationSessionStates(activeModReadablePaths: Set<string>) {
+  for (const [modReadablePath, state] of modLocalizationSessionStates) {
+    if (activeModReadablePaths.has(modReadablePath)) {
+      continue;
+    }
+
+    closeWatchGroup(state.languageWatchGroup);
+    closeWatchGroup(state.rootWatchGroup);
+    closeWatchGroup(state.defsWatchGroup);
+    modLocalizationSessionStates.delete(modReadablePath);
+  }
 }
 
 function finalizeBucketedInventory(
@@ -374,6 +496,9 @@ function finalizeBucketedInventory(
     fingerprint: [...inventory.tokens].sort().join("\n"),
     keyed: [...inventory.keyed].sort(sortByRelativePath),
     strings: [...inventory.strings].sort(sortByRelativePath),
+    watchDirectories: [...new Set(inventory.watchDirectories)].sort((left, right) =>
+      left.localeCompare(right),
+    ),
   };
 }
 
@@ -384,6 +509,7 @@ function appendBucketedInventory(
   target.keyed.push(...source.keyed);
   target.defInjected.push(...source.defInjected);
   target.strings.push(...source.strings);
+  target.watchDirectories.push(...source.watchDirectories);
 
   if (source.fingerprint) {
     target.tokens.push(source.fingerprint);
@@ -477,9 +603,13 @@ async function pathExists(path: string) {
 
 async function listFilesRecursive(rootPath: string) {
   if (!(await pathExists(rootPath))) {
-    return [];
+    return {
+      directories: [] as string[],
+      files: [] as string[],
+    };
   }
 
+  const directories = [rootPath];
   const files: string[] = [];
   const pending = [rootPath];
 
@@ -496,6 +626,7 @@ async function listFilesRecursive(rootPath: string) {
       const nextPath = join(currentPath, entry.name);
 
       if (entry.isDirectory()) {
+        directories.push(nextPath);
         pending.push(nextPath);
         continue;
       }
@@ -506,7 +637,10 @@ async function listFilesRecursive(rootPath: string) {
     }
   }
 
-  return files.sort((left, right) => left.localeCompare(right));
+  return {
+    directories: directories.sort((left, right) => left.localeCompare(right)),
+    files: files.sort((left, right) => left.localeCompare(right)),
+  };
 }
 
 function normalizePathForId(value: string) {
@@ -693,6 +827,145 @@ async function resolveModRelativeRoots(args: {
   }
 
   return createDefaultRelativeRoots(args.gameVersion);
+}
+
+function createRelativeRootsArgsKey(args: {
+  activePackageIdsKey: string;
+  gameVersion: string | null;
+}) {
+  return `${args.gameVersion ?? "null"}::${args.activePackageIdsKey}`;
+}
+
+function createRelativeRootsKey(relativeRoots: string[]) {
+  return relativeRoots.join("|");
+}
+
+function updateRelativeRootsWatchers(args: {
+  sessionState: ModLocalizationSessionState;
+  watchPaths: string[];
+}) {
+  const nextGroup = replaceWatchGroup({
+    current: args.sessionState.rootWatchGroup,
+    label: "localization-roots",
+    markDirty: () => {
+      markRootsDirty(args.sessionState);
+    },
+    paths: args.watchPaths,
+  });
+  args.sessionState.rootWatchGroup = nextGroup;
+
+  if (nextGroup.hasSetupFailures) {
+    markRootsDirty(args.sessionState);
+  }
+}
+
+async function resolveRelativeRootsWatchPaths(args: {
+  modReadablePath: string;
+  relativeRoots: string[];
+}) {
+  const watchPaths = [args.modReadablePath];
+
+  for (const relativeRoot of args.relativeRoots) {
+    if (!relativeRoot) {
+      continue;
+    }
+
+    const candidatePath = join(args.modReadablePath, relativeRoot);
+
+    if (await pathExists(candidatePath)) {
+      watchPaths.push(candidatePath);
+    }
+  }
+
+  return watchPaths;
+}
+
+function updateLanguageWatchers(args: {
+  sessionState: ModLocalizationSessionState;
+  watchDirectories: string[];
+}) {
+  const nextGroup = replaceWatchGroup({
+    current: args.sessionState.languageWatchGroup,
+    label: "localization-languages",
+    markDirty: () => {
+      markLanguagesDirty(args.sessionState);
+    },
+    paths: args.watchDirectories,
+  });
+  args.sessionState.languageWatchGroup = nextGroup;
+
+  if (nextGroup.hasSetupFailures) {
+    markLanguagesDirty(args.sessionState);
+  }
+}
+
+function updateDefsWatchers(args: {
+  sessionState: ModLocalizationSessionState;
+  watchDirectories: string[];
+}) {
+  const nextGroup = replaceWatchGroup({
+    current: args.sessionState.defsWatchGroup,
+    label: "localization-defs",
+    markDirty: () => {
+      markDefsDirty(args.sessionState);
+    },
+    paths: args.watchDirectories,
+  });
+  args.sessionState.defsWatchGroup = nextGroup;
+
+  if (nextGroup.hasSetupFailures) {
+    markDefsDirty(args.sessionState);
+  }
+}
+
+async function resolveCachedRelativeRoots(args: {
+  activePackageIds: Set<string>;
+  activePackageIdsKey: string;
+  gameVersion: string | null;
+  modReadablePath: string;
+  sessionState: ModLocalizationSessionState;
+}) {
+  const relativeRootsArgsKey = createRelativeRootsArgsKey({
+    activePackageIdsKey: args.activePackageIdsKey,
+    gameVersion: args.gameVersion,
+  });
+
+  if (
+    args.sessionState.relativeRoots !== null &&
+    !args.sessionState.rootsDirty &&
+    args.sessionState.relativeRootsArgsKey === relativeRootsArgsKey
+  ) {
+    return args.sessionState.relativeRoots;
+  }
+
+  const rootsDirtyVersion = args.sessionState.rootsDirtyVersion;
+  const relativeRoots = await resolveModRelativeRoots({
+    activePackageIds: args.activePackageIds,
+    gameVersion: args.gameVersion,
+    modReadablePath: args.modReadablePath,
+  });
+  args.sessionState.relativeRoots = relativeRoots;
+  args.sessionState.relativeRootsArgsKey = relativeRootsArgsKey;
+  args.sessionState.rootsDirty = false;
+  markLanguagesDirty(args.sessionState);
+  markDefsDirty(args.sessionState);
+  args.sessionState.descriptorArtifacts = null;
+  args.sessionState.languageInventory = null;
+  args.sessionState.defsBaseline = null;
+
+  if (args.sessionState.rootsDirtyVersion === rootsDirtyVersion) {
+    updateRelativeRootsWatchers({
+      sessionState: args.sessionState,
+      watchPaths: await resolveRelativeRootsWatchPaths({
+        modReadablePath: args.modReadablePath,
+        relativeRoots,
+      }),
+    });
+  } else {
+    args.sessionState.rootsDirty = true;
+  }
+
+  return relativeRoots;
 }
 
 function getLocalizationWorkerPoolSize() {
@@ -939,15 +1212,18 @@ async function collectFileInventory(args: {
   runtime: AnalysisRuntime;
 }) {
   if (!(await pathExists(args.rootPath))) {
-    return [] as FileInventoryEntry[];
+    return {
+      files: [] as FileInventoryEntry[],
+      watchDirectories: [] as string[],
+    };
   }
 
-  const filePaths = await listFilesRecursive(args.rootPath);
+  const listing = await listFilesRecursive(args.rootPath);
   const filteredFilePaths = args.filter
-    ? filePaths.filter(args.filter)
-    : filePaths;
+    ? listing.files.filter(args.filter)
+    : listing.files;
 
-  return Promise.all(
+  const files = await Promise.all(
     filteredFilePaths.map((absolutePath) =>
       args.runtime.fileLimit(async () => {
         const fileStats = await stat(absolutePath, { bigint: true });
@@ -969,6 +1245,11 @@ async function collectFileInventory(args: {
       }),
     ),
   );
+
+  return {
+    files,
+    watchDirectories: listing.directories,
+  };
 }
 
 async function collectBucketedLocalizationFiles(args: {
@@ -976,7 +1257,7 @@ async function collectBucketedLocalizationFiles(args: {
   fingerprintPrefix: string;
   runtime: AnalysisRuntime;
 }) {
-  const [keyedFiles, defInjectedFiles, stringFiles] = await Promise.all([
+  const [keyedResult, defInjectedResult, stringResult] = await Promise.all([
     collectFileInventory({
       filter: (filePath) => filePath.toLowerCase().endsWith(".xml"),
       rootPath: join(args.basePath, "Keyed"),
@@ -992,11 +1273,19 @@ async function collectBucketedLocalizationFiles(args: {
       runtime: args.runtime,
     }),
   ]);
+  const keyedFiles = keyedResult.files;
+  const defInjectedFiles = defInjectedResult.files;
+  const stringFiles = stringResult.files;
 
   const inventory = createEmptyMutableBucketedInventory();
   inventory.keyed.push(...keyedFiles);
   inventory.defInjected.push(...defInjectedFiles);
   inventory.strings.push(...stringFiles);
+  inventory.watchDirectories.push(
+    ...keyedResult.watchDirectories,
+    ...defInjectedResult.watchDirectories,
+    ...stringResult.watchDirectories,
+  );
 
   for (const file of keyedFiles) {
     inventory.tokens.push(
@@ -1031,6 +1320,7 @@ async function collectLanguageContributionInventory(args: {
     `currentLanguage:${args.currentLanguageFolderName ?? "null"}`,
     `relativeRoots:${args.relativeRoots.join("|")}`,
   ];
+  const watchDirectories = new Set<string>();
   let hasAnyLanguagesRoot = false;
   let matchedFolderName: string | null = null;
 
@@ -1046,6 +1336,7 @@ async function collectLanguageContributionInventory(args: {
     }
 
     hasAnyLanguagesRoot = true;
+    watchDirectories.add(languagesPath);
     fingerprintTokens.push(`languages:${rootKey}:present`);
     const candidates = (await readdir(languagesPath, { withFileTypes: true }))
       .filter((entry) => entry.isDirectory())
@@ -1104,6 +1395,11 @@ async function collectLanguageContributionInventory(args: {
     fingerprint: fingerprintTokens.sort().join("\n"),
     hasAnyLanguagesRoot,
     matchedFolderName,
+    watchDirectories: [
+      ...watchDirectories,
+      ...current.watchDirectories,
+      ...english.watchDirectories,
+    ].sort((left, right) => left.localeCompare(right)),
   } satisfies LanguageContributionInventory;
 }
 
@@ -1414,12 +1710,70 @@ async function prepareDescriptorFromCache(args: {
   relativeRoots: string[];
   runtime: AnalysisRuntime;
 }): Promise<PreparedDescriptorResolution> {
+  const sessionState = getModLocalizationSessionState(args.entry.modReadablePath);
+  const relativeRootsKey = createRelativeRootsKey(args.relativeRoots);
+
+  if (
+    sessionState.currentLanguageFolderName !==
+    args.currentGameLanguage.normalizedFolderName
+  ) {
+    sessionState.currentLanguageFolderName =
+      args.currentGameLanguage.normalizedFolderName;
+    markLanguagesDirty(sessionState);
+    sessionState.descriptorArtifacts = null;
+    sessionState.languageInventory = null;
+  }
+
+  if (
+    sessionState.relativeRoots !== null &&
+    createRelativeRootsKey(sessionState.relativeRoots) !== relativeRootsKey
+  ) {
+    markLanguagesDirty(sessionState);
+    markDefsDirty(sessionState);
+    sessionState.descriptorArtifacts = null;
+    sessionState.languageInventory = null;
+    sessionState.defsBaseline = null;
+  }
+
+  if (
+    !sessionState.languagesDirty &&
+    sessionState.descriptorArtifacts !== null &&
+    sessionState.languageInventory !== null
+  ) {
+    modLocalizationPerfStats.descriptorCacheHits += 1;
+
+    return {
+      kind: "hit",
+      descriptor: {
+        baselineEntries: sessionState.descriptorArtifacts.baselineEntries,
+        currentLanguageContribution:
+          sessionState.descriptorArtifacts.currentLanguageContribution,
+        descriptorFingerprint: sessionState.descriptorArtifacts.fingerprint,
+        dependencyTargets: args.metadata.dependencyTargets,
+        entry: args.entry,
+        hasSelfTranslation: sessionState.descriptorArtifacts.hasSelfTranslation,
+        packageIdNormalized: args.metadata.packageIdNormalized,
+        relativeRoots: args.relativeRoots,
+      } satisfies ModLocalizationDescriptor,
+    };
+  }
+
+  const languagesDirtyVersion = sessionState.languagesDirtyVersion;
   const languageInventory = await collectLanguageContributionInventory({
     currentLanguageFolderName: args.currentGameLanguage.normalizedFolderName,
     modReadablePath: args.entry.modReadablePath,
     relativeRoots: args.relativeRoots,
     runtime: args.runtime,
   });
+  sessionState.languageInventory = languageInventory;
+
+  if (sessionState.languagesDirtyVersion === languagesDirtyVersion) {
+    sessionState.languagesDirty = false;
+    updateLanguageWatchers({
+      sessionState,
+      watchDirectories: languageInventory.watchDirectories,
+    });
+  }
   const cacheKey = createDescriptorCacheKey({
     currentLanguageFolderName: args.currentGameLanguage.normalizedFolderName,
     modReadablePath: args.entry.modReadablePath,
@@ -1429,6 +1783,9 @@ async function prepareDescriptorFromCache(args: {
 
   if (cached && cached.fingerprint === languageInventory.fingerprint) {
     modLocalizationPerfStats.descriptorCacheHits += 1;
+    if (sessionState.languagesDirtyVersion === languagesDirtyVersion) {
+      sessionState.descriptorArtifacts = cached;
+    }
 
     return {
       kind: "hit",
@@ -1465,12 +1822,17 @@ async function prepareDescriptorFromCache(args: {
       persisted.baselineEntries,
     );
 
-    descriptorArtifactsCache.set(cacheKey, {
+    const artifacts = {
       baselineEntries,
       currentLanguageContribution,
       fingerprint: persisted.fingerprint,
       hasSelfTranslation: persisted.hasSelfTranslation,
-    });
+    } satisfies CachedDescriptorArtifacts;
+
+    descriptorArtifactsCache.set(cacheKey, artifacts);
+    if (sessionState.languagesDirtyVersion === languagesDirtyVersion) {
+      sessionState.descriptorArtifacts = artifacts;
+    }
 
     return {
       kind: "hit",
@@ -1495,6 +1857,7 @@ async function prepareDescriptorFromCache(args: {
     languageInventory,
     metadata: args.metadata,
     relativeRoots: args.relativeRoots,
+    sessionState,
     cacheKey,
   };
 }
@@ -1509,6 +1872,7 @@ function buildDescriptorFromParsedArtifacts(args: {
   matchedFolderName: string | null;
   metadata: ReturnType<typeof collectDependencyTargets>;
   relativeRoots: string[];
+  sessionState: ModLocalizationSessionState;
 }) {
   const currentLanguageContribution = {
     entries: args.currentEntries,
@@ -1517,19 +1881,17 @@ function buildDescriptorFromParsedArtifacts(args: {
   } satisfies LanguageContribution;
   const hasSelfTranslation = hasAnyEntries(args.currentEntries);
 
-  descriptorArtifactsCache.set(args.cacheKey, {
+  const artifacts = {
     baselineEntries: args.baselineEntries,
     currentLanguageContribution,
     fingerprint: args.fingerprint,
     hasSelfTranslation,
-  });
+  } satisfies CachedDescriptorArtifacts;
+
+  descriptorArtifactsCache.set(args.cacheKey, artifacts);
+  args.sessionState.descriptorArtifacts = artifacts;
   saveCachedDescriptorArtifacts({
-    artifacts: {
-      baselineEntries: args.baselineEntries,
-      currentLanguageContribution,
-      fingerprint: args.fingerprint,
-      hasSelfTranslation,
-    },
+    artifacts,
     cacheKey: args.cacheKey,
   });
 
@@ -1556,6 +1918,7 @@ async function collectDefsInventory(args: {
 }) {
   const tokens: string[] = [`relativeRoots:${args.relativeRoots.join("|")}`];
   const files: FileInventoryEntry[] = [];
+  const watchDirectories = new Set<string>();
 
   for (const relativeRoot of args.relativeRoots) {
     const rootKey = relativeRoot || ".";
@@ -1569,13 +1932,17 @@ async function collectDefsInventory(args: {
     }
 
     tokens.push(`defs:${rootKey}:present`);
-    const rootFiles = await collectFileInventory({
+    const rootInventory = await collectFileInventory({
       filter: (filePath) => filePath.toLowerCase().endsWith(".xml"),
       rootPath: defsPath,
       runtime: args.runtime,
     });
+    const rootFiles = rootInventory.files;
 
     files.push(...rootFiles);
+    for (const directory of rootInventory.watchDirectories) {
+      watchDirectories.add(directory);
+    }
 
     for (const file of rootFiles) {
       tokens.push(`defs:${rootKey}:${file.fingerprintToken}`);
@@ -1587,6 +1954,9 @@ async function collectDefsInventory(args: {
       left.absolutePath.localeCompare(right.absolutePath),
     ),
     fingerprint: tokens.sort().join("\n"),
+    watchDirectories: [...watchDirectories].sort((left, right) =>
+      left.localeCompare(right),
+    ),
   };
 }
 
@@ -1594,6 +1964,22 @@ async function prepareDefsBaselineIdsCached(args: {
   descriptor: ModLocalizationDescriptor;
   runtime: AnalysisRuntime;
 }): Promise<number[] | PreparedDefsBaselineMiss> {
+  const sessionState = getModLocalizationSessionState(
+    args.descriptor.entry.modReadablePath,
+  );
+  const relativeRootsKey = createRelativeRootsKey(args.descriptor.relativeRoots);
+
+  if (
+    !sessionState.defsDirty &&
+    sessionState.defsBaseline !== null &&
+    sessionState.relativeRoots !== null &&
+    createRelativeRootsKey(sessionState.relativeRoots) === relativeRootsKey
+  ) {
+    modLocalizationPerfStats.defsCacheHits += 1;
+    return sessionState.defsBaseline.ids;
+  }
+
+  const defsDirtyVersion = sessionState.defsDirtyVersion;
   const inventory = await collectDefsInventory({
     modReadablePath: args.descriptor.entry.modReadablePath,
     relativeRoots: args.descriptor.relativeRoots,
@@ -1604,6 +1990,15 @@ async function prepareDefsBaselineIdsCached(args: {
 
   if (cached && cached.fingerprint === inventory.fingerprint) {
     modLocalizationPerfStats.defsCacheHits += 1;
+
+    if (sessionState.defsDirtyVersion === defsDirtyVersion) {
+      sessionState.defsBaseline = cached;
+      sessionState.defsDirty = false;
+      updateDefsWatchers({
+        sessionState,
+        watchDirectories: inventory.watchDirectories,
+      });
+    }
     return cached.ids;
   }
 
@@ -1615,10 +2010,20 @@ async function prepareDefsBaselineIdsCached(args: {
   if (persisted) {
     modLocalizationPerfStats.defsCacheHits += 1;
     modLocalizationPerfStats.defsDbHits += 1;
-    defsBaselineCache.set(cacheKey, {
+    const cachedBaseline = {
       fingerprint: persisted.fingerprint,
       ids: [...persisted.ids],
-    });
+    } satisfies CachedDefsBaseline;
+    defsBaselineCache.set(cacheKey, cachedBaseline);
+
+    if (sessionState.defsDirtyVersion === defsDirtyVersion) {
+      sessionState.defsBaseline = cachedBaseline;
+      sessionState.defsDirty = false;
+      updateDefsWatchers({
+        sessionState,
+        watchDirectories: inventory.watchDirectories,
+      });
+    }
 
     return persisted.ids;
   }
@@ -1629,10 +2034,13 @@ async function prepareDefsBaselineIdsCached(args: {
   return {
     cacheKey,
     descriptor: args.descriptor,
+    defsDirtyVersion,
     fingerprint: inventory.fingerprint,
     indexGroups: [],
     inventoryFiles: inventory.files,
     modReadablePath: args.descriptor.entry.modReadablePath,
+    sessionState,
+    watchDirectories: inventory.watchDirectories,
   } satisfies PreparedDefsBaselineMiss;
 }
 
@@ -2026,6 +2434,7 @@ function buildLocalizationStatus(args: {
 
 async function buildDescriptors(args: {
   activePackageIds: Set<string>;
+  activePackageIdsKey: string;
   currentGameLanguage: CurrentGameLanguage;
   entries: ModSourceSnapshotEntry[];
   gameVersion: string | null;
@@ -2041,14 +2450,17 @@ async function buildDescriptors(args: {
   await Promise.all(
     args.entries.map((entry, index) =>
       args.runtime.descriptorLimit(async () => {
+        const sessionState = getModLocalizationSessionState(entry.modReadablePath);
         const resolution = await prepareDescriptorFromCache({
           currentGameLanguage: args.currentGameLanguage,
           entry,
           metadata: metadataByEntry[index] ?? collectDependencyTargets(entry),
-          relativeRoots: await resolveModRelativeRoots({
+          relativeRoots: await resolveCachedRelativeRoots({
             activePackageIds: args.activePackageIds,
+            activePackageIdsKey: args.activePackageIdsKey,
             gameVersion: args.gameVersion,
             modReadablePath: entry.modReadablePath,
+            sessionState,
           }),
           runtime: args.runtime,
         });
@@ -2120,6 +2532,7 @@ async function buildDescriptors(args: {
           matchedFolderName: miss.languageInventory.matchedFolderName,
           metadata: miss.metadata,
           relativeRoots: miss.relativeRoots,
+          sessionState: miss.sessionState,
         });
       }
 
@@ -2164,6 +2577,7 @@ async function buildDescriptors(args: {
             matchedFolderName: miss.languageInventory.matchedFolderName,
             metadata: miss.metadata,
             relativeRoots: miss.relativeRoots,
+            sessionState: miss.sessionState,
           });
         }),
       ),
@@ -2272,10 +2686,20 @@ async function hydrateDescriptorsWithDefsBaselines(args: {
             new Set(result.ids),
           );
 
-          defsBaselineCache.set(miss.cacheKey, {
+          const cachedBaseline = {
             fingerprint: miss.fingerprint,
             ids,
-          });
+          } satisfies CachedDefsBaseline;
+
+          defsBaselineCache.set(miss.cacheKey, cachedBaseline);
+          if (miss.sessionState.defsDirtyVersion === miss.defsDirtyVersion) {
+            miss.sessionState.defsBaseline = cachedBaseline;
+            miss.sessionState.defsDirty = false;
+            updateDefsWatchers({
+              sessionState: miss.sessionState,
+              watchDirectories: miss.watchDirectories,
+            });
+          }
           saveCachedDefsBaseline({
             cacheKey: miss.cacheKey,
             record: {
@@ -2344,10 +2768,20 @@ async function hydrateDescriptorsWithDefsBaselines(args: {
 
             const ids = internTranslationIdsForBucket("defInjected", rawIds);
 
-            defsBaselineCache.set(miss.cacheKey, {
+            const cachedBaseline = {
               fingerprint: miss.fingerprint,
               ids,
-            });
+            } satisfies CachedDefsBaseline;
+
+            defsBaselineCache.set(miss.cacheKey, cachedBaseline);
+            if (miss.sessionState.defsDirtyVersion === miss.defsDirtyVersion) {
+              miss.sessionState.defsBaseline = cachedBaseline;
+              miss.sessionState.defsDirty = false;
+              updateDefsWatchers({
+                sessionState: miss.sessionState,
+                watchDirectories: miss.watchDirectories,
+              });
+            }
             saveCachedDefsBaseline({
               cacheKey: miss.cacheKey,
               record: {
@@ -2403,7 +2837,52 @@ export function getModLocalizationPerfStatsForTests() {
   };
 }
 
+export function hasDirtyModLocalizationSessionState(
+  modReadablePaths: Iterable<string>,
+) {
+  for (const modReadablePath of modReadablePaths) {
+    const state = modLocalizationSessionStates.get(modReadablePath);
+
+    if (
+      !state ||
+      state.descriptorArtifacts === null ||
+      state.relativeRoots === null ||
+      state.rootsDirty ||
+      state.languagesDirty ||
+      (state.defsBaseline !== null && state.defsDirty)
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+export function getModLocalizationSessionDebugStateForTests(
+  modReadablePaths: Iterable<string>,
+) {
+  return [...modReadablePaths].map((modReadablePath) => {
+    const state = modLocalizationSessionStates.get(modReadablePath);
+
+    return {
+      modReadablePath,
+      hasState: state !== undefined,
+      hasDescriptorArtifacts:
+        state !== undefined && state.descriptorArtifacts !== null,
+      hasDefsBaseline: state !== undefined && state.defsBaseline !== null,
+      hasRelativeRoots: state !== undefined && state.relativeRoots !== null,
+      rootsDirty: state?.rootsDirty ?? null,
+      languagesDirty: state?.languagesDirty ?? null,
+      defsDirty: state?.defsDirty ?? null,
+    };
+  });
+}
+
 export function resetModLocalizationPerfStateForTests() {
+  for (const state of modLocalizationSessionStates.values()) {
+    closeModLocalizationSessionState(state);
+  }
+  modLocalizationSessionStates.clear();
   descriptorArtifactsCache.clear();
   defsBaselineCache.clear();
   reusableLocalizationWorkerPool.reset();
@@ -2427,6 +2906,7 @@ export function resetModLocalizationPerfStateForTests() {
   modLocalizationPerfStats.strictParseFailures = 0;
   modLocalizationPerfStats.unrecoverableFiles = 0;
   resetLocalizationIndexStateForTests();
+  resetWatchGroupPerfStatsForTests();
   resetXmlRecoveryStatsForTests();
 }
 
@@ -2470,6 +2950,7 @@ export async function readCurrentGameLanguage(args: {
 export async function readModLocalizationSnapshot(args: {
   activePackageIds: string[];
   configPath: string | null;
+  currentGameLanguage?: CurrentGameLanguage;
   entries: ModSourceSnapshotEntry[];
   gameVersion: string | null;
   onProgress?: (progress: ModLocalizationAnalysisProgress) => void;
@@ -2491,6 +2972,7 @@ export async function readModLocalizationSnapshot(args: {
 export async function analyzeModLocalizations(args: {
   activePackageIds: string[];
   configPath: string | null;
+  currentGameLanguage?: CurrentGameLanguage;
   entries: ModSourceSnapshotEntry[];
   gameVersion: string | null;
   onProgress?: (progress: ModLocalizationAnalysisProgress) => void;
@@ -2504,18 +2986,22 @@ export async function analyzeModLocalizations(args: {
         args.onProgress,
       )
     : null;
-  const currentGameLanguage = await readCurrentGameLanguage({
-    configPath: args.configPath,
-    toReadablePath: args.toReadablePath,
-  });
+  const currentGameLanguage =
+    args.currentGameLanguage ??
+    (await readCurrentGameLanguage({
+      configPath: args.configPath,
+      toReadablePath: args.toReadablePath,
+    }));
   progressTracker?.markCurrentLanguageResolved();
   const activePackageIds = new Set(
     args.activePackageIds.map((id) => id.toLowerCase()),
   );
+  const activePackageIdsKey = [...activePackageIds].sort().join("|");
 
   const descriptorStart = performance.now();
   const descriptors = await buildDescriptors({
     activePackageIds,
+    activePackageIdsKey,
     currentGameLanguage,
     entries: args.entries,
     gameVersion: args.gameVersion,
@@ -2575,6 +3061,9 @@ export async function analyzeModLocalizations(args: {
     modLocalizationPerfStats.initialStatusBuildMs +
     modLocalizationPerfStats.finalStatusBuildMs;
   modLocalizationPerfStats.lastAnalyzeMs = performance.now() - totalStart;
+  pruneModLocalizationSessionStates(
+    new Set(args.entries.map((entry) => entry.modReadablePath)),
+  );
 
   return {
     currentGameLanguage,

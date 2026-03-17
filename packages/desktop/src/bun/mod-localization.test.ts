@@ -5,6 +5,7 @@ import type { ModSourceSnapshotEntry } from "@rimun/shared";
 import { createRimunTempDir } from "../../../shared/test/tmp-path";
 import {
   analyzeModLocalizations,
+  getModLocalizationSessionDebugStateForTests,
   getModLocalizationPerfStatsForTests,
   resetModLocalizationPerfStateForTests,
 } from "./mod-localization";
@@ -188,6 +189,28 @@ afterEach(() => {
 
   process.env["RIMUN_APP_DATA_DIR"] = originalAppDataDir;
 });
+
+async function waitForSessionState(
+  modReadablePath: string,
+  predicate: (
+    state: ReturnType<typeof getModLocalizationSessionDebugStateForTests>[number],
+  ) => boolean,
+  timeoutMs = 1_000,
+) {
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < timeoutMs) {
+    const [state] = getModLocalizationSessionDebugStateForTests([modReadablePath]);
+
+    if (state && predicate(state)) {
+      return;
+    }
+
+    await Bun.sleep(5);
+  }
+
+  throw new Error("Timed out waiting for localization session state.");
+}
 
 describe("mod localization analyzer", () => {
   it("matches translation providers through the reverse translation index", async () => {
@@ -454,16 +477,23 @@ describe("mod localization analyzer", () => {
 
     await analyzeModLocalizations(baseArgs);
     const warmStats = getModLocalizationPerfStatsForTests();
+    const modReadablePath = join(modsRoot, "LazyDefsMod");
 
     expect(warmStats.descriptorCacheHits - firstStats.descriptorCacheHits).toBe(
       1,
     );
     expect(warmStats.defsCacheHits - firstStats.defsCacheHits).toBe(1);
+    expect(warmStats.descriptorDbHits).toBe(firstStats.descriptorDbHits);
+    expect(warmStats.defsDbHits).toBe(firstStats.defsDbHits);
 
     writeDefInjectedXml(modsRoot, "LazyDefsMod", "ChineseSimplified", [
       { path: "LazyThing.label", value: "懒标签-变更" },
       { path: "LazyThing.description", value: "懒描述-变更" },
     ]);
+    await waitForSessionState(
+      modReadablePath,
+      (state) => state.languagesDirty === true,
+    );
 
     await analyzeModLocalizations(baseArgs);
     const changedTranslationStats = getModLocalizationPerfStatsForTests();
@@ -483,6 +513,7 @@ describe("mod localization analyzer", () => {
         label: "Lazy label changed",
       },
     ]);
+    await waitForSessionState(modReadablePath, (state) => state.defsDirty === true);
 
     await analyzeModLocalizations(baseArgs);
     const changedDefsStats = getModLocalizationPerfStatsForTests();
