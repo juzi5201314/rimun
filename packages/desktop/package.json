@@ -5,14 +5,14 @@
   "type": "module",
   "scripts": {
     "dev": "bunx electrobun dev",
-    "dev:cdp": "bash ./scripts/with-cef-automation-env.sh dev",
+    "dev:cdp": "bun run ./scripts/with-cef-automation-env.ts dev",
     "dev:host": "bun run src/bun/dev-host.ts",
     "dev:watch": "bunx electrobun dev --watch",
-    "dev:watch:cdp": "bash ./scripts/with-cef-automation-env.sh dev --watch",
+    "dev:watch:cdp": "bun run ./scripts/with-cef-automation-env.ts dev --watch",
     "run": "bunx electrobun run",
     "build": "bunx electrobun build --env=stable",
     "build:dev": "bunx electrobun build --env=dev",
-    "build:test:cdp": "bash ./scripts/with-cef-automation-env.sh build --env=test",
+    "build:test:cdp": "bun run ./scripts/with-cef-automation-env.ts build --env=test",
     "test": "bun test",
     "check": "bunx tsc --noEmit"
   },
