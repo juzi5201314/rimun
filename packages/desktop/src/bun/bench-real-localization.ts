@@ -488,7 +488,7 @@ async function main() {
       `coldRun: ms=${formatMs(coldRun.elapsedMs)} progressEvents=${coldRun.progressEventCount} ${formatKindCounts(coldRun.kindCounts)}`,
     );
     console.log(
-      `coldStats: descriptorHits=${coldRun.stats.descriptorCacheHits} descriptorMisses=${coldRun.stats.descriptorCacheMisses} descriptorDbHits=${coldRun.stats.descriptorDbHits} descriptorDbMisses=${coldRun.stats.descriptorDbMisses} defsHits=${coldRun.stats.defsCacheHits} defsMisses=${coldRun.stats.defsCacheMisses} providerBitmapMs=${formatMs(coldRun.stats.providerBitmapBuildMs)} statusComputeMs=${formatMs(coldRun.stats.statusComputeMs)}`,
+      `coldStats: descriptorHits=${coldRun.stats.descriptorCacheHits} descriptorMisses=${coldRun.stats.descriptorCacheMisses} descriptorDbHits=${coldRun.stats.descriptorDbHits} descriptorDbMisses=${coldRun.stats.descriptorDbMisses} descriptorDbHydrateMs=${formatMs(coldRun.stats.descriptorDbHydrateMs)} languageInventoryMs=${formatMs(coldRun.stats.languageInventoryMs)} defsHits=${coldRun.stats.defsCacheHits} defsMisses=${coldRun.stats.defsCacheMisses} defsDbHydrateMs=${formatMs(coldRun.stats.defsDbHydrateMs)} defsInventoryMs=${formatMs(coldRun.stats.defsInventoryMs)} descriptorBuildMs=${formatMs(coldRun.stats.descriptorBuildMs)} providerBitmapMs=${formatMs(coldRun.stats.providerBitmapBuildMs)} statusComputeMs=${formatMs(coldRun.stats.statusComputeMs)} analyzeMs=${formatMs(coldRun.stats.lastAnalyzeMs)}`,
     );
 
     const warmRuns: BenchmarkRunResult[] = [];
@@ -509,7 +509,7 @@ async function main() {
         `warmRun#${index + 1}: ms=${formatMs(run.elapsedMs)} progressEvents=${run.progressEventCount} ${formatKindCounts(run.kindCounts)}`,
       );
       console.log(
-        `warmStats#${index + 1}: descriptorHits=${run.stats.descriptorCacheHits} descriptorMisses=${run.stats.descriptorCacheMisses} descriptorDbHits=${run.stats.descriptorDbHits} descriptorDbMisses=${run.stats.descriptorDbMisses} defsHits=${run.stats.defsCacheHits} defsMisses=${run.stats.defsCacheMisses} providerBitmapMs=${formatMs(run.stats.providerBitmapBuildMs)} statusComputeMs=${formatMs(run.stats.statusComputeMs)}`,
+        `warmStats#${index + 1}: descriptorHits=${run.stats.descriptorCacheHits} descriptorMisses=${run.stats.descriptorCacheMisses} descriptorDbHits=${run.stats.descriptorDbHits} descriptorDbMisses=${run.stats.descriptorDbMisses} descriptorDbHydrateMs=${formatMs(run.stats.descriptorDbHydrateMs)} languageInventoryMs=${formatMs(run.stats.languageInventoryMs)} defsHits=${run.stats.defsCacheHits} defsMisses=${run.stats.defsCacheMisses} defsDbHydrateMs=${formatMs(run.stats.defsDbHydrateMs)} defsInventoryMs=${formatMs(run.stats.defsInventoryMs)} descriptorBuildMs=${formatMs(run.stats.descriptorBuildMs)} providerBitmapMs=${formatMs(run.stats.providerBitmapBuildMs)} statusComputeMs=${formatMs(run.stats.statusComputeMs)} analyzeMs=${formatMs(run.stats.lastAnalyzeMs)}`,
       );
     }
 

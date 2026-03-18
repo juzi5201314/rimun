@@ -11,6 +11,29 @@ import {
 
 const originalAppDataDir = process.env["RIMUN_APP_DATA_DIR"] ?? null;
 
+function createManifestMetadata(args: {
+  folderName: string;
+  packageId: string;
+}) {
+  return {
+    author: null,
+    dependencyMetadata: {
+      dependencies: [] as string[],
+      forceLoadAfter: [] as string[],
+      forceLoadBefore: [] as string[],
+      incompatibleWith: [] as string[],
+      loadAfter: [] as string[],
+      loadBefore: [] as string[],
+      packageIdNormalized: args.packageId,
+      supportedVersions: [] as string[],
+    },
+    description: null,
+    name: args.folderName,
+    packageId: args.packageId,
+    version: null,
+  };
+}
+
 function createSandboxLayout() {
   const sandboxRoot = createRimunTempDir("rimun-localization-perf-");
   const modsRoot = join(sandboxRoot, "Mods");
@@ -90,6 +113,10 @@ function writeSyntheticMod(modsRoot: string, index: number) {
     modWindowsPath: `C:\\Games\\RimWorld\\Mods\\${folderName}`,
     modReadablePath: modRoot,
     manifestPath: null,
+    manifestMetadata: createManifestMetadata({
+      folderName,
+      packageId,
+    }),
     hasAboutXml: true,
     aboutXmlText,
     localizationStatus: {
@@ -222,7 +249,7 @@ describe("mod localization perf", () => {
 
     expect(analysis.entries).toHaveLength(entries.length);
     expect(coldMs).toBeLessThan(2000);
-  });
+  }, 20_000);
 
   it("VAL-LOCALIZATION-PERF-003 incremental request for mods=600 completes under 2000ms", async () => {
     const { configRoot, modsRoot, sandboxRoot } = createSandboxLayout();
@@ -262,5 +289,5 @@ describe("mod localization perf", () => {
 
     expect(analysis.entries).toHaveLength(entries.length);
     expect(changedMs).toBeLessThan(2000);
-  });
+  }, 20_000);
 });

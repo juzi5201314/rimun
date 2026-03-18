@@ -1820,6 +1820,7 @@ export async function readModLocalizationSnapshotForSnapshot(
   options: {
     onProgress?: (progress: ModLocalizationAnalysisProgress) => void;
     toReadablePath?: (windowsPath: string) => string | null;
+    watchChanges?: boolean;
   } = {},
 ): Promise<ModLocalizationSnapshot> {
   if (snapshot.requiresConfiguration || snapshot.entries.length === 0) {
@@ -1841,6 +1842,7 @@ export async function readModLocalizationSnapshotForSnapshot(
     onProgress: options.onProgress,
     scannedAt: snapshot.scannedAt,
     toReadablePath,
+    watchChanges: options.watchChanges,
   });
 }
 

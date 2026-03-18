@@ -8,6 +8,7 @@ export type WatchGroup = {
 
 type WatchGroupCreateOptions = {
   label?: string;
+  recursive?: boolean;
 };
 
 type WatchGroupPerfBucket = {
@@ -84,6 +85,7 @@ export function createWatchGroup(
           path,
           {
             persistent: false,
+            recursive: options.recursive ?? false,
           },
           () => {
             onDirty(path);

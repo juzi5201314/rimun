@@ -976,6 +976,7 @@ export function createRimunHostService(
         });
       },
       toReadablePath,
+      watchChanges: true,
     })
       .then((localizationSnapshot) => {
         if (

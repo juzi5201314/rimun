@@ -12,6 +12,29 @@ import {
 
 const originalAppDataDir = process.env["RIMUN_APP_DATA_DIR"] ?? null;
 
+function createManifestMetadata(args: {
+  folderName: string;
+  packageId: string | null;
+}) {
+  return {
+    author: null,
+    dependencyMetadata: {
+      dependencies: [] as string[],
+      forceLoadAfter: [] as string[],
+      forceLoadBefore: [] as string[],
+      incompatibleWith: [] as string[],
+      loadAfter: [] as string[],
+      loadBefore: [] as string[],
+      packageIdNormalized: args.packageId,
+      supportedVersions: [] as string[],
+    },
+    description: null,
+    name: args.folderName,
+    packageId: args.packageId,
+    version: null,
+  };
+}
+
 function createSandboxLayout() {
   const sandboxRoot = createRimunTempDir("rimun-localization-");
   const modsRoot = join(sandboxRoot, "Mods");
@@ -168,12 +191,19 @@ function createEntry(args: {
   folderName: string;
   modsRoot: string;
 }): ModSourceSnapshotEntry {
+  const packageId =
+    /<packageId>([^<]+)<\/packageId>/.exec(args.aboutXmlText)?.[1] ?? null;
+
   return {
     entryName: args.folderName,
     source: "installation",
     modWindowsPath: `C:\\Games\\RimWorld\\Mods\\${args.folderName}`,
     modReadablePath: join(args.modsRoot, args.folderName),
     manifestPath: null,
+    manifestMetadata: createManifestMetadata({
+      folderName: args.folderName,
+      packageId,
+    }),
     hasAboutXml: true,
     aboutXmlText: args.aboutXmlText,
     localizationStatus: {
@@ -499,6 +529,7 @@ describe("mod localization analyzer", () => {
       ],
       gameVersion: "1.5.4104 rev435",
       toReadablePath: createReadablePathResolver(configRoot),
+      watchChanges: true,
     };
 
     const firstAnalysis = await analyzeModLocalizations(baseArgs);

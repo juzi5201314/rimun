@@ -414,6 +414,53 @@ export function saveCachedDescriptorArtifacts(args: {
   });
 }
 
+export function saveCachedDescriptorArtifactsBatch(args: {
+  entries: Array<{
+    artifacts: CachedDescriptorArtifactsRecord;
+    cacheKey: string;
+  }>;
+}) {
+  if (args.entries.length === 0) {
+    return;
+  }
+
+  withWritableDatabaseState((state) => {
+    const transaction = state.sqlite.transaction(
+      (
+        entries: Array<{
+          artifacts: CachedDescriptorArtifactsRecord;
+          cacheKey: string;
+        }>,
+      ) => {
+        for (const entry of entries) {
+          state.descriptorCacheUpsert.run(
+            entry.cacheKey,
+            LOCALIZATION_ANALYZER_VERSION,
+            entry.artifacts.fingerprint,
+            Number(entry.artifacts.currentLanguageContribution.hasAnyLanguagesRoot),
+            entry.artifacts.currentLanguageContribution.matchedFolderName,
+            Number(entry.artifacts.hasSelfTranslation),
+            encodeUint32Array(entry.artifacts.baselineEntries.keyed),
+            encodeUint32Array(entry.artifacts.baselineEntries.defInjected),
+            encodeUint32Array(entry.artifacts.baselineEntries.strings),
+            encodeUint32Array(
+              entry.artifacts.currentLanguageContribution.entries.keyed,
+            ),
+            encodeUint32Array(
+              entry.artifacts.currentLanguageContribution.entries.defInjected,
+            ),
+            encodeUint32Array(
+              entry.artifacts.currentLanguageContribution.entries.strings,
+            ),
+          );
+        }
+      },
+    );
+
+    transaction(args.entries);
+  });
+}
+
 export function loadCachedDefsBaseline(args: {
   cacheKey: string;
   fingerprint: string;
@@ -451,6 +498,39 @@ export function saveCachedDefsBaseline(args: {
   });
 }
 
+export function saveCachedDefsBaselineBatch(args: {
+  entries: Array<{
+    cacheKey: string;
+    record: CachedDefsBaselineRecord;
+  }>;
+}) {
+  if (args.entries.length === 0) {
+    return;
+  }
+
+  withWritableDatabaseState((state) => {
+    const transaction = state.sqlite.transaction(
+      (
+        entries: Array<{
+          cacheKey: string;
+          record: CachedDefsBaselineRecord;
+        }>,
+      ) => {
+        for (const entry of entries) {
+          state.defsCacheUpsert.run(
+            entry.cacheKey,
+            LOCALIZATION_ANALYZER_VERSION,
+            entry.record.fingerprint,
+            encodeUint32Array(entry.record.ids),
+          );
+        }
+      },
+    );
+
+    transaction(args.entries);
+  });
+}
+
 function internTermsForBucket(
   bucket: TranslationBucket,
   orderedIds: readonly string[],
@@ -480,25 +560,32 @@ function internTermsForBucket(
   if (misses.size > 0) {
     const uniqueMisses = [...misses.keys()];
     withWritableDatabaseState((writableState) => {
-      const transaction = writableState.sqlite.transaction((values: string[]) => {
+      // 批量插入所有缺失的术语（使用单个事务）
+      const insertTransaction = writableState.sqlite.transaction((values: string[]) => {
         for (const value of values) {
           writableState.insertTerm.run(bucket, value);
-          const row = writableState.selectTerm.get(
-            bucket,
-            value,
-          ) as TermRow | null;
-
-          if (!row) {
-            throw new Error(
-              `Expected localization term id for ${bucket}:${value}`,
-            );
-          }
-
-          writableState.termIdsByBucket[bucket].set(value, row.term_id);
         }
       });
+      insertTransaction(uniqueMisses);
 
-      transaction(uniqueMisses);
+      // 批量查询所有术语ID（使用单个查询）
+      const placeholders = uniqueMisses.map(() => "?").join(",");
+      const selectQuery = writableState.sqlite.query(
+        `SELECT term_id, normalized_translation_id
+         FROM localization_terms
+         WHERE bucket = ? AND normalized_translation_id IN (${placeholders})`
+      );
+      const rows = selectQuery.all(bucket, ...uniqueMisses) as Array<{
+        term_id: number;
+        normalized_translation_id: string;
+      }>;
+
+      for (const row of rows) {
+        writableState.termIdsByBucket[bucket].set(
+          row.normalized_translation_id,
+          row.term_id
+        );
+      }
     });
     knownTerms = getDatabaseState().termIdsByBucket[bucket];
   }

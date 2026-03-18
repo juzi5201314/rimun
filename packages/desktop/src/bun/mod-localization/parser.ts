@@ -427,6 +427,54 @@ function collectLeafEntriesWithRecovery(xml: string) {
   }
 }
 
+function tryCollectFlatLanguageDataLeafPaths(xml: string) {
+  if (
+    xml.includes("<!--") ||
+    xml.includes("<![CDATA[") ||
+    xml.includes("<?") ||
+    xml.includes("<!")
+  ) {
+    return null;
+  }
+
+  const normalizedXml = sanitizeXmlPreamble(xml).trim();
+  const rootMatch =
+    /^<LanguageData>([\s\S]*)<\/LanguageData>$/i.exec(normalizedXml);
+
+  if (!rootMatch) {
+    return null;
+  }
+
+  const body = rootMatch[1] ?? "";
+  const paths: string[] = [];
+  const tagPattern = /<([A-Za-z_:][A-Za-z0-9:_.-]*)>([^<>]*)<\/\1>/g;
+  let cursor = 0;
+
+  for (const match of body.matchAll(tagPattern)) {
+    const matchIndex = match.index ?? 0;
+    const leading = body.slice(cursor, matchIndex);
+
+    if (leading.trim().length > 0) {
+      return null;
+    }
+
+    const tagName = match[1];
+
+    if (!tagName) {
+      return null;
+    }
+
+    paths.push(normalizePathForId(tagName));
+    cursor = matchIndex + (match[0]?.length ?? 0);
+  }
+
+  if (body.slice(cursor).trim().length > 0) {
+    return null;
+  }
+
+  return paths;
+}
+
 export function collectXmlLeafEntries(xml: string) {
   return collectLeafEntriesWithRecovery(xml);
 }
@@ -454,6 +502,14 @@ export function extractFirstMatchingTagText(
 }
 
 export function collectKeyedIdsFromXml(xml: string, relativeFilePath: string) {
+  const flatLeafPaths = tryCollectFlatLanguageDataLeafPaths(xml);
+
+  if (flatLeafPaths) {
+    return new Set(
+      flatLeafPaths.map((leafPath) => `keyed:${relativeFilePath}:${leafPath}`),
+    );
+  }
+
   const ids = new Set<string>();
 
   for (const leaf of collectLeafEntriesWithRecovery(xml)) {

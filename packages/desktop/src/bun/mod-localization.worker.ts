@@ -225,34 +225,35 @@ async function parseDefsFiles(files: string[]) {
 }
 
 async function runLocalizationTasks(tasks: LocalizationWorkerParseTask[]) {
-  const results: LocalizationWorkerParseResult[] = [];
+  // 并行处理所有任务
+  const results = await Promise.all(
+    tasks.map(async (task) => {
+      const [baseline, current] = await Promise.all([
+        parseLocalizationInventory(task.baseline),
+        task.current === null
+          ? Promise.resolve(null)
+          : parseLocalizationInventory(task.current),
+      ]);
 
-  for (const task of tasks) {
-    const baseline = await parseLocalizationInventory(task.baseline);
-    const current =
-      task.current === null
-        ? null
-        : await parseLocalizationInventory(task.current);
-
-    results.push({
-      baseline,
-      current,
-      taskId: task.taskId,
-    });
-  }
+      return {
+        baseline,
+        current,
+        taskId: task.taskId,
+      } satisfies LocalizationWorkerParseResult;
+    })
+  );
 
   return results;
 }
 
 async function runDefsTasks(tasks: DefsWorkerParseTask[]) {
-  const results: DefsWorkerParseResult[] = [];
-
-  for (const task of tasks) {
-    results.push({
+  // 并行处理所有任务
+  const results = await Promise.all(
+    tasks.map(async (task) => ({
       ids: await parseDefsFiles(task.files),
       taskId: task.taskId,
-    });
-  }
+    }))
+  );
 
   return results;
 }

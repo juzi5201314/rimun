@@ -259,6 +259,10 @@ export function ensureAppDatabaseSchema(sqlite: Database) {
       UNIQUE(bucket, normalized_translation_id)
     );
 
+    -- 为批量查询创建复合索引
+    CREATE INDEX IF NOT EXISTS idx_localization_terms_lookup
+    ON localization_terms(bucket, normalized_translation_id, term_id);
+
     CREATE TABLE IF NOT EXISTS localization_descriptor_cache (
       cache_key TEXT PRIMARY KEY NOT NULL,
       analyzer_version INTEGER NOT NULL,
