@@ -13,6 +13,7 @@
     "build": "bunx electrobun build --env=stable",
     "build:dev": "bunx electrobun build --env=dev",
     "build:test:cdp": "bun run ./scripts/with-cef-automation-env.ts build --env=test",
+    "bench:localization:real": "bun run src/bun/bench-real-localization.ts",
     "test": "bun test",
     "check": "bunx tsc --noEmit"
   },

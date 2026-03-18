@@ -1,5 +1,6 @@
 import { Database } from "bun:sqlite";
 import { mkdirSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   ensureAppDatabaseSchema,
@@ -150,13 +151,15 @@ function cloneTranslationEntryVectors(
 }
 
 function resolveTempDatabasePath() {
-  return join("/tmp", "rimun-localization-cache.sqlite");
+  return join(tmpdir(), "rimun-localization-cache.sqlite");
 }
 
 function createDatabaseStateForPath(path: string): DatabaseState {
   const databasePath = resolveDatabasePath();
+  const parentDirectory =
+    path === databasePath ? resolveAppDataDirectory() : tmpdir();
 
-  mkdirSync(path === databasePath ? resolveAppDataDirectory() : "/tmp", {
+  mkdirSync(parentDirectory, {
     recursive: true,
   });
 

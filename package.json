@@ -8,6 +8,7 @@
     "dev": "bun run ./tools/dev.ts --mode auto",
     "dev:cdp": "bun run ./tools/dev.ts --mode auto --cef-automation",
     "dev:web": "bun run ./tools/dev.ts --mode web",
+    "bench:localization:real": "bun run --cwd packages/desktop bench:localization:real",
     "build": "bun run ./tools/build.ts",
     "build:desktop:test:cdp": "bun run --cwd packages/desktop build:test:cdp",
     "test": "bun run ./tools/test.ts",
