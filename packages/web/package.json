@@ -4,11 +4,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview",
-    "test": "vitest run",
-    "check": "tsc --noEmit"
+    "dev": "bunx vite",
+    "build": "bunx vite build",
+    "preview": "bunx vite preview",
+    "test": "bunx vitest run",
+    "check": "bunx tsc --noEmit"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

@@ -4,17 +4,17 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "electrobun dev",
+    "dev": "bunx electrobun dev",
     "dev:cdp": "bash ./scripts/with-cef-automation-env.sh dev",
     "dev:host": "bun run src/bun/dev-host.ts",
-    "dev:watch": "electrobun dev --watch",
+    "dev:watch": "bunx electrobun dev --watch",
     "dev:watch:cdp": "bash ./scripts/with-cef-automation-env.sh dev --watch",
-    "run": "electrobun run",
-    "build": "electrobun build --env=stable",
-    "build:dev": "electrobun build --env=dev",
+    "run": "bunx electrobun run",
+    "build": "bunx electrobun build --env=stable",
+    "build:dev": "bunx electrobun build --env=dev",
     "build:test:cdp": "bash ./scripts/with-cef-automation-env.sh build --env=test",
     "test": "bun test",
-    "check": "tsc --noEmit"
+    "check": "bunx tsc --noEmit"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.58",

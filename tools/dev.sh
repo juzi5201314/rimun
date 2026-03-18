@@ -81,7 +81,7 @@ prepare_cef_automation_env() {
 
 cd "${ROOT_DIR}/packages/web"
 RIMUN_DEV_HOST_PORT="${DEV_HOST_PORT}" \
-bun run dev -- --host 127.0.0.1 --port "${WEB_PORT}" --strictPort &
+bunx vite --host 127.0.0.1 --port "${WEB_PORT}" --strictPort &
 WEB_PID=$!
 
 for _ in $(seq 1 120); do

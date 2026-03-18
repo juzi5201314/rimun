@@ -8,7 +8,7 @@
   },
   "scripts": {
     "test": "bun test",
-    "check": "tsc --noEmit"
+    "check": "bunx tsc --noEmit"
   },
   "dependencies": {
     "zod": "^4.1.8"

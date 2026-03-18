@@ -12,9 +12,9 @@
     "build:desktop:test:cdp": "bun --cwd packages/desktop run build:test:cdp",
     "test": "bash ./tools/test.sh",
     "typecheck": "bash ./tools/typecheck.sh",
-    "lint": "biome check .",
+    "lint": "bunx biome check .",
     "check": "bun run typecheck && bun run lint && bun run test",
-    "format": "biome format --write ."
+    "format": "bunx biome format --write ."
   },
   "devDependencies": {
     "@types/bun": "latest",
